@@ -1,0 +1,47 @@
+working_dir_path: output                              # Workflow output directory
+can_write_console_log: True                           # Output log to console
+restart: False                                         # Do not execute steps if output files are already created
+
+step0_gmx_cluster:
+  tool: gmx_cluster
+  paths:
+    input_structure_path: file:../1.MD_setup_mutation/output/step2_fixsidechain/fixsidechain.pdb  # Path to input topology (tpr, gro, g96, pdb or brk format) 
+    input_traj_path: file:../1.MD_setup_mutation/output/step18_mdrun_md/md.trr # Path to trajectory (xtc, trr, cpt, gro, g96, pdb or tng format)
+    output_pdb_path: output.cluster.pdb
+  properties:
+    fit_selection: Backbone
+    output_selection: Protein
+    dista: False
+    method: linkage
+    cutoff: 2
+
+step1_extract_models:
+  tool: extract_model
+  paths:
+    input_structure_path: dependency/step0_gmx_cluster/output_pdb_path
+    output_structure_path: model0.pdb      # Dummy, names will be: model0.pdb, model1.pdb ...
+  properties:
+    models_to_extract: 1                   # Number of most populated models to extract
+
+step2_cavity_analysis:
+  tool: fpocket_run
+  paths:
+    input_pdb_path: dependency/step1_extract_models/output_structure_path
+    output_pockets_zip: all_pockets.zip
+    output_summary: summary.json
+  properties:
+    min_radius: 3
+    max_radius: 6
+    num_spheres: 35
+    models_to_use: 1                   # (should be < 'models_to_extract') Number of models on which to do cavity analysis
+
+step3_filter_cavities:
+  tool: fpocket_filter
+  paths:
+    input_pockets_zip: dependency/step2_cavity_analysis/output_pockets_zip
+    input_summary: dependency/step2_cavity_analysis/output_summary
+    output_filter_pockets_zip: filtered_pockets.zip
+  properties:
+    score: [0, 1]
+    druggability_score: [0.5, 1]
+    volume: [0, 2000]
