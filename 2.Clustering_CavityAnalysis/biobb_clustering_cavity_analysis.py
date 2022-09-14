@@ -124,11 +124,11 @@ def main(config, system=None):
     # Write next action to global log
     global_log.info(steps_names[0] + ": Clustering structures from the trajectory")
 
-    # NOTE: would the input trajectory be dry in general? Is it necessary?
+    # NOTE: would the input trajectory be dry in general? Is it necessary for clustering?
 
     # Action: Initialize GMXCluster and call launch method
     # NOTE: perhaps hierarchical clustering is more adequate - study which is the most adequate method
-    #       one can compare the numbe of frames with the number of clusters and cluster again until the num clusters << num of frames
+    #       one can compare the number of frames with the number of clusters and cluster again until the num clusters << num of frames
     gmx_cluster(**global_paths[steps_names[0]], properties=global_prop[steps_names[0]])
 
     # Write next action to global log
@@ -207,6 +207,8 @@ def main(config, system=None):
     for i in range(models2use):
 
         fpocket_filter(**paths, properties=prop)
+    
+    # NOTE: issue warning if there are many pockets or too few
 
     # Print timing information to the log file
     elapsed_time = time.time() - start_time

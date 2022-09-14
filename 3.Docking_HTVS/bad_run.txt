@@ -1,0 +1,103 @@
+12:14:08 step1_fpocket_select: Extract pocket cavity
+2022-09-05 12:14:08,993 [MainThread  ] [INFO ]  Creating cf0ece22-fd2d-49e0-9ce9-4ce70cdee3a2 temporary folder
+2022-09-05 12:14:08,994 [MainThread  ] [INFO ]  Extracting: /home/pablo/repos/BIOEXCEL/eucanshare_wfs/2.Clustering_CavityAnalysis/output/step3_filter_cavities/filtered_pockets.zip
+2022-09-05 12:14:08,994 [MainThread  ] [INFO ]  to:
+2022-09-05 12:14:08,994 [MainThread  ] [INFO ]  ['cf0ece22-fd2d-49e0-9ce9-4ce70cdee3a2/pocket3_atm.pdb', 'cf0ece22-fd2d-49e0-9ce9-4ce70cdee3a2/pocket3_vert.pqr']
+2022-09-05 12:14:08,994 [MainThread  ] [INFO ]  Saving /home/pablo/repos/BIOEXCEL/eucanshare_wfs/3.Docking_HTVS/output/step1_fpocket_select/fpocket_cavity.pdb file
+2022-09-05 12:14:08,995 [MainThread  ] [INFO ]  Saving /home/pablo/repos/BIOEXCEL/eucanshare_wfs/3.Docking_HTVS/output/step1_fpocket_select/fpocket_pocket.pqr file
+2022-09-05 12:14:08,995 [MainThread  ] [INFO ]  Removed: ['cf0ece22-fd2d-49e0-9ce9-4ce70cdee3a2']
+12:14:08 step2_box: Generating cavity box
+2022-09-05 12:14:08,996 [MainThread  ] [INFO ]  Loading pocket PQR selection from /home/pablo/repos/BIOEXCEL/eucanshare_wfs/3.Docking_HTVS/output/step1_fpocket_select/fpocket_pocket.pqr
+12:14:08     Loading pocket PQR selection from /home/pablo/repos/BIOEXCEL/eucanshare_wfs/3.Docking_HTVS/output/step1_fpocket_select/fpocket_pocket.pqr
+2022-09-05 12:14:08,997 [MainThread  ] [INFO ]  Binding site center (Angstroms):      4.041    13.919    14.717
+12:14:08     Binding site center (Angstroms):      4.041    13.919    14.717
+2022-09-05 12:14:08,997 [MainThread  ] [INFO ]  Adding 12.0 Angstroms offset
+12:14:08     Adding 12.0 Angstroms offset
+2022-09-05 12:14:08,997 [MainThread  ] [INFO ]  Binding site size (Angstroms):       17.714    16.633    14.496
+12:14:08     Binding site size (Angstroms):       17.714    16.633    14.496
+2022-09-05 12:14:08,997 [MainThread  ] [INFO ]  Volume (cubic Angstroms): 34167
+12:14:08     Volume (cubic Angstroms): 34167
+2022-09-05 12:14:08,998 [MainThread  ] [INFO ]  Adding box coordinates
+12:14:08     Adding box coordinates
+2022-09-05 12:14:08,998 [MainThread  ] [INFO ]  Saving output PDB file (with box setting annotations): /home/pablo/repos/BIOEXCEL/eucanshare_wfs/3.Docking_HTVS/output/step2_box/box.pdb
+12:14:08     Saving output PDB file (with box setting annotations): /home/pablo/repos/BIOEXCEL/eucanshare_wfs/3.Docking_HTVS/output/step2_box/box.pdb
+12:14:08 step3_str_check_add_hydrogens: Preparing target protein for docking
+2022-09-05 12:14:08,999 [MainThread  ] [INFO ]  Not using any container
+12:14:08     Not using any container
+2022-09-05 12:14:08,999 [MainThread  ] [INFO ]  check_structure -i /home/pablo/repos/BIOEXCEL/eucanshare_wfs/3.Docking_HTVS/../2.Clustering_CavityAnalysis/output/step1_extract_models/fixsidechain.pdb -o /home/pablo/repos/BIOEXCEL/eucanshare_wfs/3.Docking_HTVS/output/step3_str_check_add_hydrogens/prep_receptor.pdbqt --non_interactive --force_save command_list --list 'add_hydrogen --add_charges ADT --add_mode auto '
+
+2022-09-05 12:14:10,126 [MainThread  ] [INFO ]  Exit code 1
+
+2022-09-05 12:14:10,126 [MainThread  ] [INFO ]  ===============================================================================
+=                   BioBB structure checking utility v3.9.11                   =
+=            P. Andrio, A. Hospital, G. Bayarri, J.L. Gelpi 2018-22           =
+===============================================================================
+
+Warning: sequence features only available in mmCIF format or with external fasta input
+Structure /home/pablo/repos/BIOEXCEL/eucanshare_wfs/3.Docking_HTVS/../2.Clustering_CavityAnalysis/output/step1_extract_models/fixsidechain.pdb loaded
+ Title: 
+ Experimental method: unknown
+ Resolution (A): N.A.
+
+ Num. models: 1
+ Num. chains: 2 (A: Protein, B: Protein)
+ Num. residues:  703
+ Num. residues with ins. codes:  0
+ Num. HETATM residues:  0
+ Num. ligands or modified residues:  0
+ Num. water mol.:  0
+ Num. atoms:  5678
+
+
+Step 1: add_hydrogen --add_charges ADT --add_mode auto 
+Running add_hydrogen. Options: --add_charges ADT --add_mode auto
+229 Residues requiring selection on adding H atoms
+ CYS A98,A114,A133,A140,A224,A244,A258,B39,B119,B162,B211
+ ASP A61,A62,A97,A122,A142,A152,A155,A186,A207,A241,A245,A345,A351,A366,A377,B43,B88,B101,B112,B124,B125,B145,B150,B161,B168,B176,B177,B205,B227,B230,B283,B292,B294,B313,B315,B316,B321,B324,B331,B335,B343,B354
+ GLU A88,A104,A106,A125,A139,A145,A160,A162,A165,A172,A190,A213,A233,A238,A285,A290,A293,A296,A297,A309,A318,A344,A347,A350,A368,A376,A394,B4,B12,B19,B22,B71,B81,B97,B98,B160,B163,B178,B192,B215,B245,B253,B286,B317,B328,B336,B344,B356,B357,B359
+ HIS A116,A217,A267,A337,A400,B64,B107,B126,B174,B199,B305,B312
+ LYS A64,A77,A84,A89,A93,A100,A132,A168,A188,A197,A204,A212,A239,A242,A276,A299,A307,A330,A343,A346,A353,A371,A373,A374,A385,A388,A389,B15,B45,B53,B54,B66,B76,B79,B118,B121,B139,B152,B165,B233,B248,B249,B267,B287,B295,B338
+ ARG A85,A102,A103,A119,A131,A149,A153,A161,A185,A198,A278,A280,A303,A313,A340,A348,A364,A386,A387,A391,B5,B10,B23,B49,B57,B67,B70,B73,B94,B136,B149,B173,B186,B189,B220,B237,B256,B296,B330
+ TYR A63,A124,A128,A176,A194,A225,A228,A229,A240,A254,A260,A264,A284,A367,B9,B24,B35,B69,B103,B132,B140,B182,B188,B200,B258,B307,B311,B323,B342
+WARNING: fixing side chains, override with --no_fix_side
+Running fixside. Options: --fix all
+No residues with missing or unknown side chain atoms found
+Selection: auto
+Replacing HIS A116 by HIE
+Replacing HIS A217 by HIE
+Replacing HIS A267 by HIE
+Replacing HIS A337 by HIE
+Replacing HIS A400 by HIE
+Replacing HIS B64 by HIE
+Replacing HIS B107 by HIE
+Replacing HIS B126 by HIE
+Replacing HIS B174 by HIE
+Replacing HIS B199 by HIE
+Replacing HIS B305 by HIE
+Replacing HIS B312 by HIE
+Updating partial charges and atom types
+Warning: OXT atom missing in CTRP A109. Run backbone --fix_atoms first
+
+12:14:10     Executing: check_structure -i /home/pablo/repos/BIOEXCEL/eucanshare_wfs/3.Docking_HTVS/../2...
+12:14:10     Exit code 1
+2022-09-05 12:14:10,127 [MainThread  ] [INFO ]  Traceback (most recent call last):
+  File "/home/pablo/anaconda3/envs/eucanshare_wf3/bin/check_structure", line 10, in <module>
+    sys.exit(main())
+  File "/home/pablo/anaconda3/envs/eucanshare_wf3/lib/python3.7/site-packages/biobb_structure_checking/check_structure.py", line 49, in main
+    StructureChecking(base_dir_path, vars(args)).launch()
+  File "/home/pablo/anaconda3/envs/eucanshare_wf3/lib/python3.7/site-packages/biobb_structure_checking/structure_checking.py", line 88, in launch
+    self.command_list(self.args['options'])
+  File "/home/pablo/anaconda3/envs/eucanshare_wf3/lib/python3.7/site-packages/biobb_structure_checking/structure_checking.py", line 206, in command_list
+    self._run_method(command, opts)
+  File "/home/pablo/anaconda3/envs/eucanshare_wf3/lib/python3.7/site-packages/biobb_structure_checking/structure_checking.py", line 292, in _run_method
+    error_status = f_fix(opts, data_to_fix)
+  File "/home/pablo/anaconda3/envs/eucanshare_wf3/lib/python3.7/site-packages/biobb_structure_checking/structure_checking.py", line 1532, in _add_hydrogen_fix
+    self.strucm.add_hydrogens(ion_to_fix, add_charges=opts['add_charges'].upper())
+  File "/home/pablo/anaconda3/envs/eucanshare_wf3/lib/python3.7/site-packages/biobb_structure_checking/structure_manager.py", line 1364, in add_hydrogens
+    self.update_atom_charges(add_charges)
+  File "/home/pablo/anaconda3/envs/eucanshare_wf3/lib/python3.7/site-packages/biobb_structure_checking/structure_manager.py", line 285, in update_atom_charges
+    atm.pqr_charge = self.res_library.get_atom_def(rcode, atm.id).chrg
+  File "/home/pablo/anaconda3/envs/eucanshare_wf3/lib/python3.7/site-packages/biobb_structure_checking/residue_lib_manager.py", line 73, in get_atom_def
+    while resid_def.ats[i].id != at_id and i < len(resid_def.ats):
+IndexError: list index out of range
+

@@ -1,0 +1,4 @@
+*.pdb
+*.log
+input/
+output/
