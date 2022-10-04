@@ -1,4 +1,4 @@
 #!/bin/bash
 
-rm -rf output
+# rm -rf output
 python biobb_clustering_cavity_analysis.py --config input.yml  

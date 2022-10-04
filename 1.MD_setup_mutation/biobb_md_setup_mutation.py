@@ -59,6 +59,8 @@ def write_pdb_from_gro(output_pdb_path, input_gro_path):
     
 def run_wf(args):
 
+    start_time = time.time()
+
     # 'to_do' = free (default)
     if 'to_do' not in args:
         args.to_do = 'free'
@@ -209,6 +211,18 @@ def run_wf(args):
 
     write_pdb_from_gro(args.output_pdb_path, global_paths["step18_mdrun_md"]["output_gro_path"])
     global_log.info("Free Equilibration completed. Final structure saved on " + args.output_pdb_path)
+    
+    # Print timing information to the log file
+    elapsed_time = time.time() - start_time
+    global_log.info('')
+    global_log.info('')
+    global_log.info('Execution successful: ')
+    global_log.info('  Workflow_path: %s' % conf.get_working_dir_path())
+    global_log.info('  Config File: %s' % args.config_path)
+    global_log.info('')
+    global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
+    global_log.info('')
+
     return 0
     
 def main():
