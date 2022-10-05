@@ -80,9 +80,9 @@ def saveClusters(log_file, json_file, clustering_folder):
     '''
 
     # Open log file - try to find it in working dir or in step dir
-    if (os.path.exists(log_file)):
+    if os.path.exists(log_file):
         file = open(log_file)
-    elif (os.path.exists(clustering_folder + "/output.cluster.log")):
+    elif os.path.exists(clustering_folder + "/output.cluster.log"):
         file = open(clustering_folder + "/output.cluster.log")
     else:
         print("Error: clustering log file not found, try restart: false")
@@ -174,8 +174,8 @@ def main(args):
     step_dir = wdir + "/" + steps_names[0] + "/"
     
     # Write next action to global log
-    global_log.info(steps_names[0] + ": Clustering structures from the trajectory")
-
+    global_log.info(steps_names[0] + ": Clustering structures from the trajectory" + "\n")
+    
     # Action: Initialize GMXCluster and call launch method
     gmx_cluster(**global_paths[steps_names[0]], properties=global_prop[steps_names[0]])
 
@@ -212,13 +212,13 @@ def main(args):
 
     for i in range(modelsToExtract):
 
-        # Add 'models' keyword and value to properties
+        # Update 'models' index
         prop.update({'models':[clusters[i][1]]})
 
-        # Modify the output name according to model index
+        # Modify the output name - according to model index
         output_path = addModelSuffix(default_output, i)
 
-        # Update path dictionary
+        # Update paths dictionary
         paths.update({'output_structure_path':output_path})
 
         # Extract the model 
@@ -245,7 +245,7 @@ def main(args):
 
     for i in range(modelsToUse):
 
-        # Modify the path names according to model index
+        # Modify the path names - according to model index
         input_path = addModelSuffix(default_input, i)
         zip_path = addModelSuffix(default_zip, i)
         summary_path = addModelSuffix(default_summary, i)
@@ -300,7 +300,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Clustering, cavity analysis and docking pipeline using BioExcel Building Blocks")
+    parser = argparse.ArgumentParser(description="Simple clustering, cavity analysis and docking pipeline using BioExcel Building Blocks")
     
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)")

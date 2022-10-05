@@ -5,11 +5,11 @@ run_md: False
 step1_fpocket_select:
   tool: fpocket_select
   paths:
-    input_pockets_zip:  file:../2.Clustering_CavityAnalysis/output/step3_filter_cavities/filtered_pockets.zip
+    input_pockets_zip:  file:../2.Clustering_CavityAnalysis/output/step4_filter_cavities/filtered_pockets_model1.zip
     output_pocket_pdb: fpocket_cavity.pdb
     output_pocket_pqr: fpocket_pocket.pqr
   properties:
-    pocket: 3
+    pocket: 1
 
 step2_box:
   tool: box
@@ -17,29 +17,28 @@ step2_box:
     input_pdb_path: dependency/step1_fpocket_select/output_pocket_pqr
     output_pdb_path: box.pdb 
   properties:
-    offset: 12
+    offset: 12             
     box_coordinates: True
 
 step3_str_check_add_hydrogens:
   tool: str_check_add_hydrogens
   paths:
-    input_structure_path: file:../2.Clustering_CavityAnalysis/output/step1_extract_models/model.pdb
+    input_structure_path: file:../2.Clustering_CavityAnalysis/output/step2_extract_models/output_model0.pdb
     output_structure_path: prep_receptor.pdbqt
   properties:
     charges: True
     mode: auto
 
-step4_drugbank:
-  tool: drug_bank
+step4_source_lig:
   paths:
-    output_sdf_path: ligand.sdf
+    output_sdf_path: drug.sdf
   properties:
-    drugbank_list: ['DB00530', 'DB14195']
+    ligand_list: ['AQ4', 'DB14195']    # ['DB00530', 'DB14195'] SMILES (+ 4 char), 3-letter PDB Ligand ID's or Drug Bank ID's
 
-step5_babel_convert_prep_lig:
+step5_babel_prepare_lig:
   tool: babel_convert
   paths:
-    input_path: dependency/step4_drugbank/output_sdf_path
+    input_path: dependency/step4_source_lig/output_sdf_path
     output_path: prep_ligand.pdbqt
   properties:
     input_format: sdf
@@ -50,17 +49,17 @@ step5_babel_convert_prep_lig:
 step6_autodock_vina_run:
   tool: autodock_vina_run
   paths:
-    input_ligand_pdbqt_path: dependency/step5_babel_convert_prep_lig/output_path
+    input_ligand_pdbqt_path: dependency/step5_babel_prepare_lig/output_path
     input_receptor_pdbqt_path: dependency/step3_str_check_add_hydrogens/output_structure_path
     input_box_path: dependency/step2_box/output_pdb_path
     output_pdbqt_path: output_vina.pdbqt
     output_log_path: output_vina.log
 
-step7_babel_convert_pose_pdb:
+step7_babel_prepare_pose:
   tool: babel_convert
   paths:
     input_path: dependency/step6_autodock_vina_run/output_pdbqt_path
-    output_path: output_model.pdb
+    output_path: output_vina.pdb
   properties:
     input_format: pdbqt
     output_format: pdb

@@ -1,4 +1,4 @@
 #!/bin/bash
 
-rm -rf output
+#rm -rf output
 python biobb_docking_htvs.py --config input.yml  
