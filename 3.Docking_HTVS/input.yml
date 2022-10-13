@@ -9,7 +9,7 @@ step1_fpocket_select:
     output_pocket_pdb: fpocket_cavity.pdb
     output_pocket_pqr: fpocket_pocket.pqr
   properties:
-    pocket: 2
+    pocket: 1
 
 step2_box:
   tool: box

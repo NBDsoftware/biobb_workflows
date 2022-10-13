@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 # Importing all the needed libraries
+from mailbox import NoSuchMailboxError
 import os
+import re
 import time
 import argparse
 from pathlib import Path, PurePath
@@ -15,7 +17,145 @@ from biobb_chemistry.babelm.babel_convert import babel_convert
 from biobb_structure_utils.utils.str_check_add_hydrogens import str_check_add_hydrogens
 from biobb_vs.vina.autodock_vina_run import autodock_vina_run
 
-def findTopLigands(paths, properties, ligands):
+def findMatchingLines(pattern, filepath):
+    '''
+    Finds all lines in file containing a given pattern
+
+    Inputs:
+        pattern  (regex pattern): regular expression pattern to search in file lines
+        filepath           (str): file path to search in
+    
+    Output:
+        lines (list(str)): lines matching the pattern or None if no line matches the pattern
+    '''
+
+    # Open log file
+    file = open(filepath, 'r')
+    
+    # Read all lines
+    lines = file.readlines()
+
+    # List to save matching lines
+    matchingLines = []
+
+    # Search matching string in each line
+    for line in lines:
+
+        match = re.search(pattern, line)
+
+        if match is not None:
+
+            matchingLines.append(match[0])
+
+    # Close file
+    file.close()
+
+    # If no lines contained the pattern, return None
+    if len(matchingLines) == 0:
+        matchingLines = None
+    
+    return matchingLines
+
+def findMatchingLine(pattern, filepath):
+    '''
+    Finds first line in file containing a given pattern
+
+    Inputs:
+        pattern  (regex pattern): regular expression pattern to search in file lines
+        filepath           (str): file path to search in
+    
+    Output:
+        line (str): line matching the pattern or None if no line matches the pattern
+    '''
+
+    # Open log file
+    file = open(filepath, 'r')
+    
+    # Read all lines
+    lines = file.readlines()
+
+    # Search matching string in each line
+    for line in lines:
+
+        match = re.search(pattern, line)
+
+        if match is not None:
+
+            # Close file
+            file.close()
+
+            return line
+    
+    return None
+
+def findNumberInString(string):
+    '''
+    Finds and returns first integer number in string. If no integer is found a 0 is returned.
+
+    Inputs:
+        string (str): string to search int in
+    
+    Output:
+        number (int): integer found in string or 0 if no integer is found.
+    '''
+
+    # Pattern corresponding to a digit of one or more characters
+    digitPattern = r'\d+'
+
+    # Search for the first match in string
+    number = re.search(digitPattern, string)
+    
+    if (number == None):
+        # If there is no match, return a 0
+        number = 0
+    else:
+        # If there is a match, convert match object to string
+        number = number[0]
+
+    return int(number)
+
+def printAvailablePockets(pockets_path, global_log):
+    '''
+    Print in log file all available pockets for each model found in the input folder for the pocket selection step
+    
+    Inputs:
+        pockets_path  (str): Path to pockets folder including file name
+        global_log (Logger): Object of class Logger (dumps info to global log file of this workflow)
+    Output:
+        Info dumped to log file
+    '''
+    
+    # Convert string to Path class
+    pocketsLogPath = Path(pockets_path)
+
+    # Path of pocket filtering step
+    stepPath = pocketsLogPath.parent
+
+    # Pattern for pocket filtering log files names
+    logNamePattern = stepPath.name + "_log*.out"
+
+    # Find all log files matching pattern
+    logList = stepPath.rglob(logNamePattern)
+
+    # Iterate through all log files -> print the model ID + available pockets in the global log
+    for log in logList:
+
+        # Find model from file name
+        logName = log.name
+        modelID = findNumberInString(logName.strip(stepPath.name))
+
+        # Find pockets 
+        pockets = findMatchingLines(pattern=r'pocket\d+$', filepath=str(log))
+
+        # Print to global log
+        global_log.info("   Model {}".format(modelID))
+
+        for pocket in pockets:
+            global_log.info("        {}".format(pocket))
+
+    return
+
+def findTopLigands(paths, properties, ligands, global_log):
     '''
     Find top scoring ligands according to binding affinity calculated in step 6. 
     The number of ligands considered is determined in the properties of step 8
@@ -24,6 +164,7 @@ def findTopLigands(paths, properties, ligands):
         paths         (dict): paths of step 8 
         properties    (dict): properties of step 8
         ligands       (list): list of ligand identifiers
+        global_log  (Logger):
 
     Output:
         bestLigandAffinities      (list): list with lowest affinities 
@@ -35,48 +176,35 @@ def findTopLigands(paths, properties, ligands):
     affinities = []
     ligandID_indices = []
 
-    # Default path for docking log
+    # Default path for docking log, convert from string to Path class
     dockingLogsPath = Path(paths["docking_logs"])
     
     # Step path for docking step
     stepPath = dockingLogsPath.parent
 
-    # Default name of docking log: output_vina.log
-    defaultLogName = dockingLogsPath.name
-
-    # ["output_vina", "log"]
-    logNameParts = defaultLogName.split(".")
-
     # "output_vina*log"
-    logNamePattern = logNameParts[0] + "*" + logNameParts[1]
+    logNamePattern = dockingLogsPath.stem + "*" + dockingLogsPath.suffix
 
     # List all files matching the pattern
     logList = stepPath.rglob(logNamePattern)
+
+    # NOTE: extend to many ligands - might be 2 or 3 characters, take number 
 
     # For each docked ligand
     for log in logList:
 
         # Find index of ligand from log name
         logName = log.name
-        ligandID_index = int(logName.strip(logNameParts[0])[0])
+        ligandID_index = findNumberInString(logName.strip(dockingLogsPath.stem))
 
         # Find affinity of best pose from log
+        line = findMatchingLine(pattern=r'   1 ', filepath=str(log))
+        
+        # Separate line
+        lineParts = line.split()
 
-        # Open log file
-        logfile = open(str(log), 'r')
-        # Read all lines
-        lines = logfile.readlines()
-
-        # Search matching string in each line
-        for line in lines:
-
-            if '   1 ' in line:
-
-                lineParts = line.split()
-                affinity = float(lineParts[1])
-
-        # Close log file
-        logfile.close()
+        # Save just the affinity
+        affinity = float(lineParts[1])
 
         # Save both: best affinity and index
         affinities.append(affinity)
@@ -114,8 +242,12 @@ def findTopLigands(paths, properties, ligands):
         # Remove ligandID index
         ligandID_indices.remove(bestLigandIDIndex)
 
+    # Print best ligands and their affinities in log file
+    for i in range(len(bestLigandAffinities)):
 
-    return bestLigandAffinities, bestLigandIDs
+        global_log.info("    Affinity: {} for ligand {}".format(bestLigandAffinities[i], bestLigandIDs[i]))
+
+    return
 
 def validateStep(*output_paths):
     '''
@@ -352,7 +484,6 @@ def addLigandIDSuffix(original_path, ligand_ID, ligand_index):
     return new_path
 
 
-
 def main(args):
 
     start_time = time.time()
@@ -379,9 +510,25 @@ def main(args):
     # Write next action to global log
     global_log.info("step1_fpocket_select: Extract pocket cavity")
 
-    # Action: pocket selection
-    fpocket_select(**global_paths["step1_fpocket_select"], properties=global_prop["step1_fpocket_select"])
+    # Properties and paths of step
+    props = global_prop["step1_fpocket_select"]
+    paths = global_paths["step1_fpocket_select"]
 
+    # Action: pocket selection
+    fpocket_select(**paths, properties=props)
+
+    # Validate pocket selection (make sure chosen pocket exists)
+    if not validateStep(paths["output_pocket_pdb"],paths["output_pocket_pqr"]):
+
+        # If output is not valid, print error message and available options in log file
+        global_log.info("    ERROR: fpocket_select failed to select a pocket from input file.")
+        global_log.info("           Check the selected pocket in the properties of this step exists.")
+
+        # Print available pockets in input folder
+        printAvailablePockets(paths["input_pockets_zip"], global_log)
+
+        # Exit 
+        return
 
 # STEP 2: Generate box around selected cavity
 
@@ -520,24 +667,26 @@ def main(args):
         # Increase ligand ID count
         ligandID_index += 1
 
-    # STEP 8: Find top ligands (according to lowest affinity)
+# STEP 8: Find top ligands (according to lowest affinity)
     
     # Write action to global log
     global_log.info("step8_show_top_ligands: print identifiers of top ligands ranked by lowest affinity")  
 
-    # Find top ligands
-    topAffinities, topLigands = findTopLigands(global_paths["step8_show_top_ligands"], global_prop["step8_show_top_ligands"], ligand_list)
+    # Properties and paths of step
+    props = global_prop["step8_show_top_ligands"]
+    paths = global_paths["step8_show_top_ligands"]
 
-    for i in range(len(topAffinities)):
+    # Find and print top ligands in log file
+    findTopLigands(paths, props, ligand_list, global_log)
 
-        global_log.info("Affinity: {} for ligand {}".format(topAffinities[i], topLigands[i]))
-
+# Timing information
     elapsed_time = time.time() - start_time
     global_log.info('')
     global_log.info('')
     global_log.info('Execution successful: ')
     global_log.info('  Workflow_path: %s' % conf.get_working_dir_path())
     global_log.info('  Config File: %s' % args.config_path)
+    global_log.info('  Ligand library: %s' % args.ligand_lib)
     global_log.info('')
     global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
     global_log.info('')
