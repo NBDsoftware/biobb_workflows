@@ -304,7 +304,6 @@ def readLigandLibFile(ligand_lib_path):
 
     return ligand_lib
 
-
 def identifyFormat(ligand_ID):
     '''
     Guess the format of the identifier

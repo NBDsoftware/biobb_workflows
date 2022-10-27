@@ -2,12 +2,14 @@ name: eucanshare_wf1
 channels:
   - conda-forge
   - bioconda
+  - salilab
 dependencies:
+  - modeller
   - biobb_io>=3.7.0
   - biobb_common>=3.7.0
   - biobb_structure_utils>=3.7.0
   - biobb_chemistry>=3.7.0
-  - biobb_model>=3.7.0
-  - biobb_md>=3.7.0
+  - biobb_model>=3.8.0
+  - biobb_gromacs>=3.7.0
   - biobb_analysis>=3.7.0
   - conda
