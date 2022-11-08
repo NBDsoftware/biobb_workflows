@@ -18,8 +18,12 @@ from traceback import StackSummary
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 from biobb_io.api.pdb import pdb
+from biobb_io.api.canonical_fasta import canonical_fasta
+from biobb_model.model.fix_backbone import fix_backbone
 from biobb_model.model.fix_side_chain import fix_side_chain
 from biobb_model.model.fix_ssbonds import fix_ssbonds
+from biobb_model.model.fix_altlocs import fix_altlocs
+from biobb_model.model.fix_amides import fix_amides
 from biobb_model.model.checking_log import checking_log
 from biobb_model.model.mutate import mutate
 from biobb_gromacs.gromacs.pdb2gmx import pdb2gmx
@@ -34,7 +38,8 @@ from biobb_analysis.gromacs.gmx_energy import gmx_energy
 from biobb_analysis.gromacs.gmx_image import gmx_image
 from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 from biobb_structure_utils.utils.structure_check import structure_check
-from biobb_structure_utils.utils.remove_molecules import remove_molecules
+from biobb_structure_utils.utils.extract_molecule import extract_molecule
+from biobb_structure_utils.utils.renumber_structure import renumber_structure
 
 def validateStep(*output_paths):
     '''
@@ -108,147 +113,6 @@ def write_pdb_from_gro(output_pdb_path, input_gro_path):
         properties=prop
     )
 
-def readPDBCheckLog(log_path, global_log):
-
-    '''
-    Reads information from Check PDB log file, sets True or False to each possible defect, returns
-    results as a dictionary. This dictionary will be used to decide which extra 
-    preparation steps to take or Warnings to issue. List of dictionary keywords:
-
-    INS_CODE            : Insertion codes found*
-    ALT_LOC             : Alternative location labels
-    LIGAND              : Presence of ligand
-    SS_BONDS            : Di-sulfide bonds between CYS residues
-    SC_CHIRALITY_ERROR  : Residues with incorrect side-chain chirality 
-    BCK_CHIRALITY_ERROR : Residues with incorrect backbone chirality 
-    BCK_ATOMS_MISSING   : Residues with missing backbone atoms
-    SC_ATOMS_MISSING    : Residues with missing side chain atoms
-    BCK_BREAKS          : Backbone breaks (missing residues)**
-    BCK_LINKS           : Unexpected backbone links
-    SEVERE_CLASHES      : Severe clashes detected  NOTE: -> add minimization with soft potential 
-
-    *: to preserve numbering of important residues their residue number is conserved among
-       different species of the same protein with respect to a reference sequence. Those species 
-       that present longer sequences will repeat the residue number adding an insertion code.
-
-    **: detects backbone breaks, i.e. jumps in residue ID that are not marked by "TER". 
-        If the missing residues are located at the beginning or the end of the protein they
-        will not be marked as a backbone break. NOTE: should we try to model those residues too? 
-        Is Modeller Suite already adding them ... ? 
-
-    Ex:   SS bonds found -------> {'SS_BONDS' : True}
-          SS bonds not found ---> {'SS_BONDS' : False}
-    
-    If ALT_LOC : True then the list of residues with alternative locations will be returned
-
-    Inputs:
-        log_path   (str): '/path/to/checkPDB.log'
-        global_log : global log class, to print to global log
-
-    Output:
-        pdb_defects  (dict): dictionary containing PDB defects as keys and True/False as values
-        alt_locs     (list): list of residues <chain><residue id> with alternative locations
-    
-    '''
-
-    # Open check PDB log file
-    logFile = open(log_path, mode = 'r')
-
-    # Read contents
-    logContents = logFile.read()
-
-    # Close file
-    logFile.close()
-
-    # Search for defects in logContents
-    pdb_defects, alt_locs = findDefectsInLog(logContents, global_log)
-
-    # Return defects and alternative locations
-    return pdb_defects, alt_locs
-
-def findDefectsInLog(logContents, global_log):
-
-    # Alternative location for residues
-    alt_locs = []
-
-    # Initialize defects dictionary with False values
-    pdb_defects = {
-        'INS_CODE': False,
-        'ALT_LOC': False,
-        'LIGAND': False,
-        'SS_BONDS': False,
-        'SC_CHIRALITY_ERROR': False,
-        'BCK_CHIRALITY_ERROR': False,
-        'BCK_ATOMS_MISSING': False,
-        'SC_ATOMS_MISSING': False,
-        'BCK_BREAKS': False,
-        'BCK_LINKS': False,
-        'SEVERE_CLASHES': False
-    }
-
-    # Define regular expressions (regex) dictionary to discard defect
-    # Keywords are defect names, values are regex to be found in Check PDB log if defect is NOT present
-    regex_false = {
-        'INS_CODE': re.compile(r'No residues with insertion codes found'),
-        'ALT_LOC': re.compile(r'No residues with alternative location labels detected'),
-        'LIGAND': re.compile(r'No ligands found'),
-        'SS_BONDS': re.compile(r'No SS bonds detected'),
-        'SC_CHIRALITY_ERROR': re.compile(r'No residues with incorrect side-chain chirality found'),
-        'BCK_CHIRALITY_ERROR': re.compile(r'No residues with incorrect backbone chirality found'),
-        'BCK_ATOMS_MISSING': re.compile(r'No residues with missing backbone atoms found'),
-        'SC_ATOMS_MISSING': re.compile(r'No residues with missing or unknown side chain atoms found'),
-        'BCK_BREAKS': re.compile(r'No backbone breaks'),
-        'BCK_LINKS': re.compile(r'No unexpected backbone links'),
-        'SEVERE_CLASHES': re.compile(r'No severe clashes detected')
-    }
-
-    # Define regular expressions (regex) dictionary to take defect into account
-    # Keywords are defect names, values are regex to be found in Check PDB log if defect IS present
-    regex_true = {
-        'INS_CODE': re.compile(r'.*'),
-        'ALT_LOC': re.compile(r'Detected (\d+) residues with alternative location labels([\s\S]+)Running rem_hydrogen'),
-        'LIGAND': re.compile(r'(\d+) Ligands detected'),
-        'SS_BONDS': re.compile(r'(\d+) Possible SS Bonds detected'),
-        'SC_CHIRALITY_ERROR': re.compile(r'.*'),
-        'BCK_CHIRALITY_ERROR': re.compile(r'.*'),
-        'BCK_ATOMS_MISSING': re.compile(r'(\d+) Residues with missing backbone atoms found'),
-        'SC_ATOMS_MISSING': re.compile(r'(\d+) Residues with missing side chain atoms found'),
-        'BCK_BREAKS': re.compile(r'(\d+) Backbone breaks found'),
-        'BCK_LINKS': re.compile(r'.*'),
-        'SEVERE_CLASHES': re.compile(r'.*')
-    }
-
-    for defect in pdb_defects.keys():
-        
-        # Search for false regex in log Contents
-        false_match = regex_false[defect].search(logContents)
-
-        # Search for true regex in log Contents
-        true_match = regex_true[defect].search(logContents)
-
-        # If false regex is not found but true regex is -> set defect to True
-        if false_match is None:
-
-            pdb_defects[defect] = True
-
-            if defect == 'ALT_LOC':
-
-                # Section of log file containing Alternative Locations information
-                logContentsWithAltLocs = true_match.group(2)
-
-                # Additional regex to find residues (<chain><residue id>) with alternative locations
-                alt_loc_residues = re.compile(r'\n[A-Z]+ ([A-Z]\d+)\n') 
-
-                # Find residues in separate function and return list of residues - ready to pass to function
-                alt_locs = alt_loc_residues.findall(logContentsWithAltLocs)
-
-        # If none of the regex are found -> print Warning
-        elif false_match is None and true_match is not None:
-
-            global_log.info("    WARNING: No match for {} in checking_log file".format(defect))
-
-    return pdb_defects, alt_locs
-
 def readJSONSummary(summary_path):
 
     '''
@@ -271,32 +135,109 @@ def readJSONSummary(summary_path):
 
     return pdb_defects_data
 
-def findLigandsResID(ligand_list):
-
+def checkStructure(step_pdb_path, global_log):
     '''
-    Finds all residue IDs from list of ligand string descriptors and 
-    returns list of residue IDs
-
-    ["SB4 A401", "CZ1 A402", ...] -> [401, 402, ...]
+    Writes PDB check summary in JSON file and writes JSON file data into a python dictionary
+    to be used by the workflow.
     
     Inputs:
-        ligand_list (list): list of detected ligands
+        step_pdb_path       (str): path to pdb in current step
+        global_log    (log class): logger to global log
 
     Output:
-        ligandsResIDs (list): list of residue ID for those ligands 
+        pdb_defects_data   (dict): dictionary with pdb defects
     '''
 
-    ligandsResIDs = []
+    # Identify output folder 
+    step_path = PurePath(step_pdb_path).parent
 
-    ligand_regex = re.compile(r'[\w]{3} [A-Z](\d+)') 
+    # Create JSON summary output path
+    output = os.path.join(step_path, "pdbStructureCheck.json")
 
-    for ligand in ligand_list:
+    # Create paths dictionary
+    paths = {'input_structure_path': step_pdb_path,
+             'output_summary_path': output}
+             
+    # Create properties dictionary (None: return all features)
+    props = {'features': None}
 
-        match = ligand_regex.search(ligand)
+    # Write action to global log and execute step
+    global_log.info("    Checking the errors of the PDB structure and creating a JSON summary")
+    structure_check(**paths, properties=props)
 
-        ligandsResIDs.append(int(match.group(1)))
+    # Validate step
+    if not validateStep(paths["output_summary_path"]):
+        global_log.info("    ERROR: PDB Structure check failed.")
+        return 0
 
-    return ligandsResIDs
+    # Read information from JSON summary
+    pdb_defects_data = readJSONSummary(paths["output_summary_path"])
+
+    return pdb_defects_data
+
+def findCanonicalFASTA(fixBackbone_paths, pdbCode):
+    '''
+    Finds canonical FASTA from a PDB code and saves it in step path
+
+    Inputs:
+        fixBackbone_paths (dict): dictionary with paths of current step
+        pdbCode            (str): PDB code 
+    '''
+
+    # Define properties NOTE: (api_id?) pdb or pdbe? 
+    prop = {'pdb_code': pdbCode}
+
+    # Output path
+    output_fasta_path=fixBackbone_paths["input_fasta_canonical_sequence_path"]
+
+    # Identify output folder 
+    wdir = PurePath(output_fasta_path).parent
+
+    # If '/path/to/output/' not created then create
+    if not os.path.isdir(wdir):
+        os.mkdir(wdir)
+    
+    # Fetch canonical FASTA
+    canonical_fasta(output_fasta_path=output_fasta_path, properties=prop)
+
+    return
+
+def findBestAltLocs(altloc_data):
+    '''
+    Finds best alternative location for each residue
+
+    Inputs:
+        altloc_data (dict): dictionary with information regarding altlocs
+    '''
+
+    best_altlocs = []
+
+    for residue in altloc_data.keys():
+
+        res_descriptors = residue.split()
+
+        res_id = res_descriptors[1]
+
+        atomic_data = altloc_data[residue]
+
+        atoms = list(atomic_data.keys())
+
+        occupancy_data = atomic_data[atoms[0]]
+
+        max_occupancy = 0
+        chosen_label = "A"
+
+        for altloc in occupancy_data:
+
+            if altloc["occupancy"] > max_occupancy:
+
+                max_occupancy = altloc["occupancy"]
+                chosen_label = altloc["loc_label"]
+    
+        best_altlocs.append(res_id + ":" + chosen_label)
+
+    return best_altlocs
+
 
 def run_wf(args):
 
@@ -327,6 +268,9 @@ def run_wf(args):
     # Properties and paths of step
     props_pdb = global_prop["step1A_pdb"]
     paths_pdb = global_paths["step1A_pdb"]
+
+    # Initial value for PDB code - change it if user gives PDB code
+    pdbCode = None
     
     if 'pdb:' in args.input_pdb_path:
 
@@ -349,114 +293,151 @@ def run_wf(args):
         global_log.info("step1A_pdb: Adding input PDB ({}) to working dir".format(args.input_pdb_path))
         prep_output_file(args.input_pdb_path, paths_pdb["output_pdb_path"])
         
-        # Take pdb code, assuming file provided is code
-        # pdbCode = os.path.splitext(args.input_pdb_path)[0]
+        # Search for pdb code in input.yml
+        if props_pdb['pdb_code']:
+            pdbCode = props_pdb['pdb_code']
     
     # Validate step
     if not validateStep(paths_pdb["output_pdb_path"]):
         global_log.info("    ERROR: No PDB file was fetched. Check PDB code or input file")
         return 0
 
-# STEP 1 (B): check the PDB structure and create a report log file
+# STEP 1 (B): extracts molecule of interest: protein
 
     # Properties and paths of step
-    props_check = global_prop["step1B_checkPDB"]
-    paths_check = global_paths["step1B_checkPDB"]
+    props_extract = global_prop["step1B_extractMolecule"]
+    paths_extract = global_paths["step1B_extractMolecule"]
 
     # Write action to global log and execute step
-    global_log.info("step1B_checkPDB: check the errors of a PDB structure and create a report log file")
-    checking_log(**paths_check, properties=props_check)
+    global_log.info("step1B_extractMolecule: extract molecule of interest (protein)")
+    extract_molecule(**paths_extract, properties=props_extract)
 
     # Validate step
-    if not validateStep(paths_check["output_log_path"]):
-        global_log.info("    ERROR: PDB check failed.")
+    if not validateStep(paths_extract["output_molecule_path"]):
+        global_log.info("    ERROR: Extraction of molecule failed.")
         return 0
 
-    # NOTE: deprecated by JSON file - will be removed (leave step for user)
-    # Read information from PDB check log 
-    pdb_defects, alt_locs = readPDBCheckLog(paths_check["output_log_path"], global_log)
+    # Check structure and save results in dictionary
+    pdb_defects_data = checkStructure(paths_extract["output_molecule_path"], global_log)
 
-    print(" ")
-    print("    ", pdb_defects)
-
-    print(" ")
-    print("    ", alt_locs, "\n")
-
-# STEP 1 (C): check the PDB structure and create a JSON summary 
+# STEP 2 (A): Fix alternative locations
 
     # Properties and paths of step
-    props_struct = global_prop["step1C_structureCheck"]
-    paths_struct = global_paths["step1C_structureCheck"]
+    props_altloc = global_prop["step2A_fixaltlocs"]
+    paths_altloc = global_paths["step2A_fixaltlocs"]
 
-    # Write action to global log and execute step
-    global_log.info("step1C_structureCheck: check the errors of a PDB structure and create a JSON summary")
-    structure_check(**paths_struct, properties=props_struct)
+    if pdb_defects_data["altloc"]:
+
+        # Find best alternative locations
+        best_altlocs = findBestAltLocs(pdb_defects_data["altloc"])
+
+        print(best_altlocs)
+
+        # Update properties dictionary
+        props_altloc.update({'altlocs': best_altlocs})
+
+        # Write action to global log and execute step
+        global_log.info("step2A_fixaltlocs: Fix alternative locations")
+        fix_altlocs(**paths_altloc, properties=props_altloc)
+        
+    else:
+        # Just copy pdb to step folder  
+        prep_output_file(paths_extract["output_molecule_path"], paths_altloc["output_pdb_path"])
 
     # Validate step
-    if not validateStep(paths_struct["output_summary_path"]):
-        global_log.info("    ERROR: PDB Structure check failed.")
+    if not validateStep(paths_altloc["output_pdb_path"]):
+        global_log.info("    ERROR: fixing alternative locations failed.")
         return 0
 
-    # Read information from PDB Structure Check summary
-    pdb_defects_data = readJSONSummary(paths_struct["output_summary_path"])
-
-# STEP 2 (A): Add mutations if requested
+# STEP 2 (B): Add mutations if requested
 
     # Properties and paths of step
-    props_mut = global_prop["step2A_mutations"]
-    paths_mut = global_paths["step2A_mutations"]
+    props_mut = global_prop["step2B_mutations"]
+    paths_mut = global_paths["step2B_mutations"]
 
     if args.mut_list:
         # Update properties dictionary
         props_mut.update({'mutation_list': args.mut_list})
         # Write action to global log and execute step
-        global_log.info("step2A_mutations: Preparing mutated structure")
+        global_log.info("step2B_mutations: Preparing mutated structure")
         mutate(**paths_mut, properties=props_mut)
+
+        # Check structure and save results in dictionary
+        pdb_defects_data = checkStructure(paths_mut["output_pdb_path"], global_log)
+        
     else:
         # Just copy pdb to step folder  
-        prep_output_file(paths_pdb["output_pdb_path"], paths_mut["output_pdb_path"])
-    
+        prep_output_file(paths_altloc["output_pdb_path"], paths_mut["output_pdb_path"])
+
     # Validate step
     if not validateStep(paths_mut["output_pdb_path"]):
-        global_log.info("    ERROR: Mutation failed. Check mutations")
+        global_log.info("    ERROR: mutation failed.")
         return 0
 
-# STEP 2 (B): model missing heavy atoms of side chains
+# STEP 2 (C): model missing heavy atoms of backbone
 
     # Properties and paths of step
-    props_fxSC = global_prop["step2B_fixsidechain"]
-    paths_fxSC = global_paths["step2B_fixsidechain"]
+    props_fxBCK = global_prop["step2C_fixbackbone"]
+    paths_fxBCK = global_paths["step2C_fixbackbone"]
+
+    # Check if there are missing side chain heavy atoms
+    if pdb_defects_data["backbone"] and pdbCode is not None:
+
+        # Use PDB code to find canonical FASTA
+        findCanonicalFASTA(paths_fxBCK, pdbCode)
+
+        # Write action to global log and execute step
+        global_log.info("step2C_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
+        fix_backbone(**paths_fxBCK, properties=props_fxBCK) 
+
+        # Check structure and save results in dictionary
+        pdb_defects_data = checkStructure(paths_fxBCK["output_pdb_path"], global_log)
+    
+    elif pdb_defects_data["backbone"] and pdbCode is None:
+        # Write warning to global log
+        global_log.info("    WARNING: Missing backbone atoms or breaks but PDB code not provided. Skipping fixbackbone step...")
+        # Just copy pdb to step folder  
+        prep_output_file(paths_mut["output_pdb_path"], paths_fxBCK["output_pdb_path"])
+   
+    else:
+        # Just copy pdb to step folder  
+        prep_output_file(paths_mut["output_pdb_path"], paths_fxBCK["output_pdb_path"])
+
+    # Validate step
+    if not validateStep(paths_fxBCK["output_pdb_path"]):
+        global_log.info("    ERROR: Fixing backbone failed. Check input PDB")
+        return 0
+
+# STEP 2 (D): model missing heavy atoms of side chains
+
+    # Properties and paths of step
+    props_fxSC = global_prop["step2D_fixsidechain"]
+    paths_fxSC = global_paths["step2D_fixsidechain"]
 
     # Check if there are missing side chain heavy atoms
     if pdb_defects_data["fixside"]:
         # Write action to global log and execute step
-        global_log.info("step2B_fixsidechain: Modeling the missing heavy atoms in the structure side chains")
+        global_log.info("step2D_fixsidechain: Modeling the missing heavy atoms in the structure side chains")
         fix_side_chain(**paths_fxSC, properties=props_fxSC)
     else:
         # Just copy pdb to step folder  
-        prep_output_file(paths_mut["output_pdb_path"], paths_fxSC["output_pdb_path"])
+        prep_output_file(paths_fxBCK["output_pdb_path"], paths_fxSC["output_pdb_path"])
 
     # Validate step
     if not validateStep(paths_fxSC["output_pdb_path"]):
         global_log.info("    ERROR: Fixing side chains failed. Check input PDB")
         return 0
 
-    # Check if this should be the final step
-    if args.to_do == 'fix':
-        shutil.copy(paths_fxSC["output_pdb_path"], args.output_pdb_path)
-        global_log.info("Fix completed. Final structure saved on " + args.output_pdb_path)
-        return 0
-
-# STEP 2 (C): model SS bonds (CYS -> CYX) if necessary
+# STEP 2 (E): model SS bonds (CYS -> CYX) if necessary
 
     # Properties and paths of step
-    props_ss = global_prop["step2C_fixssbonds"]
-    paths_ss = global_paths["step2C_fixssbonds"]
+    props_ss = global_prop["step2E_fixssbonds"]
+    paths_ss = global_paths["step2E_fixssbonds"]
 
     # Check if there are SS bonds
     if pdb_defects_data["getss"]:
         # Write action to global log and execute step
-        global_log.info("step2C_fixssbonds: Fix SS bonds")
+        global_log.info("step2E_fixssbonds: Fix SS bonds")
         fix_ssbonds(**paths_ss, properties=props_ss)
     else:
         # Just copy pdb to step folder  
@@ -466,34 +447,63 @@ def run_wf(args):
     if not validateStep(paths_ss["output_pdb_path"]):
         global_log.info("    ERROR: Fixing SS bonds failed.")
         return 0
-    
-# STEP 2 (D): remove Ligands if any
+
+# STEP 2 (F): renumber structure atoms and residues
 
     # Properties and paths of step
-    props_rmL = global_prop["step2D_removeLigands"]
-    paths_rmL = global_paths["step2D_removeLigands"]
+    props_renum = global_prop["step2F_renumberstructure"]
+    paths_renum = global_paths["step2F_renumberstructure"]
 
-    # Check if there are Ligands
-    if pdb_defects_data["ligands"]:
-
-        # Retrieve residue id of ligands
-        ligands_list = findLigandsResID(pdb_defects_data["ligands"]["detected"])
-
-        # Update properties dictionary
-        props_rmL.update({'molecules': ligands_list}) 
-
-        # Write action to global log and execute step
-        global_log.info("step2D_removeLigands: Removing ligands: {}".format(pdb_defects_data["ligands"]["detected"]))
-        remove_molecules(**paths_rmL, properties=props_rmL)
-    else:
-        # Just copy pdb to step folder  
-        prep_output_file(paths_ss["output_pdb_path"], paths_rmL["output_molecules_path"])
+    # Write action to global log and execute step
+    global_log.info("step2F_renumberstructure: renumber structure")
+    renumber_structure(**paths_renum, properties=props_renum)
 
     # Validate step
-    if not validateStep(paths_rmL["output_molecules_path"]):
-        global_log.info("    ERROR: Removing Ligand failed.")
+    if not validateStep(paths_renum["output_structure_path"]):
+        global_log.info("    ERROR: ERROR while renumbering structure")
         return 0
+
+# STEP 2 (G): Fix amides
+
+    # Properties and paths of step
+    props_famds = global_prop["step2G_fixamides"]
+    paths_famds = global_paths["step2G_fixamides"]
+
+    if pdb_defects_data["amide"]:
+        # Write action to global log and execute step
+        global_log.info("step2G_fixamides: fix clashing amides")
+        fix_amides(**paths_famds, properties=props_famds)
+
+    else:
+        # Just copy pdb to step folder  
+        prep_output_file(paths_renum["output_structure_path"], paths_famds["output_pdb_path"])
+
+
+    # Validate step
+    if not validateStep(paths_famds["output_pdb_path"]):
+        global_log.info("    ERROR: ERROR while fixing clashing amides")
+        return 0
+
+# STEP 2 (H): Final check of the PDB structure and creation of a report for the user
+
+    # Properties and paths of step
+    props_check = global_prop["step2H_checkPDB"]
+    paths_check = global_paths["step2H_checkPDB"]
+
+    # Write action to global log and execute step
+    global_log.info("step2H_checkPDB: check the errors of a PDB structure and create a report log file")
+    checking_log(**paths_check, properties=props_check)
+
+
+    # Check if this should be the final step
+    if args.to_do == 'fix':
+        shutil.copy(paths_famds["output_pdb_path"], args.output_pdb_path)
+        global_log.info("Fix completed. Final structure saved on " + args.output_pdb_path)
+        return 0
+
+    # NOTE: ISSUE WARNINGS in log file before simulation?
     
+
 # STEP 3: add H atoms, generate coordinate (.gro) and topology (.top) file
 
     # Properties and paths of step
