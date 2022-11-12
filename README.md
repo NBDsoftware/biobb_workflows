@@ -14,17 +14,21 @@ Description:
 
 Requirements: git, conda
 
-1. Clone or download this repository
+1. Clone or download this repository:
 
 ```bash
-git clone 
+git clone https://github.com/PabloNA97/eucanshare_wfs.git
 ```
 
-2. Go to workflow folder
+2. Go to one of the 3 workflow folders 
 
-3. Use conda to create the environment 
+3. Use conda to create the corresponding environment 
 
 ```bash
 conda env create -f environment.yml
 ```
-4. Provide necessary input and launch, see run.sh 
+4. Provide necessary inputs modifying the input.yml or the command line call in run.sh and launch:
+
+```bash
+./run.sh
+```
