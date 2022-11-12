@@ -10,13 +10,13 @@ import argparse
 import csv
 import json
 import shutil
-import zipfile
-from pathlib import Path, PurePath
+from pathlib import Path
 
 from pkg_resources import resource_string
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 from biobb_analysis.gromacs.gmx_cluster import gmx_cluster
+from biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_structure_utils.utils.extract_model import extract_model
 from biobb_vs.fpocket.fpocket_run import fpocket_run
 from biobb_vs.fpocket.fpocket_filter import fpocket_filter
@@ -60,7 +60,6 @@ def moveFileIfItExists(origin_src, dest_src):
         shutil.move(origin_src, dest_src)
     
     return
-
 
 
 def saveClusters(log_file, json_file, clustering_folder):
@@ -144,6 +143,32 @@ def saveClusters(log_file, json_file, clustering_folder):
     return clusters_iterator
 
 
+def validateStep(*output_paths):
+    '''
+    Check all output files exist and are not empty
+    
+    Inputs:
+        *output_paths (str): variable number of paths to output file/s
+
+    Output:
+        validation_result (bool): result of validation
+    '''
+
+    # Initialize value 
+    validation_result = True
+
+    # Check existence of files
+    for path in output_paths:
+        validation_result = validation_result and os.path.exists(path)
+
+    # Check files are not empty if they exist
+    if (validation_result):
+
+        for path in output_paths:
+            file_not_empty = os.stat(path).st_size > 0
+            validation_result = validation_result and file_not_empty
+
+    return validation_result
 
 def main(args):
     
@@ -162,46 +187,82 @@ def main(args):
     global_paths = conf.get_paths_dic()
 
     # Saving names of the steps included in config.yml
-    steps_names = list(global_paths.keys())
+    step_names = list(global_paths.keys())
 
     # Launching the actions of the workflow, one by one 
     # Using as inputs the global paths and global properties
     # identified by the corresponding step name
     # Writing information about each step to the global log 
 
+# STEP 0: Index file creation
+    
+    # Only if --ndx option provided
+    if args.ndx: 
+
+        # Write next action to global log
+        global_log.info(step_names[0] + ": Creation of index file for clustering" + "\n")
+
+        # Properties and paths of step
+        prop_ndx = global_prop[step_names[0]]
+        paths_ndx = global_paths[step_names[0]]
+
+        # Action: Initialize MakeNdx and call launch method
+        make_ndx(**paths_ndx, properties=prop_ndx)
+
+        # Validate step
+        if not validateStep(paths_ndx["output_ndx_path"]):
+            global_log.info("    ERROR: No index file was created. Check atom selection string in input file")
+            return 0
+
 # STEP 1: Clustering 
 
-    step_dir = wdir + "/" + steps_names[0] + "/"
+    step_dir = os.path.join(wdir, step_names[1])
     
     # Write next action to global log
-    global_log.info(steps_names[0] + ": Clustering structures from the trajectory" + "\n")
-    
+    global_log.info(step_names[1] + ": Clustering structures from the trajectory" + "\n")
+
+    # Properties and paths of step
+    prop_clust = global_prop[step_names[1]]
+    paths_clust = global_paths[step_names[1]]
+
+    # If ndx flag is used, then use input_index_path in step 1
+    if args.ndx:
+        global_log.info("Using step0 selection (index file)")
+        paths_clust.update({"input_index_path" : paths_ndx["output_ndx_path"]})
+    else:
+        global_log.info("Using step1 selection (no index file)")
+
     # Action: Initialize GMXCluster and call launch method
-    gmx_cluster(**global_paths[steps_names[0]], properties=global_prop[steps_names[0]])
+    gmx_cluster(**paths_clust, properties=prop_clust)
+
+    # Validate step
+    if not validateStep(paths_clust["output_pdb_path"]):
+        global_log.info("    ERROR: No PDB file was created.")
+        return 0
 
     # Write next action to global log
-    global_log.info(steps_names[0] + ": Reading clustering outcome, generating clusters JSON file")
+    global_log.info(step_names[1] + ": Reading clustering outcome, generating clusters JSON file")
 
     # Action: save Clusters' id and population in JSON file
-    clusters = saveClusters(log_file = steps_names[0] + "_cluster.log", json_file = step_dir + "clusters.json", clustering_folder = step_dir)
+    clusters = saveClusters(log_file = step_names[1] + "_cluster.log", json_file = os.path.join(step_dir, "clusters.json"), clustering_folder = step_dir)
 
     # Write next action to global log
-    global_log.info(steps_names[0] + ": Moving clustering output files to folder")
+    global_log.info(step_names[1] + ": Moving clustering output files to folder")
 
     # Action: move gmx_cluster files into step1_gmx_cluster folder
-    moveFileIfItExists(steps_names[0] + "_cluster.log", step_dir + "output.cluster.log")
-    moveFileIfItExists(steps_names[0] + "_rmsd-clust.xpm", step_dir + "output.rmsd-clust.xpm")
-    moveFileIfItExists(steps_names[0] + "_rmsd-dist.xvg", step_dir + "output.rmsd-dist.xvg")
+    moveFileIfItExists(step_names[1] + "_cluster.log", os.path.join(step_dir, "output.cluster.log"))
+    moveFileIfItExists(step_names[1] + "_rmsd-clust.xpm", os.path.join(step_dir, "output.rmsd-clust.xpm"))
+    moveFileIfItExists(step_names[1] + "_rmsd-dist.xvg", os.path.join(step_dir, "output.rmsd-dist.xvg"))
 
 # STEP 2: Extract model/s
 
     # Write next action to global log
-    global_log.info(steps_names[1] + ": Extracting models of N most populated clusters")
+    global_log.info(step_names[2] + ": Extracting models of N most populated clusters")
 
     # Action: Extract the most representative PDB models
     # Properties and paths of step
-    prop = global_prop[steps_names[1]]
-    paths = global_paths[steps_names[1]]
+    prop = global_prop[step_names[2]]
+    paths = global_paths[step_names[2]]
 
     # The models that will be extracted are min(number_clusters, models2extract) -> one model per found cluster at most
     modelsToExtract = prop['models_to_extract']
@@ -223,16 +284,21 @@ def main(args):
 
         # Extract the model 
         extract_model(**paths, properties=prop)
+
+        # Validate step
+        if not validateStep(paths["output_structure_path"]):
+            global_log.info("    ERROR: No model PDB was extracted.")
+            return 0
     
 # STEP 3: Cavity analysis
 
     # Write next action to global log
-    global_log.info(steps_names[2] + ": Compute protein cavities using fpocket")
+    global_log.info(step_names[3] + ": Compute protein cavities using fpocket")
 
     # Action: Search for cavities for each model using fpocket
     # Properties and paths of step
-    prop = global_prop[steps_names[2]]
-    paths = global_paths[steps_names[2]]
+    prop = global_prop[step_names[3]]
+    paths = global_paths[step_names[3]]
 
     # From the extracted models use only some, defined in input.yml, cannot be greater than modelsToExtract
     modelsToUse = prop['models_to_use']
@@ -257,15 +323,20 @@ def main(args):
 
         fpocket_run(**paths, properties=prop)
 
+        # Validate step
+        if not validateStep(paths["output_pockets_zip"], paths["output_summary"]):
+            global_log.info("    ERROR: no output from fpocket.")
+            return 0
+
 # STEP 4: Filtering cavities
 
     # Write next action to global log
-    global_log.info(steps_names[3] + ": Filter found cavities")
+    global_log.info(step_names[4] + ": Filter found cavities")
 
     # Action: Filter the set of cavities for each model
     # Properties and paths of step
-    prop = global_prop[steps_names[3]]
-    paths = global_paths[steps_names[3]]
+    prop = global_prop[step_names[4]]
+    paths = global_paths[step_names[4]]
 
     # Default paths from input.yml
     default_zip_input = Path(paths['input_pockets_zip'])
@@ -303,7 +374,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Simple clustering, cavity analysis and docking pipeline using BioExcel Building Blocks")
     
     parser.add_argument('--config', dest='config_path',
-                        help="Configuration file (YAML)")
+                        help="Configuration file (YAML)", required=True)
+
+    parser.add_argument('--ndx', action='store_true',
+                        help="Wether to create index file defining atoms that will be used for clustering in step0 or use step1 selection properties", required=False)
     
     args = parser.parse_args()
 
