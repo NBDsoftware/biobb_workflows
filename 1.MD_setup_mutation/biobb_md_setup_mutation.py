@@ -65,10 +65,6 @@ def validateStep(*output_paths):
         for path in output_paths:
             file_not_empty = os.stat(path).st_size > 0
             validation_result = validation_result and file_not_empty
-    
-    # Erase files if they are empty
-    if (validation_result == False):
-        removeFiles(*output_paths)
 
     return validation_result
 
