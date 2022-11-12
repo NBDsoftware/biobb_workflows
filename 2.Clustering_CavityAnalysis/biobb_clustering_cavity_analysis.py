@@ -290,6 +290,11 @@ def main(args):
             global_log.info("    ERROR: No model PDB was extracted.")
             return 0
     
+    # Check if this should be the final step
+    if args.cluster:
+        global_log.info("Clustering completed.")
+        return 0
+
 # STEP 3: Cavity analysis
 
     # Write next action to global log
@@ -378,7 +383,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--ndx', action='store_true',
                         help="Wether to create index file defining atoms that will be used for clustering in step0 or use step1 selection properties", required=False)
-    
+
+    parser.add_argument('--cluster', action='store_true',
+                        help="Just cluster trajectory and extract models (step0 - step2)", required=False)
+
     args = parser.parse_args()
 
     main(args)
