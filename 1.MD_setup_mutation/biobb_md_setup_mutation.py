@@ -5,15 +5,13 @@
 # Example of Python Script (should be accompanied by a YAML input configuration file)
 
 # Importing all the needed libraries
-import sys
 import os
-import re
 import time
 import json
 import argparse
 import shutil
-from pathlib import Path, PurePath
-from traceback import StackSummary
+from zipfile import ZipFile
+from pathlib import Path
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
@@ -24,8 +22,10 @@ from biobb_model.model.fix_side_chain import fix_side_chain
 from biobb_model.model.fix_ssbonds import fix_ssbonds
 from biobb_model.model.fix_altlocs import fix_altlocs
 from biobb_model.model.fix_amides import fix_amides
+from biobb_model.model.fix_chirality import fix_chirality
 from biobb_model.model.checking_log import checking_log
 from biobb_model.model.mutate import mutate
+from biobb_gromacs.gromacs.trjcat import trjcat
 from biobb_gromacs.gromacs.pdb2gmx import pdb2gmx
 from biobb_gromacs.gromacs.editconf import editconf
 from biobb_gromacs.gromacs.solvate import solvate
@@ -45,11 +45,16 @@ def validateStep(*output_paths):
     '''
     Check all output files exist and are not empty
     
-    Inputs:
+    Inputs
+    ------
+
         *output_paths (str): variable number of paths to output file/s
 
-    Output:
+    Output
+    ------
+
         validation_result (bool): result of validation
+
     '''
 
     # Initialize value 
@@ -73,6 +78,8 @@ def removeFiles(*file_path):
     Removes files in '*file_path' if they exist
 
     Inputs
+    ------
+
         file_path  (str): variable number of paths to files including filename
     '''
     for path in file_path:
@@ -86,12 +93,14 @@ def prep_output_file(input_file_path, output_file_path):
     Copy input_file_path to output_file_path
 
     Inputs
+    ------
+
         input_file_path  (str): '/path/to/input/input.pdb'
         output_file_path (str): '/path/to/output/output.pdb'
     '''
 
     # Get '/path/to/output/'
-    wdir = PurePath(output_file_path).parent
+    wdir = Path(output_file_path).parent
 
     # If '/path/to/output/' not created then create
     if not os.path.isdir(wdir):
@@ -101,7 +110,18 @@ def prep_output_file(input_file_path, output_file_path):
     shutil.copy(input_file_path, output_file_path)
 
 def write_pdb_from_gro(output_pdb_path, input_gro_path):
+    '''
+    Convert .gro to .pdb file
+
+    Inputs
+    ------
+
+        output_pdb_path  (str): '/path/to/input/input.pdb'
+        input_gro_path   (str): '/path/to/output/output.pdb'
+    '''
+
     prop = {'selection': 'Protein'}
+
     gmx_trjconv_str(
         input_structure_path=input_gro_path,
         input_top_path=input_gro_path,
@@ -115,10 +135,14 @@ def readJSONSummary(summary_path):
     Reads information from structure_check JSON summary, and returns the contents of the JSON 
     file as a dictionary to be used if necessary by the extra steps
 
-    Inputs:
+    Inputs
+    ------
+
         summary_path   (str): '/path/to/structureCheckSummary.json'
 
-    Output:
+    Output
+    ------
+
         pdb_defects_data (dict): dictionary containing the information for each defect
     
     '''
@@ -136,16 +160,19 @@ def checkStructure(step_pdb_path, global_log):
     Writes PDB check summary in JSON file and writes JSON file data into a python dictionary
     to be used by the workflow.
     
-    Inputs:
+    Inputs
+    ------
+
         step_pdb_path       (str): path to pdb in current step
         global_log    (log class): logger to global log
 
-    Output:
+    Output
+    ------
         pdb_defects_data   (dict): dictionary with pdb defects
     '''
 
     # Identify output folder 
-    step_path = PurePath(step_pdb_path).parent
+    step_path = Path(step_pdb_path).parent
 
     # Create JSON summary output path
     output = os.path.join(step_path, "pdbStructureCheck.json")
@@ -175,7 +202,8 @@ def findCanonicalFASTA(fixBackbone_paths, pdbCode):
     '''
     Finds canonical FASTA from a PDB code and saves it in step path
 
-    Inputs:
+    Inputs
+    ------
         fixBackbone_paths (dict): dictionary with paths of current step
         pdbCode            (str): PDB code 
     '''
@@ -187,7 +215,7 @@ def findCanonicalFASTA(fixBackbone_paths, pdbCode):
     output_fasta_path=fixBackbone_paths["input_fasta_canonical_sequence_path"]
 
     # Identify output folder 
-    wdir = PurePath(output_fasta_path).parent
+    wdir = Path(output_fasta_path).parent
 
     # If '/path/to/output/' not created then create
     if not os.path.isdir(wdir):
@@ -202,7 +230,9 @@ def findBestAltLocs(altloc_data):
     '''
     Finds best alternative location for each residue
 
-    Inputs:
+    Inputs
+    ------
+
         altloc_data (dict): dictionary with information regarding altlocs
     '''
 
@@ -234,14 +264,128 @@ def findBestAltLocs(altloc_data):
 
     return best_altlocs
 
+def concatenateTrajs(num_trajs, mdrun_traj_path, paths_trjcat, props_trjcat):
+    '''
+    Creates a zip file with all trajectories and then concatenates them
+
+    Inputs
+    ------
+
+        num_trajs         (int): number of trajectories to concatenate
+        mdrun_traj_path   (str): default path to "npt free" trajectory
+        paths_trjcat     (dict): paths of concatenating step
+        props_trjcat     (dict): properties of concatenating step
+
+    '''
+
+    # Generic trajectory name
+    traj_name = Path(mdrun_traj_path).name
+
+    # Path of npt free mdrun with all trajectories
+    mdrun_path = Path(mdrun_traj_path).parent
+
+    # Path for zip file expected by trjcat step
+    zip_path = paths_trjcat["input_trj_zip_path"]
+
+    # trjcat step folder
+    trjcat_step_path = Path(zip_path).parent
+
+    # If the step folder is not created, create it
+    if not os.path.exists(trjcat_step_path):
+        os.mkdir(trjcat_step_path)
+
+    # Create a ZipFile object
+    zip_file_obj = ZipFile(zip_path, 'w')
+
+    # Write to zip file
+    for traj_index in range(num_trajs):
+
+        # Traj folder name
+        traj_folder = "traj" + str(traj_index)
+
+        # Generic trajectory folder path
+        traj_folder_path = os.path.join(mdrun_path, traj_folder)
+
+        # Generic trajectory file path
+        traj_file_path = os.path.join(traj_folder_path, traj_name)
+
+        # Add to zip file
+        zip_file_obj.write(traj_file_path)
+    
+    # Close zip file
+    zip_file_obj.close()
+
+    # Concatenate trajectories using zip file
+    trjcat(**paths_trjcat, properties=props_trjcat)
+
+    return
+
+def addTrajPath(all_paths, traj_index, *keywords):
+    '''
+    Goes over paths corresponding to keywords in all_paths dictionary, adds 
+    folder corresponding to current traj. Creates the trajectory and step folders if needed.
+    
+    Inputs
+    ------
+
+        all_paths  (dict): dictionary with all paths of step
+        traj_index  (int): index corresponding to current trajectory
+        keywords    (str): keywords of output/input files that are inside a traj folder
+
+    Output
+    ------
+
+        new_paths  (dict): dictionary with paths with those corresponding to "keywords" modified
+    '''
+    # New paths
+    new_paths = all_paths
+
+    # Trajectory name
+    trajname = "traj" + str(traj_index)
+
+    # For all keys passed in keywords, modify path according to trajname
+    for key in keywords:
+
+        # Step path
+        stepfolder = Path(new_paths[key]).parent
+
+        # Name of file
+        filename = Path(new_paths[key]).name
+
+        # Add traj path to step path
+        trajfolder = os.path.join(stepfolder, trajname)
+
+        # Add file name to traj path
+        newpath = os.path.join(trajfolder, filename)
+
+        # Update paths dictionary
+        new_paths.update({key : newpath})
+
+    # If the step folder is not created, create it
+    if not os.path.exists(stepfolder):
+        os.mkdir(stepfolder)
+
+    # If the traj folder is not created, create it
+    if not os.path.exists(trajfolder):
+        os.mkdir(trajfolder)
+
+    return new_paths
 
 def run_wf(args):
+
+    print(args)
 
     start_time = time.time()
 
     # Set default value for 'to_do' arg
-    if 'to_do' not in args:
+    if args.to_do is None:
         args.to_do = 'free'
+
+    # Set default value for n_trajs arg
+    if args.n_trajs is None:
+        args.n_trajs = 1
+    else:
+        args.n_trajs = int(args.n_trajs)
         
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(args.config_path)
@@ -327,8 +471,6 @@ def run_wf(args):
         # Find best alternative locations
         best_altlocs = findBestAltLocs(pdb_defects_data["altloc"])
 
-        print(best_altlocs)
-
         # Update properties dictionary
         props_altloc.update({'altlocs': best_altlocs})
 
@@ -352,8 +494,10 @@ def run_wf(args):
     paths_mut = global_paths["step2B_mutations"]
 
     if args.mut_list:
+
         # Update properties dictionary
         props_mut.update({'mutation_list': args.mut_list})
+
         # Write action to global log and execute step
         global_log.info("step2B_mutations: Preparing mutated structure")
         mutate(**paths_mut, properties=props_mut)
@@ -370,13 +514,13 @@ def run_wf(args):
         global_log.info("    ERROR: mutation failed.")
         return 0
 
-# STEP 2 (C): model missing heavy atoms of backbone
+# STEP 2 (C): model missing heavy atoms of backbone NOTE: if break is long only caps, How?
 
     # Properties and paths of step
     props_fxBCK = global_prop["step2C_fixbackbone"]
     paths_fxBCK = global_paths["step2C_fixbackbone"]
 
-    # Check if there are missing side chain heavy atoms
+    # Missing bck heavy atoms + known PDB code -> Model
     if pdb_defects_data["backbone"] and pdbCode is not None:
 
         # Use PDB code to find canonical FASTA
@@ -385,24 +529,29 @@ def run_wf(args):
         # Write action to global log and execute step
         global_log.info("step2C_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
         fix_backbone(**paths_fxBCK, properties=props_fxBCK) 
-
-        # Check structure and save results in dictionary
-        pdb_defects_data = checkStructure(paths_fxBCK["output_pdb_path"], global_log)
     
+    # Missing bck heavy atoms + no PDB code
     elif pdb_defects_data["backbone"] and pdbCode is None:
+
         # Write warning to global log
         global_log.info("    WARNING: Missing backbone atoms or breaks but PDB code not provided. Skipping fixbackbone step...")
+        
         # Just copy pdb to step folder  
         prep_output_file(paths_mut["output_pdb_path"], paths_fxBCK["output_pdb_path"])
-   
+    
+    # No missing bck heavy atoms
     else:
+
         # Just copy pdb to step folder  
-        prep_output_file(paths_mut["output_pdb_path"], paths_fxBCK["output_pdb_path"])
+        prep_output_file(paths_renum["output_structure_path"], paths_fxBCK["output_pdb_path"])
 
     # Validate step
     if not validateStep(paths_fxBCK["output_pdb_path"]):
         global_log.info("    ERROR: Fixing backbone failed. Check input PDB")
         return 0
+
+    # Check structure and save results in dictionary
+    pdb_defects_data = checkStructure(paths_fxBCK["output_pdb_path"], global_log)
 
 # STEP 2 (D): model missing heavy atoms of side chains
 
@@ -412,10 +561,13 @@ def run_wf(args):
 
     # Check if there are missing side chain heavy atoms
     if pdb_defects_data["fixside"]:
+
         # Write action to global log and execute step
         global_log.info("step2D_fixsidechain: Modeling the missing heavy atoms in the structure side chains")
         fix_side_chain(**paths_fxSC, properties=props_fxSC)
+    
     else:
+
         # Just copy pdb to step folder  
         prep_output_file(paths_fxBCK["output_pdb_path"], paths_fxSC["output_pdb_path"])
 
@@ -432,10 +584,13 @@ def run_wf(args):
 
     # Check if there are SS bonds
     if pdb_defects_data["getss"]:
+
         # Write action to global log and execute step
         global_log.info("step2E_fixssbonds: Fix SS bonds")
         fix_ssbonds(**paths_ss, properties=props_ss)
+
     else:
+
         # Just copy pdb to step folder  
         prep_output_file(paths_fxSC["output_pdb_path"], paths_ss["output_pdb_path"])
 
@@ -444,35 +599,22 @@ def run_wf(args):
         global_log.info("    ERROR: Fixing SS bonds failed.")
         return 0
 
-# STEP 2 (F): renumber structure atoms and residues
+# STEP 2 (F): Fix amides
 
     # Properties and paths of step
-    props_renum = global_prop["step2F_renumberstructure"]
-    paths_renum = global_paths["step2F_renumberstructure"]
-
-    # Write action to global log and execute step
-    global_log.info("step2F_renumberstructure: renumber structure")
-    renumber_structure(**paths_renum, properties=props_renum)
-
-    # Validate step
-    if not validateStep(paths_renum["output_structure_path"]):
-        global_log.info("    ERROR: ERROR while renumbering structure")
-        return 0
-
-# STEP 2 (G): Fix amides
-
-    # Properties and paths of step
-    props_famds = global_prop["step2G_fixamides"]
-    paths_famds = global_paths["step2G_fixamides"]
+    props_famds = global_prop["step2F_fixamides"]
+    paths_famds = global_paths["step2F_fixamides"]
 
     if pdb_defects_data["amide"]:
+
         # Write action to global log and execute step
-        global_log.info("step2G_fixamides: fix clashing amides")
+        global_log.info("step2F_fixamides: fix clashing amides")
         fix_amides(**paths_famds, properties=props_famds)
 
     else:
+
         # Just copy pdb to step folder  
-        prep_output_file(paths_renum["output_structure_path"], paths_famds["output_pdb_path"])
+        prep_output_file(paths_ss["output_structure_path"], paths_famds["output_pdb_path"])
 
 
     # Validate step
@@ -480,26 +622,60 @@ def run_wf(args):
         global_log.info("    ERROR: ERROR while fixing clashing amides")
         return 0
 
-# STEP 2 (H): Final check of the PDB structure and creation of a report for the user
+# STEP 2 (H): Fix chirality
 
     # Properties and paths of step
-    props_check = global_prop["step2H_checkPDB"]
-    paths_check = global_paths["step2H_checkPDB"]
+    props_fchir = global_prop["step2G_fixchirality"]
+    paths_fchir = global_paths["step2G_fixchirality"]
+
+    # NOTE: this is not the same as chirality problems... read from log file?
+    if pdb_defects_data["chiral"] or pdb_defects_data["chiral_bck"]:
+        
+        # Write action to global log and execute step
+        global_log.info("step2G_fixchirality: fix chirality of residues")
+        fix_chirality(**paths_fchir, properties=props_fchir)
+
+    else:
+
+        # Just copy pdb to step folder  
+        prep_output_file(paths_famds["output_pdb_path"], paths_fchir["output_pdb_path"])
+
+    # Validate step
+    if not validateStep(paths_fchir["output_pdb_path"]):
+        global_log.info("    ERROR: ERROR while fixing chirality of residues")
+        return 0
+
+# STEP 2 (H): renumber structure atoms and residues
+
+    # Properties and paths of step
+    props_renum = global_prop["step2H_renumberstructure"]
+    paths_renum = global_paths["step2H_renumberstructure"]
 
     # Write action to global log and execute step
-    global_log.info("step2H_checkPDB: check the errors of a PDB structure and create a report log file")
-    checking_log(**paths_check, properties=props_check)
+    global_log.info("step2H_renumberstructure: renumber structure")
+    renumber_structure(**paths_renum, properties=props_renum)
 
+    # Validate step
+    if not validateStep(paths_renum["output_structure_path"]):
+        global_log.info("    ERROR: ERROR while renumbering structure")
+        return 0
+
+# STEP 2 (I): Final check of the PDB structure and creation of a report for the user
+
+    # Properties and paths of step
+    props_check = global_prop["step2I_checkPDB"]
+    paths_check = global_paths["step2I_checkPDB"]
+
+    # Write action to global log and execute step
+    global_log.info("step2I_checkPDB: check the errors of a PDB structure and create a report log file")
+    checking_log(**paths_check, properties=props_check)
 
     # Check if this should be the final step
     if args.to_do == 'fix':
-        shutil.copy(paths_famds["output_pdb_path"], args.output_pdb_path)
+        shutil.copy(paths_renum["output_structure_path"], args.output_pdb_path)
         global_log.info("Fix completed. Final structure saved on " + args.output_pdb_path)
         return 0
-
-    # NOTE: ISSUE WARNINGS in log file before simulation?
     
-
 # STEP 3: add H atoms, generate coordinate (.gro) and topology (.top) file
 
     # Properties and paths of step
@@ -512,7 +688,7 @@ def run_wf(args):
 
     # Validate step
     if not validateStep(paths["output_gro_path"], paths["output_top_zip_path"]):
-        global_log.info("    ERROR: Coordinates and/or topology where not generated. Check input PDB")
+        global_log.info("    ERROR: Coordinates and/or topology were not generated. Check input PDB")
         return 0
 
 # STEP 4: Create simulation box
@@ -718,52 +894,133 @@ def run_wf(args):
 
 # STEP 18: free NPT production run
 
-    # Properties and paths of step
-    props = global_prop["step18_mdrun_md"]
-    paths = global_paths["step18_mdrun_md"]
-
-    # Write next action to global log and execute step
+    # Write next action to global log 
     global_log.info("step18_mdrun_md: Execute free molecular dynamics simulation")
-    mdrun(**paths, properties=props)
+    global_log.info("                 Number of trajectories: {}".format(args.n_trajs))
+    
+    for traj_index in range(args.n_trajs):
 
-    # Validate step
-    if not validateStep(paths["output_gro_path"]):
-        global_log.info("    ERROR: output .gro file was not generated")
-        return 0
+        # Properties and paths of step
+        props_mdrun = global_prop["step18_mdrun_md"].copy()
+        paths_mdrun = global_paths["step18_mdrun_md"].copy()
 
-# STEP 19: dump RMSD with respect to equilibrated structure (first frame)
+        # Modify paths according to traj
+        addTrajPath(paths_mdrun,
+                    traj_index,
+                    "output_trr_path",
+                    "output_gro_path",
+                    "output_edr_path",
+                    "output_log_path",
+                    "output_cpt_path")
+        
+        # Execute step
+        mdrun(**paths_mdrun, properties=props_mdrun)
 
-    # Write next action to global log and execute step
-    global_log.info("step19_rmsfirst: Compute Root Mean Square deviation against equilibrated structure (first)")
-    gmx_rms(**global_paths["step19_rmsfirst"], properties=global_prop["step19_rmsfirst"])
+        # Validate step NOTE: different processes accessing same global log, if we were to parallelize this?
+        if not validateStep(paths_mdrun["output_gro_path"]):
+            global_log.info("    ERROR: output .gro file was not generated")
+            return 0
 
-# STEP 20: dump RMSD with respect to minimized structure
+    # STEP 19: dump RMSD with respect to equilibrated structure (first frame)
 
-    # Write next action to global log and execute step
-    global_log.info("step20_rmsexp: Compute Root Mean Square deviation against minimized structure (exp)")
-    gmx_rms(**global_paths["step20_rmsexp"], properties=global_prop["step20_rmsexp"])
+        # Write next action to global log 
+        global_log.info("step19_rmsfirst: Compute Root Mean Square deviation against equilibrated structure (first)")
 
-# STEP 21: dump Radius of gyration 
+        # Properties and paths of step
+        props_rmsFst = global_prop["step19_rmsfirst"].copy()
+        paths_rmsFst = global_paths["step19_rmsfirst"].copy()
 
-    # Write next action to global log and execute step
-    global_log.info("step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
-    gmx_rgyr(**global_paths["step21_rgyr"], properties=global_prop["step21_rgyr"])
+        # Modify paths according to traj
+        addTrajPath(paths_rmsFst,
+                    traj_index,
+                    "input_traj_path",
+                    "output_xvg_path")
 
-# STEP 22: image (correct for PBC) the trajectory centering the protein and dumping only protein atoms
+        # Execute step
+        gmx_rms(**paths_rmsFst, properties=props_rmsFst)
 
-    # Write next action to global log and execute step
-    global_log.info("step22_image: Imaging the resulting trajectory")
-    gmx_image(**global_paths["step22_image"], properties=global_prop["step22_image"])
+    # STEP 20: dump RMSD with respect to minimized structure
+
+        # Write next action to global log 
+        global_log.info("step20_rmsexp: Compute Root Mean Square deviation against minimized structure (exp)")
+        
+        # Properties and paths of step
+        props_rmsExp = global_prop["step20_rmsexp"].copy()
+        paths_rmsExp = global_paths["step20_rmsexp"].copy()
+
+        # Modify paths according to traj
+        addTrajPath(paths_rmsExp,
+                    traj_index,
+                    "input_traj_path",
+                    "output_xvg_path")
+        
+        # Execute step
+        gmx_rms(**paths_rmsExp, properties=props_rmsExp)
+
+    # STEP 21: dump Radius of gyration 
+
+        # Write next action to global log 
+        global_log.info("step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
+
+        # Properties and paths of step
+        props_rgyr = global_prop["step21_rgyr"].copy()
+        paths_rgyr = global_paths["step21_rgyr"].copy()
+
+        # Modify paths according to traj
+        addTrajPath(paths_rgyr,
+                    traj_index,
+                    "input_traj_path",
+                    "output_xvg_path")
+        # Execute step
+        gmx_rgyr(**paths_rgyr, properties=props_rgyr)
+
+    # STEP 22: image (correct for PBC) the trajectory centering the protein and dumping only protein atoms
+
+        # Write next action to global log 
+        global_log.info("step22_image: Imaging the resulting trajectory")
+
+        # Properties and paths of step
+        props_img = global_prop["step22_image"].copy()
+        paths_img = global_paths["step22_image"].copy()
+
+        # Modify paths according to traj
+        addTrajPath(paths_img,
+                    traj_index,
+                    "input_traj_path",
+                    "output_traj_path")
+
+        # Execute step
+        gmx_image(**paths_img, properties=props_img)
 
 # STEP 23: remove water and ions from final structure after free NPT production run
 
-    # Write next action to global log and execute step
+    # Write next action to global log 
     global_log.info("step23_dry: Removing water molecules and ions from the resulting structure")
+        
+    # Execute step
     gmx_trjconv_str(**global_paths["step23_dry"], properties=global_prop["step23_dry"])
 
-    write_pdb_from_gro(args.output_pdb_path, global_paths["step18_mdrun_md"]["output_gro_path"])
-    global_log.info("Free Equilibration completed. Final structure saved on " + args.output_pdb_path)
-    
+    global_log.info("Free Equilibration completed.")
+
+# STEP 24: concatenate trajectories
+
+    # Write next action to global log 
+    global_log.info("step24_trjcat: Concatenate trajectories")
+
+    # Properties and paths of step
+    props_trjcat = global_prop["step24_trjcat"].copy()
+    paths_trjcat = global_paths["step24_trjcat"].copy()
+
+    # Properties and paths of step
+    paths_mdrun = global_paths["step18_mdrun_md"].copy()
+
+    concatenateTrajs(args.n_trajs, paths_mdrun["output_trr_path"], paths_trjcat, props_trjcat)
+
+    # Validate step
+    if not validateStep(paths_trjcat["output_trj_path"]):
+        global_log.info("    ERROR: Concatenation of trajectories failed.")
+        return 0
+
     # Print timing information to the log file
     elapsed_time = time.time() - start_time
     global_log.info('')
@@ -784,20 +1041,25 @@ def main():
     parser.add_argument('-i', dest='input_pdb_path',
                         help="Input pdb file or id (as pdb:id)", required=True)
 
-    parser.add_argument('-o', dest='output_pdb_path',
-                        help="Output pdb file", required=True)
+    parser.add_argument('--config', dest='config_path',
+                        help="Configuration file (YAML)", required=True)
 
     # Execute workflow until 'to_do' step -> free executes all steps
-    parser.add_argument(
-        '--op', dest='to_do', help="Extent of the pipeline to execute (fix, min, nvt, npt, free")
+    parser.add_argument('--op', dest='to_do', help="(Opt) Extent of the pipeline to execute (fix, min, nvt, npt, free)", required=False)
 
     parser.add_argument('--mut_list', dest='mut_list',
-                        help="Mutations list as comma-separated list with the format  'chain_id : Old_residue_code Residue_number New_residue_code'. Examples: 'A:G34T' or 'A:F38C,A:N39W,A:T40G' ")
+                        help="(Opt) Mutations list as comma-separated list with the format  'chain_id : Old_residue_code Residue_number New_residue_code'. Examples: 'A:G34T' or 'A:F38C,A:N39W,A:T40G' ", required=False)
 
-    parser.add_argument('--config', dest='config_path',
-                        help="Configuration file (YAML)")
+    parser.add_argument('--n_trajs', dest='n_trajs',
+                        help="(Opt) Number of trajectories (default: 1)", required=False)    
     
     args = parser.parse_args()
+
+    # Define global constants
+    global HOMOLOGY_MAX_RES
+
+    # Maximum number of residues to be created using homology modelling
+    HOMOLOGY_MAX_RES = 10
 
     run_wf(args)
 
