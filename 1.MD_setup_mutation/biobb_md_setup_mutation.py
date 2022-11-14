@@ -264,14 +264,14 @@ def findBestAltLocs(altloc_data):
 
     return best_altlocs
 
-def concatenateTrajs(num_trajs, mdrun_traj_path, paths_trjcat, props_trjcat):
+def concatenateTrajs(args, mdrun_traj_path, paths_trjcat, props_trjcat):
     '''
     Creates a zip file with all trajectories and then concatenates them
 
     Inputs
     ------
 
-        num_trajs         (int): number of trajectories to concatenate
+        args             (dict): arguments passed at runtime
         mdrun_traj_path   (str): default path to "npt free" trajectory
         paths_trjcat     (dict): paths of concatenating step
         props_trjcat     (dict): properties of concatenating step
@@ -298,7 +298,7 @@ def concatenateTrajs(num_trajs, mdrun_traj_path, paths_trjcat, props_trjcat):
     zip_file_obj = ZipFile(zip_path, 'w')
 
     # Write to zip file
-    for traj_index in range(num_trajs):
+    for traj_index in range(args.n_trajs):
 
         # Traj folder name
         traj_folder = "traj" + str(traj_index)
@@ -314,6 +314,10 @@ def concatenateTrajs(num_trajs, mdrun_traj_path, paths_trjcat, props_trjcat):
     
     # Close zip file
     zip_file_obj.close()
+
+    # If args.output_path was provided, use it instead of input.yml path
+    if args.output_path is not None:
+        paths_trjcat.update({'output_trj_path' : args.output_path})
 
     # Concatenate trajectories using zip file
     trjcat(**paths_trjcat, properties=props_trjcat)
@@ -396,9 +400,14 @@ def run_wf(args):
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
 
-    # Set default value for 'output_pdb_path' arg
-    if args.output_pdb_path is None:
-        args.output_pdb_path = os.path.join(conf.get_working_dir_path(), "final.pdb") 
+    # Set default value for 'output_path' arg
+    if args.output_path is None:
+        
+        if args.to_do != 'all':
+            # If output is the structure
+            args.output_path = os.path.join(conf.get_working_dir_path(), "final.pdb") 
+
+        # If output is the trajectory and args.output was not provided, use path from input.yml
 
     # Declaring the steps of the workflow, one by one 
     # Using as inputs the global paths and global properties
@@ -414,12 +423,12 @@ def run_wf(args):
     # Initial value for PDB code - change it if user gives PDB code
     pdbCode = None
     
-    if 'pdb:' in args.input_pdb_path:
+    if 'pdb:' in args.input:
 
         # If the user gives the pdb ID as 'pdb:id' -> download PDB 
 
         # Just the id from 'pdb:id'
-        pdbCode = args.input_pdb_path.split(':')[1]
+        pdbCode = args.input.split(':')[1]
 
         # Update properties dictionary
         props_pdb.update({'pdb_code': pdbCode})
@@ -432,8 +441,8 @@ def run_wf(args):
         # If the user gives the pdb file -> just copy to step folder
 
         # Write action to global log and execute step
-        global_log.info("step1A_pdb: Adding input PDB ({}) to working dir".format(args.input_pdb_path))
-        prep_output_file(args.input_pdb_path, paths_pdb["output_pdb_path"])
+        global_log.info("step1A_pdb: Adding input PDB ({}) to working dir".format(args.input))
+        prep_output_file(args.input, paths_pdb["output_pdb_path"])
         
         # Search for pdb code in input.yml
         if props_pdb['pdb_code']:
@@ -464,8 +473,8 @@ def run_wf(args):
 
     # Check if this should be the final step
     if args.to_do == 'pdb':
-        shutil.copy(paths_extract["output_molecule_path"], args.output_pdb_path)
-        global_log.info("Molecule extraction completed. Final structure saved on " + args.output_pdb_path)
+        shutil.copy(paths_extract["output_molecule_path"], args.output_path)
+        global_log.info("Molecule extraction completed. Final structure saved on " + args.output_path)
         return 0
 
 # STEP 2 (A): Fix alternative locations
@@ -680,8 +689,8 @@ def run_wf(args):
 
     # Check if this should be the final step
     if args.to_do == 'fix':
-        shutil.copy(paths_renum["output_structure_path"], args.output_pdb_path)
-        global_log.info("Fix completed. Final structure saved on " + args.output_pdb_path)
+        shutil.copy(paths_renum["output_structure_path"], args.output_path)
+        global_log.info("Fix completed. Final structure saved on " + args.output_path)
         return 0
     
 # STEP 3: add H atoms, generate coordinate (.gro) and topology (.top) file
@@ -797,8 +806,8 @@ def run_wf(args):
 
     # Check if this should be the final step
     if args.to_do == 'min':
-        write_pdb_from_gro(args.output_pdb_path, paths["output_gro_path"])
-        global_log.info("Minimization completed. Final structure saved on " + args.output_pdb_path)
+        write_pdb_from_gro(args.output_path, paths["output_gro_path"])
+        global_log.info("Minimization completed. Final structure saved on " + args.output_path)
         return 0
 
 # STEP 11: NVT equilibration pre-processing
@@ -839,8 +848,8 @@ def run_wf(args):
 
     # Check if this should be the final step
     if args.to_do == 'nvt':
-        write_pdb_from_gro(args.output_pdb_path, paths["output_gro_path"])
-        global_log.info("NVT Equilibration completed. Final structure saved on " + args.output_pdb_path)
+        write_pdb_from_gro(args.output_path, paths["output_gro_path"])
+        global_log.info("NVT Equilibration completed. Final structure saved on " + args.output_path)
         return 0
 
 # STEP 14: NPT equilibration pre-processing
@@ -881,8 +890,8 @@ def run_wf(args):
 
     # Check if this should be the final step
     if args.to_do == 'npt':
-        write_pdb_from_gro(args.output_pdb_path, paths["output_gro_path"])
-        global_log.info("NPT Equilibration completed. Final structure saved on " + args.output_pdb_path)
+        write_pdb_from_gro(args.output_path, paths["output_gro_path"])
+        global_log.info("NPT Equilibration completed. Final structure saved on " + args.output_path)
         return 0
 
 # STEP 17: free NPT production run pre-processing
@@ -979,6 +988,7 @@ def run_wf(args):
                     traj_index,
                     "input_traj_path",
                     "output_xvg_path")
+
         # Execute step
         gmx_rgyr(**paths_rgyr, properties=props_rgyr)
 
@@ -1022,7 +1032,7 @@ def run_wf(args):
     # Properties and paths of step
     paths_mdrun = global_paths["step18_mdrun_md"].copy()
 
-    concatenateTrajs(args.n_trajs, paths_mdrun["output_trr_path"], paths_trjcat, props_trjcat)
+    concatenateTrajs(args, paths_mdrun["output_trr_path"], paths_trjcat, props_trjcat)
 
     # Validate step
     if not validateStep(paths_trjcat["output_trj_path"]):
@@ -1046,29 +1056,29 @@ def main():
 
     parser = argparse.ArgumentParser("Simple MD Protein Setup")
 
-    parser.add_argument('-i', dest='input_pdb_path',
-                        help="Input pdb file or id (as pdb:id)", 
+    parser.add_argument('--input', dest='input',
+                        help="Input pdb file or pdb id (as pdb:id)", 
                         required=True)
 
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)", 
                         required=True)
     
-    parser.add_argument('-o', dest='output_pdb_path',
-                        help="Output pdb path", 
+    parser.add_argument('--output', dest='output_path',
+                        help="Output path (structure or trajectory).", 
                         required=False)
 
     # Execute workflow until 'to_do' step -> all executes all steps (all is default)
     parser.add_argument('--until', dest='to_do', 
-                        help="(Opt) Extent of the pipeline to execute (pdb, fix, min, nvt, npt, all)", 
+                        help="(Opt, default: all) Extent of the pipeline to execute (pdb, fix, min, nvt, npt or all)", 
                         required=False)
 
     parser.add_argument('--mut_list', dest='mut_list',
-                        help="(Opt) Mutations list as comma-separated list with the format  'chain_id : Old_residue_code Residue_number New_residue_code'. Examples: 'A:G34T' or 'A:F38C,A:N39W,A:T40G' ", 
+                        help="(Opt, default: None) Mutations as comma-separated list with the format: 'chain_id : Old_residue_code Residue_number New_residue_code'. Examples: 'A:G34T' or 'A:F38C,A:N39W,A:T40G' ", 
                         required=False)
 
     parser.add_argument('--n_trajs', dest='n_trajs',
-                        help="(Opt) Number of trajectories (default: 1)", 
+                        help="(Opt, default: 1) Number of trajectories", 
                         required=False)    
     
     args = parser.parse_args()

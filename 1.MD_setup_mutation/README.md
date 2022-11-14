@@ -44,3 +44,37 @@ This workflow has several main sections, the workflow can be run until the end o
 - **Section 6**: launch several trajectories from equilibrated structure (see --n_trajs command line option). Concatenate those trajectories afterwards.
 
 Note that re-launching the workflow will skip the previously successful steps if restart is True. 
+
+## Sequential run
+
+Activate environment:
+
+```bash
+conda activate eucanshare_wf1
+```
+
+It's a good idea to run the workflow sequentially to check the output of the different steps for the used PDB file before using it for production. Choose lower simulation times to debug. For example:
+
+```bash
+python biobb_md_setup_mutation.py -i pdb:4LOO --config input.yml --until fix
+```
+
+Check that all possible PDB defects have been taken into account. A good place to start is the log file printed in step2I. Visualize fixed structure saved in step2H. Check log files and output for different steps in this section (step2 A-I). Then launch minimization:
+
+```bash
+python biobb_md_setup_mutation.py -i pdb:4LOO --config input.yml --until min
+```
+
+If restart is True, steps 2A-2I will be skipped. The rest of the steps can also be launched sequentially. The workflow will automatically skip any successful step from previous calls:
+
+```bash
+python biobb_md_setup_mutation.py -i pdb:4LOO --config input.yml --until nvt
+```
+
+```bash
+python biobb_md_setup_mutation.py -i pdb:4LOO --config input.yml --until npt
+```
+
+```bash
+python biobb_md_setup_mutation.py -i pdb:4LOO --config input.yml --until all
+```
