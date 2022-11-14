@@ -33,6 +33,8 @@ def addModelSuffix(original_path, i):
     new_path = '/home/user/ClusteringWF/output/step2_extract_models/output_model0.pdb'
 
     Inputs
+    ------
+
         original_path  (Path class from pathlib):  path to original file including filename
         i  (int):  integer 
     '''
@@ -46,12 +48,13 @@ def addModelSuffix(original_path, i):
 
     return new_path
 
-
 def moveFileIfItExists(origin_src, dest_src):
     '''
     Checks the existence of 'origin_src' file and moves it to 'dest_src' if it exists
 
     Inputs
+    ------
+
         origin_src  (str):  path to original file including filename
         dest_src    (str):  path to destination file including filename
     '''
@@ -61,19 +64,22 @@ def moveFileIfItExists(origin_src, dest_src):
     
     return
 
-
 def saveClusters(log_file, json_file, clustering_folder):
     '''
     Reads the clusters' id and population from log_file, sorts the clusters by 
     population in descending order and writes the sorted list to a JSON file.
 
     Inputs
+    -------
+
         log_file          (str): log file from clustering (reads from here)
         json_file         (str): path for JSON file with sorted cluster ids and populations (writes here) 
         clustering_folder (str): str with name of clustering step folder - just in case Restart 
                                  has been set to True and files have been moved
 
-    Outputs:
+    Outputs
+    -------
+
         clusters_iterator (list<tuple>): list with cluster information ordered by population
         (implicitly) JSON file with sorted cluster ids and populations
     '''
@@ -142,15 +148,16 @@ def saveClusters(log_file, json_file, clustering_folder):
     # Return list with cluster population and id sorted by population
     return clusters_iterator
 
-
 def validateStep(*output_paths):
     '''
     Check all output files exist and are not empty
     
-    Inputs:
+    Inputs
+    ------
         *output_paths (str): variable number of paths to output file/s
 
-    Output:
+    Output
+    ------
         validation_result (bool): result of validation
     '''
 
