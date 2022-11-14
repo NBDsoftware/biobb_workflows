@@ -381,7 +381,7 @@ def run_wf(args):
     if args.to_do is None:
         args.to_do = 'free'
 
-    # Set default value for n_trajs arg
+    # Set default value for 'n_trajs' arg
     if args.n_trajs is None:
         args.n_trajs = 1
     else:
@@ -397,6 +397,10 @@ def run_wf(args):
     # Dividing it in global paths and global properties
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
+
+    # Set default value for 'output_pdb_path' arg
+    if args.output_pdb_path is None:
+        args.output_pdb_path = os.path.join(conf.get_working_dir_path(), "final.pdb") 
 
     # Declaring the steps of the workflow, one by one 
     # Using as inputs the global paths and global properties
@@ -459,6 +463,12 @@ def run_wf(args):
 
     # Check structure and save results in dictionary
     pdb_defects_data = checkStructure(paths_extract["output_molecule_path"], global_log)
+
+    # Check if this should be the final step
+    if args.to_do == 'pdb':
+        shutil.copy(paths_extract["output_molecule_path"], args.output_pdb_path)
+        global_log.info("Molecule extraction completed. Final structure saved on " + args.output_pdb_path)
+        return 0
 
 # STEP 2 (A): Fix alternative locations
 
@@ -789,7 +799,7 @@ def run_wf(args):
 
     # Check if this should be the final step
     if args.to_do == 'min':
-        write_pdb_from_gro(args.output_pdb_path, global_paths["step9_mdrun_min"]["output_gro_path"])
+        write_pdb_from_gro(args.output_pdb_path, paths["output_gro_path"])
         global_log.info("Minimization completed. Final structure saved on " + args.output_pdb_path)
         return 0
 
@@ -831,7 +841,7 @@ def run_wf(args):
 
     # Check if this should be the final step
     if args.to_do == 'nvt':
-        write_pdb_from_gro(args.output_pdb_path, global_paths["step12_mdrun_nvt"]["output_gro_path"])
+        write_pdb_from_gro(args.output_pdb_path, paths["output_gro_path"])
         global_log.info("NVT Equilibration completed. Final structure saved on " + args.output_pdb_path)
         return 0
 
@@ -873,7 +883,7 @@ def run_wf(args):
 
     # Check if this should be the final step
     if args.to_do == 'npt':
-        write_pdb_from_gro(args.output_pdb_path, global_paths["step15_mdrun_npt"]["output_gro_path"])
+        write_pdb_from_gro(args.output_pdb_path, paths["output_gro_path"])
         global_log.info("NPT Equilibration completed. Final structure saved on " + args.output_pdb_path)
         return 0
 
@@ -1039,19 +1049,29 @@ def main():
     parser = argparse.ArgumentParser("Simple MD Protein Setup")
 
     parser.add_argument('-i', dest='input_pdb_path',
-                        help="Input pdb file or id (as pdb:id)", required=True)
+                        help="Input pdb file or id (as pdb:id)", 
+                        required=True)
 
     parser.add_argument('--config', dest='config_path',
-                        help="Configuration file (YAML)", required=True)
+                        help="Configuration file (YAML)", 
+                        required=True)
+    
+    parser.add_argument('-o', dest='output_pdb_path',
+                        help="Output pdb path", 
+                        required=False)
 
-    # Execute workflow until 'to_do' step -> free executes all steps
-    parser.add_argument('--op', dest='to_do', help="(Opt) Extent of the pipeline to execute (fix, min, nvt, npt, free)", required=False)
+    # Execute workflow until 'to_do' step -> free executes all steps (free is default)
+    parser.add_argument('--until', dest='to_do', 
+                        help="(Opt) Extent of the pipeline to execute (pdb, fix, min, nvt, npt, free)", 
+                        required=False)
 
     parser.add_argument('--mut_list', dest='mut_list',
-                        help="(Opt) Mutations list as comma-separated list with the format  'chain_id : Old_residue_code Residue_number New_residue_code'. Examples: 'A:G34T' or 'A:F38C,A:N39W,A:T40G' ", required=False)
+                        help="(Opt) Mutations list as comma-separated list with the format  'chain_id : Old_residue_code Residue_number New_residue_code'. Examples: 'A:G34T' or 'A:F38C,A:N39W,A:T40G' ", 
+                        required=False)
 
     parser.add_argument('--n_trajs', dest='n_trajs',
-                        help="(Opt) Number of trajectories (default: 1)", required=False)    
+                        help="(Opt) Number of trajectories (default: 1)", 
+                        required=False)    
     
     args = parser.parse_args()
 

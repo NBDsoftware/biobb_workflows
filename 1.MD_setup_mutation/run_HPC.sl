@@ -18,5 +18,5 @@ conda activate eucanshare_wf1
 module load gromacs/2019.6
 
 # Launch workflow
-python biobb_md_setup_mutation.py -i input/P38alpha3HEC.pdb -o output --op free --config input.yml
+python biobb_md_setup_mutation.py -i input/P38alpha3HEC.pdb --until free --config input.yml
 
