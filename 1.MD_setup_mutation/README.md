@@ -43,3 +43,4 @@ This workflow has several main sections, the workflow can be run until the end o
 
 - **Section 6**: launch several trajectories from equilibrated structure (see --n_trajs command line option). Concatenate those trajectories afterwards.
 
+Note that re-launching the workflow will skip the previously successful steps if restart is True. 

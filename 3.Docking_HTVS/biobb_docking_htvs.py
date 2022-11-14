@@ -21,11 +21,13 @@ def findMatchingLines(pattern, filepath):
     '''
     Finds all lines in file containing a given pattern
 
-    Inputs:
+    Inputs
+    ------
         pattern  (regex pattern): regular expression pattern to search in file lines
         filepath           (str): file path to search in
     
-    Output:
+    Output
+    ------
         lines (list(str)): lines matching the pattern or None if no line matches the pattern
     '''
 
@@ -60,11 +62,13 @@ def findMatchingLine(pattern, filepath):
     '''
     Finds first line in file containing a given pattern
 
-    Inputs:
+    Inputs
+    ------
         pattern  (regex pattern): regular expression pattern to search in file lines
         filepath           (str): file path to search in
     
-    Output:
+    Output
+    ------
         line (str): line matching the pattern or None if no line matches the pattern
     '''
 
@@ -92,10 +96,12 @@ def findNumberInString(string):
     '''
     Finds and returns first integer number in string. If no integer is found a 0 is returned.
 
-    Inputs:
+    Inputs
+    ------
         string (str): string to search int in
     
-    Output:
+    Output
+    ------
         number (int): integer found in string or 0 if no integer is found.
     '''
 
@@ -118,10 +124,12 @@ def printAvailablePockets(pockets_path, global_log):
     '''
     Print in log file all available pockets for each model found in the input folder for the pocket selection step
     
-    Inputs:
+    Inputs
+    ------
         pockets_path  (str): Path to pockets folder including file name
         global_log (Logger): Object of class Logger (dumps info to global log file of this workflow)
-    Output:
+    Output
+    ------
         Info dumped to log file
     '''
     
@@ -160,13 +168,15 @@ def findTopLigands(paths, properties, ligands, global_log):
     Find top scoring ligands according to binding affinity calculated in step 6. 
     The number of ligands considered is determined in the properties of step 8
     
-    Inputs:
+    Inputs
+    ------
         paths         (dict): paths of step 8 
         properties    (dict): properties of step 8
         ligands       (list): list of ligand identifiers
         global_log  (Logger):
 
-    Output:
+    Output
+    ------
         bestLigandAffinities      (list): list with lowest affinities 
         bestLigandIDs             (list): list with corresponding ligand identifiers
     '''
@@ -253,10 +263,12 @@ def validateStep(*output_paths):
     '''
     Check all output files exist and are not empty
     
-    Inputs:
+    Inputs
+    ------
         *output_paths (str): variable number of paths to output file/s
 
-    Output:
+    Output
+    ------
         validation_result (bool): result of validation
     '''
 
@@ -339,14 +351,16 @@ def sourceLigand(ligand_ID, default_output_path, paths, prop, ligand_index):
     Sources ligand in sdf format from ligand identifier. 
     The accepted formats for the identifier are: SMILES, PDB ID and Drug Bank ID
     
-    Inputs:
+    Inputs
+    ------
         ligand_ID                  (str): ligand identifier (SMILES, PDB ID or Drug Bank ID)
         default_output_path (Path class): path chosen by default for output
         paths                     (dict): paths of step
         prop                      (dict): properties of step
         ligand_index               (int): index of ligand
  
-    Output:
+    Output
+    ------
         output_path      (str): name of sdf file where ligand was saved
         successful_step (bool): success of step, False if output file was not created or is empty
                                 Protection against corrupt ligand IDs
@@ -441,6 +455,7 @@ def removeFiles(*file_path):
     Removes files in '*file_path' if they exist
 
     Inputs
+    ------
         file_path  (str): variable number of paths to files including filename
     '''
     for path in file_path:
@@ -461,6 +476,7 @@ def addLigandIDSuffix(original_path, ligand_ID, ligand_index):
     If 'ligand_ID' is a SMILES code then adds '_i_SMILES' to original_path before file extension
 
     Inputs
+    ------
         original_path  (Path class):  path to original file including filename
         ligand_ID             (str):  drug bank ID 
     '''
@@ -486,6 +502,10 @@ def addLigandIDSuffix(original_path, ligand_ID, ligand_index):
 def main(args):
 
     start_time = time.time()
+
+    # Set default value for 'to_do' arg
+    if args.to_do is None:
+        args.to_do = 'all'
 
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(args.config_path)
@@ -539,10 +559,7 @@ def main(args):
     # Action: box creation
     box(**global_paths["step2_box"], properties=global_prop["step2_box"])
 
-
 # STEP 3: Prepare target protein for docking 
-
-    # NOTE: try to fix case in which residues start again - for more complicated proteins pre-processed with maestro or else
     
     # Write next action to global log     
     global_log.info("step3_str_check_add_hydrogens: Preparing target protein for docking")
@@ -550,6 +567,10 @@ def main(args):
     # Action: Preparation of target protein
     str_check_add_hydrogens(**global_paths["step3_str_check_add_hydrogens"], properties=global_prop["step3_str_check_add_hydrogens"]) 
 
+    # Check if this should be the final step
+    if args.to_do == 'prepare':
+        global_log.info("Receptor preparation completed.")
+        return 0
 
 # STEP 4-5-6-7: For each ligand in library: obtain molecule, prepare ligand, run docking, prepare poses
 
@@ -695,11 +716,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Simple High-throughput virtual screening (HTVS) pipeline using BioExcel Building Blocks")
     
     parser.add_argument('--config', dest='config_path',
-                        help="Configuration file (YAML)")
+                        help="Configuration file (YAML)",
+                        required=True)
 
     parser.add_argument('--lig-lib', dest='ligand_lib',
-                        help="Path to file with ligand library. The file should contain one ligand identifier (Ligand PDB code, SMILES or Drug Bank ID) per line.")
+                        help="Path to file with ligand library. The file should contain one ligand identifier (Ligand PDB code, SMILES or Drug Bank ID) per line.",
+                        required=False)
     
+    # Execute workflow until 'to_do' step -> all executes all steps (all is default)
+    parser.add_argument('--until', dest='to_do', 
+                        help="(Opt) Extent of the pipeline to execute (preparation, all)", 
+                        required=False)
 
     args = parser.parse_args()
 

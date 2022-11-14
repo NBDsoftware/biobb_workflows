@@ -1,8 +1,10 @@
 working_dir_path: output                              # Workflow output directory
 can_write_console_log: True                           # Output log to console
-restart: True                                        # Do not execute steps if output files are already created
+restart: True                                         # Do not execute steps if output files are already created
 
-step0_make_ndx:                                       #
+# Section 1: Cluster trajectory and extract centroids pdb
+
+step0_make_ndx:                                       
   tool: make_ndx
   paths:
     input_structure_path:  /home/nbd-pablo/repos/eucanshare_wfs/2.Clustering_CavityAnalysis/input/structure.gro # file:/home/nbd-pablo/Documents/2022_EUCANSHARE/MAPK11/WT/repeat1/output/step4_editconf/editconf.gro # Path to input topology (tpr, gro, g96, pdb or brk format) 
@@ -30,6 +32,8 @@ step2_extract_models:
     output_structure_path: output.pdb      # Dummy, names will be: model0.pdb, model1.pdb ...
   properties:
     models_to_extract: 3                   # Number of most populated models to extract at most (will be < 'number of clusters')
+
+# Section 2: Cavity analysis with fpocket on centroids
 
 step3_cavity_analysis:
   tool: fpocket_run

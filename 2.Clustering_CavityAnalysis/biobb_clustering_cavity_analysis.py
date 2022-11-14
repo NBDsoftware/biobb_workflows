@@ -181,12 +181,16 @@ def main(args):
     
     start_time = time.time()
 
+    # Set default value for 'to_do' arg
+    if args.to_do is None:
+        args.to_do = 'all'
+
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(args.config_path )
     wdir = conf.get_working_dir_path()
 
     # Initializing a global log file
-    global_log, _ = fu.get_logs(path=conf.get_working_dir_path(), light_format=True)
+    global_log, _ = fu.get_logs(path=wdir, light_format=True)
 
     # Parsing the input configuration file (YAML);
     # Dividing it in global properties and global paths
@@ -232,7 +236,7 @@ def main(args):
     prop_clust = global_prop[step_names[1]]
     paths_clust = global_paths[step_names[1]]
 
-    # If ndx flag is used, then use input_index_path in step 1
+    # If ndx flag is used, then use input_index_path in step 1, NOTE: Is gmx cluster using the index file?
     if args.ndx:
         global_log.info("Using step0 selection (index file)")
         paths_clust.update({"input_index_path" : paths_ndx["output_ndx_path"]})
@@ -298,7 +302,7 @@ def main(args):
             return 0
     
     # Check if this should be the final step
-    if args.cluster:
+    if args.to_do == 'cluster':
         global_log.info("Clustering completed.")
         return 0
 
@@ -339,6 +343,11 @@ def main(args):
         if not validateStep(paths["output_pockets_zip"], paths["output_summary"]):
             global_log.info("    ERROR: no output from fpocket.")
             return 0
+
+    # Check if this should be the final step
+    if args.to_do == 'cavity':
+        global_log.info("Cavity analysis completed.")
+        return 0
 
 # STEP 4: Filtering cavities
 
@@ -386,13 +395,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Simple clustering, cavity analysis and docking pipeline using BioExcel Building Blocks")
     
     parser.add_argument('--config', dest='config_path',
-                        help="Configuration file (YAML)", required=True)
+                        help="Configuration file (YAML)", 
+                        required=True)
 
     parser.add_argument('--ndx', action='store_true',
-                        help="Wether to create index file defining atoms that will be used for clustering in step0 or use step1 selection properties", required=False)
+                        help="(Opt) Wether to create index file defining atoms that will be used for clustering in step0 or use step1 selection properties", 
+                        required=False)
 
-    parser.add_argument('--cluster', action='store_true',
-                        help="Just cluster trajectory and extract models (step0 - step2)", required=False)
+    # Execute workflow until 'to_do' step -> all executes all steps (all is default)
+    parser.add_argument('--until', dest='to_do', 
+                        help="(Opt) Extent of the pipeline to execute (cluster, cavity, all)", 
+                        required=False)
 
     args = parser.parse_args()
 

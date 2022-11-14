@@ -2,6 +2,8 @@ working_dir_path: output
 can_write_console_log: True
 restart: True
 
+# Section 1: Pocket selection and receptor preparation
+
 step1_fpocket_select:
   tool: fpocket_select
   paths:
@@ -28,6 +30,8 @@ step3_str_check_add_hydrogens:
   properties:
     charges: True
     mode: auto
+
+# Section 2: Source each ligand and dock it to receptor
 
 step4_source_lig:
   paths:

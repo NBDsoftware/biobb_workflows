@@ -373,13 +373,11 @@ def addTrajPath(all_paths, traj_index, *keywords):
 
 def run_wf(args):
 
-    print(args)
-
     start_time = time.time()
 
     # Set default value for 'to_do' arg
     if args.to_do is None:
-        args.to_do = 'free'
+        args.to_do = 'all'
 
     # Set default value for 'n_trajs' arg
     if args.n_trajs is None:
@@ -1060,9 +1058,9 @@ def main():
                         help="Output pdb path", 
                         required=False)
 
-    # Execute workflow until 'to_do' step -> free executes all steps (free is default)
+    # Execute workflow until 'to_do' step -> all executes all steps (all is default)
     parser.add_argument('--until', dest='to_do', 
-                        help="(Opt) Extent of the pipeline to execute (pdb, fix, min, nvt, npt, free)", 
+                        help="(Opt) Extent of the pipeline to execute (pdb, fix, min, nvt, npt, all)", 
                         required=False)
 
     parser.add_argument('--mut_list', dest='mut_list',
