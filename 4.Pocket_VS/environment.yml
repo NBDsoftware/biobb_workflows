@@ -1,0 +1,11 @@
+name: pocket_vs
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - biobb_io>=3.8.0
+  - biobb_vs>=3.8.1
+  - biobb_common>=3.8.1
+  - biobb_chemistry>=3.8.0
+  - biobb_structure_utils>=3.8.0
+  - conda
