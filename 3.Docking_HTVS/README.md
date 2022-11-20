@@ -36,3 +36,11 @@ This workflow has several main sections, the workflow can be run until the end o
 
 Note that re-launching the workflow will skip the previously successful steps if restart is True. 
 
+## Sequential run
+
+```bash
+conda activate eucanshare_wf3
+```
+
+A summary of the models and pockets available from the input folder given in 'input_pockets_zip' is printed if an unexisting pocket is chosen.
+

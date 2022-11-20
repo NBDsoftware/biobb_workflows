@@ -7,11 +7,11 @@ restart: True
 step1_fpocket_select:
   tool: fpocket_select
   paths:
-    input_pockets_zip:  file:../2.Clustering_CavityAnalysis/output/step4_filter_cavities/filtered_pockets_model1.zip
+    input_pockets_zip:  file:../2.Clustering_CavityAnalysis/output/step4_filter_cavities/filtered_pockets_model0.zip
     output_pocket_pdb: fpocket_cavity.pdb
     output_pocket_pqr: fpocket_pocket.pqr
   properties:
-    pocket: 1
+    pocket: 3
 
 step2_box:
   tool: box
@@ -73,4 +73,4 @@ step8_show_top_ligands:
   paths:
     docking_logs: dependency/step6_autodock_vina_run/output_log_path
   properties:
-    number_top_ligands: 3
+    number_top_ligands: 4

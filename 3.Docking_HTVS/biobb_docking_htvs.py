@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
 # Importing all the needed libraries
-from mailbox import NoSuchMailboxError
 import os
 import re
 import time
 import argparse
-from pathlib import Path, PurePath
+from pathlib import Path
 from biobb_io.api.drugbank import drugbank
 from biobb_io.api.ideal_sdf import ideal_sdf
 from biobb_common.configuration import settings
@@ -89,7 +88,9 @@ def findMatchingLine(pattern, filepath):
             file.close()
 
             return line
-    
+
+    file.close()
+
     return None
 
 def findNumberInString(string):
@@ -166,7 +167,8 @@ def printAvailablePockets(pockets_path, global_log):
 def findTopLigands(paths, properties, ligands, global_log):
     '''
     Find top scoring ligands according to binding affinity calculated in step 6. 
-    The number of ligands considered is determined in the properties of step 8
+    The number of ligands considered is determined in the properties of step 8 or 
+    the maximum number of ligands
     
     Inputs
     ------
@@ -198,8 +200,6 @@ def findTopLigands(paths, properties, ligands, global_log):
     # List all files matching the pattern
     logList = stepPath.rglob(logNamePattern)
 
-    # NOTE: extend to many ligands - might be 2 or 3 characters, take number 
-
     # For each docked ligand
     for log in logList:
 
@@ -223,13 +223,13 @@ def findTopLigands(paths, properties, ligands, global_log):
 # 2. Find min and its index, save in another list, remove min. Repeat "number_top_ligands" times
     
     # Read how many ligands to include in the top
-    numTopLigands = properties["number_top_ligands"]
+    numTopLigands = min(properties["number_top_ligands"], len(affinities)) 
 
     bestLigandAffinities = []
     bestLigandIDs = []
 
     # Number of top ligands should not be larger than docked ligands
-    for i in range(min(numTopLigands, len(affinities))):
+    for i in range(numTopLigands):
 
         # Find minimum affinity
         bestLigandAffinity = min(affinities)
@@ -257,7 +257,7 @@ def findTopLigands(paths, properties, ligands, global_log):
 
         global_log.info("    Affinity: {} for ligand {}".format(bestLigandAffinities[i], bestLigandIDs[i]))
 
-    return
+    return bestLigandAffinities, bestLigandIDs
 
 def validateStep(*output_paths):
     '''
@@ -294,16 +294,41 @@ def validateStep(*output_paths):
 
 def readLigandLibFile(ligand_lib_path):
     '''
-    Read all ligand identifiers from ligand library file
+    Read all ligand identifiers from ligand library file. 
+    The expected format is one of the following:
+
+    Format 1:
+
+    ligand1_id
+    ligand2_id
+    .
+    .
+    .
+
+    Format 2:
+
+    ligand1_id  name_ligand1
+    ligand2_id  name_ligand2
+    .
+    .
+    .
+
+    Where ligand_id is either a PDB code, Drug Bank ID or SMILES and name_ligand is a string with the ligand name
     
-    Inputs:
+    Inputs
+    ------
         ligand_lib_path (str): path pointing to ligand library, including file name
 
-    Output:
-        ligand_lib (list(str)): list of ligand identifiers 
+    Output
+    ------
+        ligand_IDs   (list(str)): list of ligand identifiers
+        ligand_Names (list(str)): list with ligand names if any 
     '''
 
     # NOTE: How big will the library be? maybe we should process it by pieces...
+
+    ligand_IDs = []
+    ligand_Names = []
 
     # Open file
     with open(ligand_lib_path) as file:
@@ -311,20 +336,37 @@ def readLigandLibFile(ligand_lib_path):
         # Read all lines
         ligand_lib = file.readlines()
 
-        # Strip whitespace
-        ligand_lib = [line.rstrip() for line in ligand_lib]
+        # Process every line
+        for line in ligand_lib:
 
-    return ligand_lib
+            # Divide line by white space
+            line = line.split()
+
+            # Append ligand ID to ligand_IDs list
+            ligand_IDs.append(line[0])
+
+            # If there is a name, append it to ligand_Names
+            if len(line)>1:
+
+                ligand_Names.append(line[1])
+            
+            else:
+                
+                ligand_Names.append(None)
+
+    return ligand_IDs, ligand_Names
 
 def identifyFormat(ligand_ID):
     '''
     Guess the format of the identifier
     WARNING: there is currently no way of distinguishing 3 char SMILES from 3-letter PDB Ligand ID.
     
-    Inputs:
+    Inputs
+    ------
         ligand_ID (str): ligand identifier (SMILES, PDB ID or Drug Bank ID)
 
-    Output:
+    Output
+    ------
         ID_format (str): ligand_ID format ("PDB", "DB" or "SMILES")
     '''
 
@@ -334,7 +376,6 @@ def identifyFormat(ligand_ID):
         ID_format = 'DB'
     
  # PBD identifier
-    # NOTE: should they be just letters? not numbers?
     elif (len(ligand_ID) == 3):
 
         ID_format = 'PDB'
@@ -346,18 +387,19 @@ def identifyFormat(ligand_ID):
 
     return ID_format
 
-def sourceLigand(ligand_ID, default_output_path, paths, prop, ligand_index):
+def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
     '''
     Sources ligand in sdf format from ligand identifier. 
     The accepted formats for the identifier are: SMILES, PDB ID and Drug Bank ID
     
     Inputs
     ------
-        ligand_ID                  (str): ligand identifier (SMILES, PDB ID or Drug Bank ID)
-        default_output_path (Path class): path chosen by default for output
-        paths                     (dict): paths of step
-        prop                      (dict): properties of step
-        ligand_index               (int): index of ligand
+        ligand_ID       (str): ligand identifier (SMILES, PDB ID or Drug Bank ID)
+        ligand_Name     (str): ligand name
+        ligand_index    (int): ligand index / counter
+        paths          (dict): paths of step
+        prop           (dict): properties of step
+        
  
     Output
     ------
@@ -366,13 +408,16 @@ def sourceLigand(ligand_ID, default_output_path, paths, prop, ligand_index):
                                 Protection against corrupt ligand IDs
         ligand sdf file 
     '''
+
     # Identify format of ligand ID
     ID_format = identifyFormat(ligand_ID)
 
-    # If format is SMILES, we will need to write the SMILES code in a file to give it as input to Open Babel (SMILES -> sdf)
-    smiles_filename = "ligand_" + str(ligand_index) + ".smiles"
-    step_directory = default_output_path.parent
-    smiles_path = str(step_directory) + "/" + smiles_filename
+    # Find default output path
+    default_output_path = Path(paths['output_sdf_path'])
+
+    # Modify the default output path 
+    # According to ligand ID (unless SMILES is ID) or ligand Name if there is any
+    output_path = addLigandIDSuffix(default_output_path, ligand_ID, ligand_Name, ligand_index)
 
  # If ligand_ID is a PDB entry ID
     if (ID_format == 'PDB'):
@@ -380,9 +425,6 @@ def sourceLigand(ligand_ID, default_output_path, paths, prop, ligand_index):
         # Update properties 
         prop.update({'ligand_code': ligand_ID})
         prop.update({'api_id': 'pdbe'})                 # NOTE: pdbe or pdb?
-
-        # Modify the output path - according to drug ID
-        output_path = addLigandIDSuffix(default_output_path, ligand_ID, ligand_index)
 
         # Update paths dictionary
         paths.update({'output_sdf_path': output_path})                             
@@ -399,9 +441,6 @@ def sourceLigand(ligand_ID, default_output_path, paths, prop, ligand_index):
         # Update properties
         prop.update({'drugbank_id': ligand_ID})
 
-        # Modify the output path - according to drug ID
-        output_path = addLigandIDSuffix(default_output_path, ligand_ID, ligand_index)
-
         # Update paths dictionary
         paths.update({'output_sdf_path': output_path})
 
@@ -411,26 +450,18 @@ def sourceLigand(ligand_ID, default_output_path, paths, prop, ligand_index):
         except:
             return output_path, False
         
-
  # If ligand_ID is a SMILES code
     elif (ID_format == 'SMILES'):
+        
+        # write the SMILES code in a file to give it as input to Open Babel 
+        smiles_path = writeSMILES(SMILES = ligand_ID, 
+                                 ligand_index = ligand_index, 
+                                 step_path = default_output_path.parent)
 
         # Update properties
         prop.update({'input_format': 'smiles'})
         prop.update({'output_format': 'sdf'})
         prop.update({'coordinates': 3})
-
-        # If step4 directory has not been created yet -> create dir 
-        if not os.path.exists(step_directory):
-            os.makedirs(step_directory)
-
-        # Save SMILES in tmp file inside step_directory
-        smiles_tmp_file = open(smiles_path, "w")
-        smiles_tmp_file.write(ligand_ID)
-        smiles_tmp_file.close()
-
-        # Modify the output path - according to drug ID
-        output_path = addLigandIDSuffix(default_output_path, ligand_ID, ligand_index)
 
         # Update paths
         paths.update({'input_path': smiles_path})
@@ -442,7 +473,7 @@ def sourceLigand(ligand_ID, default_output_path, paths, prop, ligand_index):
         except:
             return output_path, False
 
-        # Erase tmp file
+        # Erase tmp SMILES file
         removeFiles(smiles_path)
     
     # Check output exists and is not empty (to skip corrupt ligand identifiers)
@@ -464,51 +495,102 @@ def removeFiles(*file_path):
     
     return
 
-def addLigandIDSuffix(original_path, ligand_ID, ligand_index):
+def addLigandIDSuffix(original_path, ligand_ID, ligand_Name, ligand_index):
     '''
-    Adds 'ligand_ID' to original_path before file extension. For example:
+    Modifies original_path according to ligand_index, ligand_ID and ligand_Name if any. 
+    For example:
 
     original_path = Path('/home/user/DockingWF/step4_drugbank/drug.sdf')
     ligand_ID = DB00530
+    ligand_Name = None
+    ligand_ID = 4
 
-    new_path = '/home/user/DockingWF/step4_drugbank/drug_DB00530.sdf'
+    new_path = '/home/user/DockingWF/step4_drugbank/drug_4_DB00530.sdf'
 
     If 'ligand_ID' is a SMILES code then adds '_i_SMILES' to original_path before file extension
 
     Inputs
     ------
-        original_path  (Path class):  path to original file including filename
+        original_path  (Path class):  original path to file including filename
         ligand_ID             (str):  drug bank ID 
+        ligand_Name           (str):  name of ligand
+        ligand_index          (int):  ligand counter
+    
+    Output
+    ------
+        new_path  (str): new path to file including filename with ligand information
     '''
     
+    # Identify ID format
     ID_format = identifyFormat(ligand_ID)
 
-    filename = original_path.name
+    # Identify original file name, extension and path
+    fileName = original_path.stem
+    fileExtension = original_path.suffix
     directory = original_path.parent
 
-    filename_parts = filename.split(".")
+    # Add name information if any
+    if ligand_Name is not None:
+        ligandName = ligand_Name
+    else:
+        ligandName = ""
+    
 
     # If format is PDB or DB - print code in file name
     if (ID_format != 'SMILES'):
-        new_path = str(directory) + "/" + filename_parts[0] + "_" + str(ligand_index) + "_" + str(ligand_ID) + "." + filename_parts[1]
+
+        new_fileName = fileName + "_" +  str(ligand_index) + "_" + ligandName + "_" + str(ligand_ID) + fileExtension
     
-    # SMILES code has problematic characters and is too long - just put SMILES instead
+    # SMILES code has problematic characters and is too long - just put "SMILES" instead
     else:
-        new_path = str(directory) + "/" + filename_parts[0] + "_" + str(ligand_index) + "_SMILES" + "." + filename_parts[1]
+
+        new_fileName = fileName + "_" +  str(ligand_index) + "_" + ligandName + "_SMILES" + fileExtension
+    
+    new_path = os.path.join(str(directory), new_fileName)
 
     return new_path
 
+def writeSMILES(SMILES, ligand_index, step_path):
+    '''
+    Writes a SMILES code into a file in step_path. The name of the file will
+    be "ligand_name".smiles or ligand_"ligand_index".smiles
 
-def main(args):
+    Inputs
+    ------
+        SMILES              (str):  SMILES code
+        ligand_index        (int):  ligand index (counter for the ligands)
+        step_path    (Path class):  path of step where file will be written
+    '''
+    # Name of file
+    smiles_filename = "ligand_" + str(ligand_index) + ".smiles"
+
+    # Path including name
+    smiles_path = os.path.join(str(step_path), smiles_filename) 
+
+    # If step directory has not been created yet -> create dir 
+    if not os.path.exists(step_path):
+        os.makedirs(step_path)
+
+    # Save SMILES in tmp file inside step_path
+    smiles_tmp_file = open(smiles_path, "w")
+    smiles_tmp_file.write(SMILES)
+    smiles_tmp_file.close()
+
+    return smiles_path
+
+
+def docking_htvs(configuration_path, ligand_lib_path, last_step, input_pockets_path = None, pocket_ID = None, input_structure_path = None):
+
+    # Added last two arguments for ensemble docking :) NOTE: improve docs
 
     start_time = time.time()
 
-    # Set default value for 'to_do' arg
-    if args.to_do is None:
-        args.to_do = 'all'
+    # Set default value for 'last_step' arg
+    if last_step is None:
+        last_step = 'all'
 
     # Receiving the input configuration file (YAML)
-    conf = settings.ConfReader(args.config_path)
+    conf = settings.ConfReader(configuration_path)
     
     # Initializing a global log file
     global_log, _ = fu.get_logs(path=conf.get_working_dir_path(), light_format=True)
@@ -523,7 +605,6 @@ def main(args):
     # identified by the corresponding step name
     # Writing information about each step to the global log 
 
-
 # STEP 1: Pocket selection from filtered list 
 
     # Write next action to global log
@@ -533,6 +614,12 @@ def main(args):
     props = global_prop["step1_fpocket_select"]
     paths = global_paths["step1_fpocket_select"]
 
+    # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
+    if None not in (input_pockets_path, pocket_ID, input_structure_path):
+
+        paths.update({'input_pockets_zip' : input_pockets_path})
+        props.update({'pocket' : pocket_ID})
+
     # Action: pocket selection
     fpocket_select(**paths, properties=props)
 
@@ -541,17 +628,17 @@ def main(args):
 
         # If output is not valid, print error message and available options in log file
         global_log.info("    ERROR: fpocket_select failed to select a pocket from input file.")
-        global_log.info("           Check the selected pocket in the properties of this step exists.")
+        global_log.info("           Check the selected pocket exists:")
 
         # Print available pockets in input folder
         printAvailablePockets(paths["input_pockets_zip"], global_log)
 
         # Exit 
-        return
+        return 
 
 # STEP 2: Generate box around selected cavity
 
-    # NOTE: should we adjust offset depending on largest molecule in database?
+    # NOTE: should we adjust offset depending on largest molecule in database? 
 
     # Write next action to global log
     global_log.info("step2_box: Generating cavity box")
@@ -564,13 +651,22 @@ def main(args):
     # Write next action to global log     
     global_log.info("step3_str_check_add_hydrogens: Preparing target protein for docking")
     
+    # Properties and paths of step
+    props_addH = global_prop["step3_str_check_add_hydrogens"]
+    paths_addH = global_paths["step3_str_check_add_hydrogens"]
+
+    # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
+    if None not in (input_pockets_path, pocket_ID, input_structure_path):
+
+        paths_addH.update({'input_structure_path' : input_structure_path})
+
     # Action: Preparation of target protein
-    str_check_add_hydrogens(**global_paths["step3_str_check_add_hydrogens"], properties=global_prop["step3_str_check_add_hydrogens"]) 
+    str_check_add_hydrogens(**paths_addH, properties=props_addH) 
 
     # Check if this should be the final step
-    if args.to_do == 'prepare':
+    if last_step == 'prepare':
         global_log.info("Receptor preparation completed.")
-        return 0
+        return 
 
 # STEP 4-5-6-7: For each ligand in library: obtain molecule, prepare ligand, run docking, prepare poses
 
@@ -591,36 +687,34 @@ def main(args):
     paths_poseConv = global_paths["step7_babel_prepare_pose"]
 
     # Load drug list
-    if (args.ligand_lib):
-        # If file with drug library is given
-        ligand_list = readLigandLibFile(args.ligand_lib)
+    if (ligand_lib_path):
+        # If file with drug library is given -> prioritize over list in input.yml
+        ligand_IDs, ligand_Names = readLigandLibFile(ligand_lib_path)
     else:
-        # If no file is given, use list from input
-        ligand_list = prop_ligandLib['ligand_list']
+        # If no file is given, use list from input 
+        ligand_IDs = prop_ligandLib['ligand_list']
+        ligand_Names = [None]*len(ligand_IDs)
 
-    # Total number of drug identifiers
-    num_ligandIDs = len(ligand_list)
+    # If len(ligand_IDs) > 20 then save minimum number of files
+    drugLibIsLarge = len(ligand_IDs) > 20
 
-    # If num_ligandIDs > 20 then save minimum number of files
-    drugLibIsLarge = num_ligandIDs > 20
-
-    # Default paths that will be modified according to drug ID
-    default_ligandLib_output = Path(paths_ligandLib['output_sdf_path'])
+    # Default paths that will be modified according to drug ID / Name (avoid overwriting)
     default_ligConv_output = Path(paths_ligConv['output_path'])
     default_autodock_pdbqt = Path(paths_autodock['output_pdbqt_path'])
     default_autodock_log = Path(paths_autodock['output_log_path'])
 
     default_poseConv_input = Path(paths_poseConv['input_path'])
     default_poseConv_output = Path(paths_poseConv['output_path'])
+    
+    for ligand_index in range(len(ligand_IDs)):
 
-    ligandID_index = 0
-
-    for ligand in ligand_list:
+        ligand_ID = ligand_IDs[ligand_index]
+        ligand_Name = ligand_Names[ligand_index]
 
     # STEP 4: Source ligand in sdf format
 
-        drugbank_output_path, step4_successful = sourceLigand(ligand, default_ligandLib_output, 
-                                                               paths_ligandLib, prop_ligandLib, ligandID_index)
+        ligand_output_path, step4_successful = sourceLigand(ligand_ID, ligand_Name, ligand_index, 
+                                                            paths_ligandLib, prop_ligandLib)
 
         # Skip corrupt ligand IDs 
         if (step4_successful):
@@ -630,11 +724,11 @@ def main(args):
             # Write next action to global log
             global_log.info("step5_babel_prepare_lig: Preparing small molecule (ligand) for docking")
 
-            # Modify the output path - according to drug ID
-            ligConv_output_path = addLigandIDSuffix(default_ligConv_output, ligand, ligandID_index)
+            # Modify the output path - according to ligand info
+            ligConv_output_path = addLigandIDSuffix(default_ligConv_output, ligand_ID, ligand_Name, ligand_index)
         
             # Update paths dictionary
-            paths_ligConv.update({'input_path':drugbank_output_path})
+            paths_ligConv.update({'input_path':ligand_output_path})
             paths_ligConv.update({'output_path':ligConv_output_path})
 
             # Action: format conversion using Open Babel
@@ -646,9 +740,9 @@ def main(args):
             # Write action to global log
             global_log.info("step6_autodock_vina_run: Running the docking")
 
-            # Modify pdbqt and log paths - according to drug ID
-            autodock_pdbqt_path = addLigandIDSuffix(default_autodock_pdbqt, ligand, ligandID_index)
-            autodock_log_path = addLigandIDSuffix(default_autodock_log, ligand, ligandID_index)
+            # Modify pdbqt and log paths - according to ligand info
+            autodock_pdbqt_path = addLigandIDSuffix(default_autodock_pdbqt, ligand_ID, ligand_Name, ligand_index)
+            autodock_log_path = addLigandIDSuffix(default_autodock_log, ligand_ID, ligand_Name, ligand_index)
 
             # Update paths in dictionary  
             paths_autodock.update({'input_ligand_pdbqt_path': ligConv_output_path})
@@ -664,9 +758,9 @@ def main(args):
             # Write action to global log
             global_log.info("step7_babel_prepare_pose: Converting ligand pose to PDB format")  
 
-            # Modify input and output paths - according to drug ID
-            poseConv_input_path = addLigandIDSuffix(default_poseConv_input, ligand, ligandID_index)
-            poseConv_output_path = addLigandIDSuffix(default_poseConv_output, ligand, ligandID_index)
+            # Modify input and output paths - according to ligand info
+            poseConv_input_path = addLigandIDSuffix(default_poseConv_input, ligand_ID, ligand_Name, ligand_index)
+            poseConv_output_path = addLigandIDSuffix(default_poseConv_output, ligand_ID, ligand_Name, ligand_index)
 
             # Update paths in dictionary
             paths_poseConv.update({'input_path': poseConv_input_path})
@@ -677,15 +771,13 @@ def main(args):
 
             # If drug library is large remove unnecessary files 
             if (drugLibIsLarge):
-                removeFiles(drugbank_output_path, ligConv_output_path, autodock_pdbqt_path)
+                removeFiles(ligand_output_path, ligConv_output_path, autodock_pdbqt_path)
         
+        # If step 4 was not successful
         else:
 
-            global_log.info("    WARNING: failed to source ligand {} with ligand ID: {}".format(ligandID_index, ligand))
+            global_log.info("    WARNING: failed to source ligand {} with ligand ID: {}".format(ligand_index, ligand_ID))
             global_log.info("            Skipping to next ligand")
-        
-        # Increase ligand ID count
-        ligandID_index += 1
 
 # STEP 8: Find top ligands (according to lowest affinity)
     
@@ -697,19 +789,24 @@ def main(args):
     paths = global_paths["step8_show_top_ligands"]
 
     # Find and print top ligands in log file
-    findTopLigands(paths, props, ligand_list, global_log)
+    bestAffinities, bestLigands = findTopLigands(paths, props, ligand_IDs, global_log)
 
-# Timing information
-    elapsed_time = time.time() - start_time
-    global_log.info('')
-    global_log.info('')
-    global_log.info('Execution successful: ')
-    global_log.info('  Workflow_path: %s' % conf.get_working_dir_path())
-    global_log.info('  Config File: %s' % args.config_path)
-    global_log.info('  Ligand library: %s' % args.ligand_lib)
-    global_log.info('')
-    global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
-    global_log.info('')
+    # Print timing info only if we are not calling docking_htvs from another script
+    if None in (input_pockets_path, pocket_ID, input_structure_path):
+        
+        # Timing information
+        elapsed_time = time.time() - start_time
+        global_log.info('')
+        global_log.info('')
+        global_log.info('Execution successful: ')
+        global_log.info('  Workflow_path: %s' % conf.get_working_dir_path())
+        global_log.info('  Config File: %s' % configuration_path)
+        global_log.info('  Ligand library: %s' % ligand_lib_path)
+        global_log.info('')
+        global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
+        global_log.info('')
+
+    return conf.get_working_dir_path(), bestAffinities, bestLigands 
 
 if __name__ == '__main__':
     
@@ -730,4 +827,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main(args)
+    _,_,_ = docking_htvs(args.config_path, args.ligand_lib, args.to_do)
