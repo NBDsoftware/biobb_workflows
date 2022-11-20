@@ -2,28 +2,31 @@ working_dir_path: output                              # Workflow output director
 can_write_console_log: True                           # Output log to console
 restart: True                                         # Do not execute steps if output files are already created
 
-# Section 1: Cluster trajectory and extract centroids pdb
+# Section 1: Create index file - if not needed just put 'selection: 0'
 
 step0_make_ndx:                                       
   tool: make_ndx
   paths:
-    input_structure_path:  /home/nbd-pablo/repos/eucanshare_wfs/2.Clustering_CavityAnalysis/input/structure.gro # file:/home/nbd-pablo/Documents/2022_EUCANSHARE/MAPK11/WT/repeat1/output/step4_editconf/editconf.gro # Path to input topology (tpr, gro, g96, pdb or brk format) 
+    input_structure_path: /home/nbd-pablo/repos/eucanshare_wfs/1.MD_setup_mutation/output/step23_dry/imaged_structure.gro # Path to input topology (tpr, gro, g96, pdb or brk format) 
     output_ndx_path: index.ndx
   properties:
-    selection: "2 & ri 7-106 & ! ri 14-58"        # Atom selection string
+    selection: "4 & ! ri 7-106"        # Atom selection string - these atoms will be used to create a new group that can be selected in the next step
+
+# Section 2: Cluster trajectory and extract centroids pdb
 
 step1_gmx_cluster:
   tool: gmx_cluster
   paths:
-    input_structure_path:  dependency/step0_make_ndx/input_structure_path  # file:/home/nbd-pablo/Documents/2022_EUCANSHARE/MAPK11/WT/repeat1/output/step4_editconf/editconf.gro  # Path to input topology (tpr, gro, g96, pdb or brk format) 
-    input_traj_path:    /home/nbd-pablo/repos/eucanshare_wfs/2.Clustering_CavityAnalysis/input/trajectory.trr     # file:/home/nbd-pablo/Documents/2022_EUCANSHARE/MAPK11/WT/trajs/imaged_traj_all.trr # Path to trajectory (xtc, trr, cpt, gro, g96, pdb or tng format)
+    input_traj_path: /home/nbd-pablo/repos/eucanshare_wfs/1.MD_setup_mutation/output/step24_trjcat/all_trajectories.trr  # Path to trajectory (xtc, trr, cpt, gro, g96, pdb or tng format)
+    input_structure_path: dependency/step0_make_ndx/input_structure_path  
+    input_index_path: dependency/step0_make_ndx/output_ndx_path
     output_pdb_path: output.cluster.pdb
   properties:
-    fit_selection: Backbone
-    output_selection: System
+    fit_selection: Backbone_&_!r_7-106 # Select new group from index file if needed
+    output_selection: System            # Select new group from index file if needed
     dista: False
     method: linkage
-    cutoff: 0.1                            # nm (RMSD cut-off)
+    cutoff: 0.35                         # nm (RMSD cut-off)
 
 step2_extract_models:
   tool: extract_model
@@ -31,7 +34,7 @@ step2_extract_models:
     input_structure_path: dependency/step1_gmx_cluster/output_pdb_path
     output_structure_path: output.pdb      # Dummy, names will be: model0.pdb, model1.pdb ...
   properties:
-    models_to_extract: 3                   # Number of most populated models to extract at most (will be < 'number of clusters')
+    models_to_extract: 4                   # Number of most populated models to extract at most (will be < 'number of clusters')
 
 # Section 2: Cavity analysis with fpocket on centroids
 
@@ -46,7 +49,7 @@ step3_cavity_analysis:
     max_radius: 6
     num_spheres: 35
     sort_by: druggability_score
-    models_to_use: 2                     # Number of models on which to do cavity analysis at most (will be < 'models_to_extract') 
+    models_to_use: 4                     # Number of models on which to do cavity analysis at most (will be < 'models_to_extract') 
 
 step4_filter_cavities:
   tool: fpocket_filter

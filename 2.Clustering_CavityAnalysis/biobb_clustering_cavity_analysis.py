@@ -206,16 +206,16 @@ def main(args):
     # Writing information about each step to the global log 
 
 # STEP 0: Index file creation
+
+    # Properties and paths of step
+    prop_ndx = global_prop[step_names[0]]
+    paths_ndx = global_paths[step_names[0]]
     
-    # Only if --ndx option provided
-    if args.ndx: 
+    # Only if ndx file is not given already with '--ndx-file'
+    if args.ndx_path is None: 
 
         # Write next action to global log
         global_log.info(step_names[0] + ": Creation of index file for clustering" + "\n")
-
-        # Properties and paths of step
-        prop_ndx = global_prop[step_names[0]]
-        paths_ndx = global_paths[step_names[0]]
 
         # Action: Initialize MakeNdx and call launch method
         make_ndx(**paths_ndx, properties=prop_ndx)
@@ -224,6 +224,11 @@ def main(args):
         if not validateStep(paths_ndx["output_ndx_path"]):
             global_log.info("    ERROR: No index file was created. Check atom selection string in input file")
             return 0
+
+    # Check if this should be the final step
+    if args.to_do == 'ndx':
+        global_log.info("Index file created.")
+        return 0
 
 # STEP 1: Clustering 
 
@@ -236,16 +241,21 @@ def main(args):
     prop_clust = global_prop[step_names[1]]
     paths_clust = global_paths[step_names[1]]
 
-    # If ndx flag is used, then use input_index_path in step 1, NOTE: Is gmx cluster using the index file?
-    if args.ndx:
-        global_log.info("Using step0 selection (index file)")
-        paths_clust.update({"input_index_path" : paths_ndx["output_ndx_path"]})
+    if args.ndx_path is None:
+        # If index path was not provided, it was created and paths are correct
+        global_log.info("   Using created index file")
     else:
-        global_log.info("Using step1 selection (no index file)")
+        # If index path was provided, change the corresponding paths
+        global_log.info("   Using external index file")
+        paths_clust.update({"input_index_path" : args.ndx_path})
+        paths_clust.update({"input_index_path" : paths_ndx["input_structure_path"]})
 
     # Action: Initialize GMXCluster and call launch method
     gmx_cluster(**paths_clust, properties=prop_clust)
 
+    # NOTE: The clustering is always done using all the atoms for the RMSD calculation? Is it possible to use a sub-set with gmx cluster? Maybe including ttclust project? or mdtraj?
+    # Using gromos the RMSD calculation is done with respect to a certain group... But we have to align previously? the idea is to align with respect to one group and compute rmsd with respect to another.
+    
     # Validate step
     if not validateStep(paths_clust["output_pdb_path"]):
         global_log.info("    ERROR: No PDB file was created.")
@@ -397,14 +407,14 @@ if __name__ == '__main__':
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)", 
                         required=True)
-
-    parser.add_argument('--ndx', action='store_true',
-                        help="(Opt) Wether to create index file defining atoms that will be used for clustering in step0 or use step1 selection properties", 
+    
+    parser.add_argument('--ndx-file', dest='ndx_path',
+                        help="(Opt, default: None) External index file path to be used. Select groups for 'fit_selection' and 'output_selection' contained in index file.", 
                         required=False)
 
     # Execute workflow until 'to_do' step -> all executes all steps (all is default)
     parser.add_argument('--until', dest='to_do', 
-                        help="(Opt) Extent of the pipeline to execute (cluster, cavity, all)", 
+                        help="(Opt, default: all) Extent of the pipeline to execute (ndx, cluster, cavity, all)", 
                         required=False)
 
     args = parser.parse_args()

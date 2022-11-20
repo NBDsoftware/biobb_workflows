@@ -30,9 +30,65 @@ The output will be generated in the "/output" folder by default and the global l
 
 This workflow has several main sections, the workflow can be run until the end or until one of the sections (see --until command line option):
 
-- **Section 1**: Clustering of trajectory. A trajectory (accepted formats: xtc, trr, cpt, gro, g96, pdb or tng) and a topology (accepted formats: tpr, gro, g96, pdb or brk) are read. The trajectory is clustered using the atoms defined in created index file (if --ndx command line option is used, see make_ndx step) or atoms defined in gmx_cluster step. From the pdb file with all the centroids the most populated ones are extracted. The number of extracted models is defined in the extract_models step.
+- **Section 1**: Creation of index file (if --ndx-file command line option is used, then this section is skipped). 
 
-- **Section 2**: Cavity analysis of a subset of the most populated models and a subsequent filtering of cavities.
+- **Section 2**: Clustering of trajectory. A trajectory (accepted formats: xtc, trr, cpt, gro, g96, pdb or tng) and a topology (accepted formats: tpr, gro, g96, pdb or brk) are read. The trajectory is clustered after fitting using group of atoms defined in 'fit_selection' from gmx_cluster step. From the pdb file with all the centroids the most populated ones are extracted. The number of extracted models is defined in the extract_models step.
+
+- **Section 3**: Cavity analysis of a subset of the most populated models and a subsequent filtering of cavities.
 
 Note that re-launching the workflow will skip the previously successful steps if restart is True. 
+
+## Sequential run
+
+```bash
+conda activate eucanshare_wf2
+```
+
+It's a good idea to run the workflow sequentially to check the output of the different steps for the used trajectory and structure file before using it for production. Modify 'input_structure_path' and 'input_traj_path' from the input.yml. 
+
+If no index file is needed, (if we want to align all the backbone atoms of the protein for example) then just use the corresponding groups in 'fit_selection' and 'output_selection'. If the index file is already created, then provide its path with '--ndx-file' command line option. If the index file should be created, then provide a suitable atom selection string in 'selection' from the input.yml and the corresponding group in 'fit_selection' and/or 'output_selection'.
+
+In this example, we set the structure and trajectory paths to the output of the previous workflow.
+
+- input_structure_path : /path/to/eucanshare_wfs/1.MD_setup_mutation/output/step23_dry/imaged_structure.gro
+- input_traj_path : /path/to/eucanshare_wfs/1.MD_setup_mutation/output/step24_trjcat/all_trajectories.trr
+
+We want to align the frames of the trajectory using all backbone atoms except those from the region that contains the pocket domain.
+
+- selection: "4 & ! ri 7-106"
+
+Launch index file creation:
+
+```bash
+python biobb_clustering_cavity_analysis.py --config input.yml --until ndx
+```
+
+Alternatively, the index file can be created outside the workflow using the same conda environment:
+
+```bash
+gmx make_ndx -f /path/to/structure
+```
+
+Once the index file is created, open it and copy-paste the relevant groups to the properties of step1_gmx_cluster. 
+
+- fit_selection: Backbone_&_!r_7-106
+- output_selection: System
+
+Then, cluster the trajectory:
+
+```bash
+python biobb_clustering_cavity_analysis.py --config input.yml --until cluster
+```
+
+After seeing the results, adjust the 'cutoff' and 'method' of the clustering if needed. Adjust the number of models to extract if needed. To re-launch this section simply erase the corresponding step folders and launch again. Finally the cavity analysis and filtering:
+
+```bash
+python biobb_clustering_cavity_analysis.py --config input.yml --until all
+```
+
+Repeat the filtering with different values removing the filtering step folder and launching again.
+
+
+
+
 
