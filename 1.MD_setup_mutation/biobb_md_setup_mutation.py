@@ -404,7 +404,8 @@ def run_wf(args):
     if args.output_path is None:
         
         if args.to_do != 'all':
-            # If output is the structure
+
+            # If output is a single structure 
             args.output_path = os.path.join(conf.get_working_dir_path(), "final.pdb") 
 
         # If output is the trajectory and args.output was not provided, use path from input.yml
@@ -913,7 +914,7 @@ def run_wf(args):
 
     # Write next action to global log 
     global_log.info("step18_mdrun_md: Execute free molecular dynamics simulation")
-    global_log.info("                 Number of trajectories: {}".format(args.n_trajs))
+    global_log.info("     Number of trajectories: {}".format(args.n_trajs))
     
     for traj_index in range(args.n_trajs):
 
