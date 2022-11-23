@@ -264,14 +264,15 @@ def findBestAltLocs(altloc_data):
 
     return best_altlocs
 
-def concatenateTrajs(args, mdrun_traj_path, paths_trjcat, props_trjcat):
+def concatenateTrajs(num_trajs, output_path, mdrun_traj_path, paths_trjcat, props_trjcat):
     '''
     Creates a zip file with all trajectories and then concatenates them
 
     Inputs
     ------
 
-        args             (dict): arguments passed at runtime
+        num_trajs         (int): number of trajectories
+        output_path       (str): output path for concatenated traj
         mdrun_traj_path   (str): default path to "npt free" trajectory
         paths_trjcat     (dict): paths of concatenating step
         props_trjcat     (dict): properties of concatenating step
@@ -298,7 +299,7 @@ def concatenateTrajs(args, mdrun_traj_path, paths_trjcat, props_trjcat):
     zip_file_obj = ZipFile(zip_path, 'w')
 
     # Write to zip file
-    for traj_index in range(args.n_trajs):
+    for traj_index in range(num_trajs):
 
         # Traj folder name
         traj_folder = "traj" + str(traj_index)
@@ -315,9 +316,9 @@ def concatenateTrajs(args, mdrun_traj_path, paths_trjcat, props_trjcat):
     # Close zip file
     zip_file_obj.close()
 
-    # If args.output_path was provided, use it instead of input.yml path
-    if args.output_path is not None:
-        paths_trjcat.update({'output_trj_path' : args.output_path})
+    # If output_path was provided, use it instead of input.yml path
+    if output_path is not None:
+        paths_trjcat.update({'output_trj_path' : output_path})
 
     # Concatenate trajectories using zip file
     trjcat(**paths_trjcat, properties=props_trjcat)
@@ -375,22 +376,23 @@ def addTrajPath(all_paths, traj_index, *keywords):
 
     return new_paths
 
-def run_wf(args):
+
+def main_wf(input_pdb, configuration_path, output_path, last_step, mutation_list, num_trajs):
 
     start_time = time.time()
 
-    # Set default value for 'to_do' arg
-    if args.to_do is None:
-        args.to_do = 'all'
+    # Set default value for 'last_step' arg
+    if last_step is None:
+        last_step = 'all'
 
     # Set default value for 'n_trajs' arg
-    if args.n_trajs is None:
-        args.n_trajs = 1
+    if num_trajs is None:
+        num_trajs = 1
     else:
-        args.n_trajs = int(args.n_trajs)
+        num_trajs = int(num_trajs)
         
     # Receiving the input configuration file (YAML)
-    conf = settings.ConfReader(args.config_path)
+    conf = settings.ConfReader(configuration_path)
 
     # Initializing a global log file
     global_log, _ = fu.get_logs(path=conf.get_working_dir_path(), light_format=True)
@@ -401,12 +403,12 @@ def run_wf(args):
     global_paths = conf.get_paths_dic()
 
     # Set default value for 'output_path' arg
-    if args.output_path is None:
+    if output_path is None:
         
-        if args.to_do != 'all':
+        if last_step != 'all':
 
             # If output is a single structure 
-            args.output_path = os.path.join(conf.get_working_dir_path(), "final.pdb") 
+            output_path = os.path.join(conf.get_working_dir_path(), "final.pdb") 
 
         # If output is the trajectory and args.output was not provided, use path from input.yml
 
@@ -424,12 +426,12 @@ def run_wf(args):
     # Initial value for PDB code - change it if user gives PDB code
     pdbCode = None
     
-    if 'pdb:' in args.input:
+    if 'pdb:' in input_pdb:
 
         # If the user gives the pdb ID as 'pdb:id' -> download PDB 
 
         # Just the id from 'pdb:id'
-        pdbCode = args.input.split(':')[1]
+        pdbCode = input_pdb.split(':')[1]
 
         # Update properties dictionary
         props_pdb.update({'pdb_code': pdbCode})
@@ -442,8 +444,8 @@ def run_wf(args):
         # If the user gives the pdb file -> just copy to step folder
 
         # Write action to global log and execute step
-        global_log.info("step1A_pdb: Adding input PDB ({}) to working dir".format(args.input))
-        prep_output_file(args.input, paths_pdb["output_pdb_path"])
+        global_log.info("step1A_pdb: Adding input PDB ({}) to working dir".format(input_pdb))
+        prep_output_file(input_pdb, paths_pdb["output_pdb_path"])
         
         # Search for pdb code in input.yml
         if props_pdb['pdb_code']:
@@ -473,9 +475,9 @@ def run_wf(args):
     pdb_defects_data = checkStructure(paths_extract["output_molecule_path"], global_log)
 
     # Check if this should be the final step
-    if args.to_do == 'pdb':
-        shutil.copy(paths_extract["output_molecule_path"], args.output_path)
-        global_log.info("Molecule extraction completed. Final structure saved on " + args.output_path)
+    if last_step == 'pdb':
+        shutil.copy(paths_extract["output_molecule_path"], output_path)
+        global_log.info("Molecule extraction completed. Final structure saved on " + output_path)
         return 0
 
 # STEP 2 (A): Fix alternative locations
@@ -511,10 +513,10 @@ def run_wf(args):
     props_mut = global_prop["step2B_mutations"]
     paths_mut = global_paths["step2B_mutations"]
 
-    if args.mut_list:
+    if mutation_list:
 
         # Update properties dictionary
-        props_mut.update({'mutation_list': args.mut_list})
+        props_mut.update({'mutation_list': mutation_list})
 
         # Write action to global log and execute step
         global_log.info("step2B_mutations: Preparing mutated structure")
@@ -689,9 +691,9 @@ def run_wf(args):
     checking_log(**paths_check, properties=props_check)
 
     # Check if this should be the final step
-    if args.to_do == 'fix':
-        shutil.copy(paths_renum["output_structure_path"], args.output_path)
-        global_log.info("Fix completed. Final structure saved on " + args.output_path)
+    if last_step == 'fix':
+        shutil.copy(paths_renum["output_structure_path"], output_path)
+        global_log.info("Fix completed. Final structure saved on " + output_path)
         return 0
     
 # STEP 3: add H atoms, generate coordinate (.gro) and topology (.top) file
@@ -806,9 +808,9 @@ def run_wf(args):
     gmx_energy(**global_paths["step10_energy_min"], properties=global_prop["step10_energy_min"])
 
     # Check if this should be the final step
-    if args.to_do == 'min':
-        write_pdb_from_gro(args.output_path, paths["output_gro_path"])
-        global_log.info("Minimization completed. Final structure saved on " + args.output_path)
+    if last_step == 'min':
+        write_pdb_from_gro(output_path, paths["output_gro_path"])
+        global_log.info("Minimization completed. Final structure saved on " + output_path)
         return 0
 
 # STEP 11: NVT equilibration pre-processing
@@ -848,9 +850,9 @@ def run_wf(args):
     gmx_energy(**global_paths["step13_energy_nvt"], properties=global_prop["step13_energy_nvt"])
 
     # Check if this should be the final step
-    if args.to_do == 'nvt':
-        write_pdb_from_gro(args.output_path, paths["output_gro_path"])
-        global_log.info("NVT Equilibration completed. Final structure saved on " + args.output_path)
+    if last_step == 'nvt':
+        write_pdb_from_gro(output_path, paths["output_gro_path"])
+        global_log.info("NVT Equilibration completed. Final structure saved on " + output_path)
         return 0
 
 # STEP 14: NPT equilibration pre-processing
@@ -890,9 +892,9 @@ def run_wf(args):
     gmx_energy(**global_paths["step16_energy_npt"], properties=global_prop["step16_energy_npt"])
 
     # Check if this should be the final step
-    if args.to_do == 'npt':
-        write_pdb_from_gro(args.output_path, paths["output_gro_path"])
-        global_log.info("NPT Equilibration completed. Final structure saved on " + args.output_path)
+    if last_step == 'npt':
+        write_pdb_from_gro(output_path, paths["output_gro_path"])
+        global_log.info("NPT Equilibration completed. Final structure saved on " + output_path)
         return 0
 
 # STEP 17: free NPT production run pre-processing
@@ -914,9 +916,9 @@ def run_wf(args):
 
     # Write next action to global log 
     global_log.info("step18_mdrun_md: Execute free molecular dynamics simulation")
-    global_log.info("     Number of trajectories: {}".format(args.n_trajs))
+    global_log.info("     Number of trajectories: {}".format(num_trajs))
     
-    for traj_index in range(args.n_trajs):
+    for traj_index in range(num_trajs):
 
         # Properties and paths of step
         props_mdrun = global_prop["step18_mdrun_md"].copy()
@@ -1033,7 +1035,8 @@ def run_wf(args):
     # Properties and paths of step
     paths_mdrun = global_paths["step18_mdrun_md"].copy()
 
-    concatenateTrajs(args, paths_mdrun["output_trr_path"], paths_trjcat, props_trjcat)
+    concatenateTrajs(num_trajs, output_path, paths_mdrun["output_trr_path"], 
+                        paths_trjcat, props_trjcat)
 
     # Validate step
     if not validateStep(paths_trjcat["output_trj_path"]):
@@ -1046,14 +1049,14 @@ def run_wf(args):
     global_log.info('')
     global_log.info('Execution successful: ')
     global_log.info('  Workflow_path: %s' % conf.get_working_dir_path())
-    global_log.info('  Config File: %s' % args.config_path)
+    global_log.info('  Config File: %s' % configuration_path)
     global_log.info('')
     global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
     global_log.info('')
 
-    return 0
-    
-def main():
+    return 
+
+if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simple MD Protein Setup")
 
@@ -1069,8 +1072,8 @@ def main():
                         help="Output path (structure or trajectory).", 
                         required=False)
 
-    # Execute workflow until 'to_do' step -> all executes all steps (all is default)
-    parser.add_argument('--until', dest='to_do', 
+    # Execute workflow until 'last_step' -> all executes all steps (all is default)
+    parser.add_argument('--until', dest='last_step', 
                         help="(Opt, default: all) Extent of the pipeline to execute (pdb, fix, min, nvt, npt or all)", 
                         required=False)
 
@@ -1090,8 +1093,5 @@ def main():
     # Maximum number of residues to be created using homology modelling
     HOMOLOGY_MAX_RES = 10
 
-    run_wf(args)
-
-
-if __name__ == "__main__":
-    main()
+    main_wf(input_pdb = args.input, configuration_path = args.config_path, output_path = args.output_path, 
+            last_step = args.last_step, mutation_list = args.mut_list, num_trajs = args.n_trajs)
