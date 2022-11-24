@@ -7,11 +7,11 @@ restart: True
 step1_fpocket_select:
   tool: fpocket_select
   paths:
-    input_pockets_zip:  file:../2.Clustering_CavityAnalysis/output/step4_filter_cavities/filtered_pockets_model0.zip
+    input_pockets_zip:  file:../2.Clustering_CavityAnalysis/output/step4_filter_cavities/filtered_pockets_cluster_0.zip
     output_pocket_pdb: fpocket_cavity.pdb
     output_pocket_pqr: fpocket_pocket.pqr
   properties:
-    pocket: 3
+    pocket: 2
 
 step2_box:
   tool: box
@@ -25,7 +25,7 @@ step2_box:
 step3_str_check_add_hydrogens:
   tool: str_check_add_hydrogens
   paths:
-    input_structure_path: file:../2.Clustering_CavityAnalysis/output/step2_extract_models/output_model0.pdb
+    input_structure_path: file:../2.Clustering_CavityAnalysis/output/step2_extract_models/cluster_0.pdb
     output_structure_path: prep_receptor.pdbqt
   properties:
     charges: True
