@@ -559,18 +559,18 @@ def addLigandSuffixToPaths(all_paths, ligand_ID, ligand_Name, ligand_index, *key
 
     # Add name information if any
     if ligand_Name is None:
-        ligandName = ""
+        ligand_Name = ""
     else:
-        ligandName = "_" + ligandName
+        ligand_Name = "_" + ligand_Name
     
     # SMILES code has problematic characters and is too long - just put "SMILES" in name
     if (ID_format == 'SMILES'):
 
-        suffix = str(ligand_index) + ligandName + "_SMILES"
+        suffix = str(ligand_index) + ligand_Name + "_SMILES"
         
     # If format is PDB or DB - print code in file name
     else:
-        suffix = str(ligand_index) + ligandName + "_" + str(ligand_ID) 
+        suffix = str(ligand_index) + ligand_Name + "_" + str(ligand_ID) 
     
     # For all keys passed in keywords, modify path 
     for key in keywords:
@@ -699,7 +699,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     paths_addH = global_paths["step3_str_check_add_hydrogens"]
 
     # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
-    if None not in (input_pockets_path, pocket_ID, input_structure_path):
+    if input_structure_path is not None:
 
         paths_addH.update({'input_structure_path' : input_structure_path})
 

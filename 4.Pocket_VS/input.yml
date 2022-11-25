@@ -1,6 +1,7 @@
 working_dir_path: output                              # Workflow output directory
 can_write_console_log: True                           # Output log to console
 restart: True                                         # Do not execute steps if output files are already created
+remove_tmp: True
 
 # Section 1: Cavity analysis with fpocket on centroids + filtering 
 
@@ -29,19 +30,23 @@ step2_filter_cavities:
 step3A_renumber_structure:
   tool: renumber_structure
   paths:
-    input_structure_path: 
     output_structure_path: renumbered.pdb
     output_mapping_json_path: mapping.json
   properties:
-
+    renumber_residues: True
+    renumber_residues_per_chain: True
 
 step3B_extract_model:
   tool: extract_model
   paths:
+    input_structure_path: dependency/step3A_renumber_structure/output_structure_path
+    output_structure_path: extracted.pdb
   properties:
-    model: 0
+    models: [0]
 
 step3C_extract_residues:
   tool:
   paths:
-  properties:
+    input_structure_path: dependency/step3B_extract_model/output_structure_path
+    output_residues_path: pocket_residues.pdb
+

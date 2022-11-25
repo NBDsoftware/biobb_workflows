@@ -1,9 +1,9 @@
 # Example of a YAML configuration file for a BioExcel building blocks workflow
 
-working_dir_path: output          # Folder to write i/o files of the workflow steps
-can_write_console_log: False      # Verbose writing of log information
-restart: True                     # Skip steps already performed
-remove_tmp: True 
+working_dir_path: output # Folder to write i/o files of the workflow steps
+can_write_console_log: False # Verbose writing of log information
+restart: True # Skip steps already performed
+remove_tmp: True
 
 # Section 1: extraction of protein and structure Check
 
@@ -12,7 +12,7 @@ step1A_pdb:
   paths:
     output_pdb_path: structure.pdb
   properties:
-    filter: False                 # [ATOM, MODEL, ENDMDL] or False (then extract protein)
+    filter: False # [ATOM, MODEL, ENDMDL] or False (then extract protein)
     pdb_code: 4LOO
 
 step1B_extractMolecule:
@@ -21,8 +21,8 @@ step1B_extractMolecule:
     input_structure_path: dependency/step1A_pdb/output_pdb_path
     output_molecule_path: protein.pdb
   properties:
-    molecule_type: chains            # (all), protein, na, dna, rna, chains
-    chains: [A]                      # None or [A, B]
+    molecule_type: chains # (all), protein, na, dna, rna, chains
+    chains: [A] # None or [A, B]
     remove_tmp: True
 
 step1C_structure_check:
@@ -31,7 +31,7 @@ step1C_structure_check:
     input_structure_path: dependency/step1B_extractMolecule/output_molecule_path
     output_summary_path: pdbStructureCheck.json
 
-# Section 2: addition of mutations and fix PDB defects 
+# Section 2: addition of mutations and fix PDB defects
 
 step2A_fixaltlocs:
   tool: fix_altlocs
@@ -99,7 +99,7 @@ step2J_checkPDB:
   paths:
     input_pdb_path: dependency/step2I_renumberstructure/output_structure_path
     output_log_path: pdbStructureCheck.log
-    
+
 # Section 3 (Steps 3-10): prepare system for minimization and MD and minimize
 
 step3_pdb2gmx:
@@ -109,10 +109,10 @@ step3_pdb2gmx:
     output_gro_path: pdb2gmx.gro
     output_top_zip_path: pdb2gmx_top.zip
   properties:
-    water_type: spce                 # spc, spce, tip3p, tip4p, tip5p, tips3p
-    force_field: amber99sb-ildn      # gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut
-    ignh: False                      # Ignore hydrogens in the input structure
-    merge: False                     # Merge all chains into one molecule
+    water_type: spce # spc, spce, tip3p, tip4p, tip5p, tips3p
+    force_field: amber99sb-ildn # gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut
+    ignh: False # Ignore hydrogens in the input structure
+    merge: False # Merge all chains into one molecule
     remove_tmp: True
 
 step4_editconf:
@@ -121,8 +121,8 @@ step4_editconf:
     input_gro_path: dependency/step3_pdb2gmx/output_gro_path
     output_gro_path: editconf.gro
   properties:
-    box_type: dodecahedron           # cubic, triclinic, octahedron, dodecahedron
-    distance_to_molecule: 1.0        # Distance of the box from the outermost atom in nm
+    box_type: dodecahedron # cubic, triclinic, octahedron, dodecahedron
+    distance_to_molecule: 1.0 # Distance of the box from the outermost atom in nm
 
 step5_solvate:
   tool: solvate
@@ -150,7 +150,7 @@ step7_genion:
     input_top_zip_path: dependency/step5_solvate/output_top_zip_path
     output_top_zip_path: genion_top.zip
   properties:
-    neutral: True       # Neutralize charge of the system
+    neutral: True # Neutralize charge of the system
     concentration: 0.05 # Concentration of ions in mols/L
 
 step8_grompp_min:
@@ -175,16 +175,16 @@ step9_mdrun_min:
     output_log_path: min.log
   properties:
     gmx_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin:  /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
+    mpi_bin: /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
     mpi_np: 4
 
 step10_energy_min:
   tool: gmx_energy
   paths:
-      input_energy_path: dependency/step9_mdrun_min/output_edr_path
-      output_xvg_path: min_ene.xvg
+    input_energy_path: dependency/step9_mdrun_min/output_edr_path
+    output_xvg_path: min_ene.xvg
   properties:
-      terms:  ["Potential"]
+    terms: ["Potential"]
 
 # Section 4 (Steps 11-13): NVT
 
@@ -204,7 +204,7 @@ step11_grompp_nvt:
 
 step12_mdrun_nvt:
   tool: mdrun
-  paths: 
+  paths:
     input_tpr_path: dependency/step11_grompp_nvt/output_tpr_path
     output_trr_path: nvt.trr
     output_gro_path: nvt.gro
@@ -213,17 +213,16 @@ step12_mdrun_nvt:
     output_cpt_path: nvt.cpt
   properties:
     gmx_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin:  /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
+    mpi_bin: /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
     mpi_np: 4
-
 
 step13_energy_nvt:
   tool: gmx_energy
   paths:
-      input_energy_path: dependency/step12_mdrun_nvt/output_edr_path
-      output_xvg_path: nvt_temp.xvg
+    input_energy_path: dependency/step12_mdrun_nvt/output_edr_path
+    output_xvg_path: nvt_temp.xvg
   properties:
-      terms:  ["Temperature"]
+    terms: ["Temperature"]
 
 # Section 5 (Steps 14-16): NPT
 
@@ -251,17 +250,16 @@ step15_mdrun_npt:
     output_cpt_path: npt.cpt
   properties:
     gmx_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin:  /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
+    mpi_bin: /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
     mpi_np: 4
-
 
 step16_energy_npt:
   tool: gmx_energy
   paths:
-      input_energy_path: dependency/step15_mdrun_npt/output_edr_path
-      output_xvg_path: npt_den_press.xvg
+    input_energy_path: dependency/step15_mdrun_npt/output_edr_path
+    output_xvg_path: npt_den_press.xvg
   properties:
-      terms:  ["Pressure","Density"]
+    terms: ["Pressure", "Density"]
 
 # Section 6 (Steps 17-24): production run of several trajs
 
@@ -275,7 +273,7 @@ step17_grompp_md:
   properties:
     simulation_type: free
     mdp:
-      nsteps : 10000 # 50000000
+      nsteps: 10000 # 50000000
       ref-t: 310 310
       nstxout: 100 # 100000
       nstxout-compressed: 100 # 100000
@@ -293,62 +291,59 @@ step18_mdrun_md:
     output_cpt_path: md.cpt
   properties:
     gmx_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin:  /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
+    mpi_bin: /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
     mpi_np: 4
-
 
 step19_rmsfirst:
   tool: gmx_rms
   paths:
-      input_structure_path: dependency/step17_grompp_md/output_tpr_path
-      input_traj_path: dependency/step18_mdrun_md/output_trr_path
-      output_xvg_path: md_rmsdfirst.xvg
+    input_structure_path: dependency/step17_grompp_md/output_tpr_path
+    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    output_xvg_path: md_rmsdfirst.xvg
   properties:
-      selection: Backbone
+    selection: Backbone
 
 step20_rmsexp:
   tool: gmx_rms
   paths:
-      input_structure_path: dependency/step8_grompp_min/output_tpr_path
-      input_traj_path: dependency/step18_mdrun_md/output_trr_path
-      output_xvg_path: md_rmsdexp.xvg
+    input_structure_path: dependency/step8_grompp_min/output_tpr_path
+    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    output_xvg_path: md_rmsdexp.xvg
   properties:
-      selection: Backbone
+    selection: Backbone
 
 step21_rgyr:
   tool: gmx_rgyr
   paths:
-      input_structure_path: dependency/step17_grompp_md/output_tpr_path
-      input_traj_path: dependency/step18_mdrun_md/output_trr_path
-      output_xvg_path: md_rgyr.xvg
+    input_structure_path: dependency/step17_grompp_md/output_tpr_path
+    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    output_xvg_path: md_rgyr.xvg
   properties:
-      selection: Backbone
+    selection: Backbone
 
 step22_image:
   tool: gmx_image
   paths:
-      input_traj_path: dependency/step18_mdrun_md/output_trr_path
-      input_top_path: dependency/step17_grompp_md/output_tpr_path
-      output_traj_path: imaged_traj.trr
+    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    input_top_path: dependency/step17_grompp_md/output_tpr_path
+    output_traj_path: imaged_traj.trr
   properties:
-      center_selection: Protein
-      output_selection: Protein
-      pbc: mol
-      center : True
+    center_selection: Protein
+    output_selection: Protein
+    pbc: mol
+    center: True
 
 step23_dry:
   tool: gmx_trjconv_str
   paths:
-      input_structure_path: dependency/step15_mdrun_npt/output_gro_path
-      input_top_path: dependency/step17_grompp_md/output_tpr_path
-      output_str_path: imaged_structure.gro
+    input_structure_path: dependency/step15_mdrun_npt/output_gro_path
+    input_top_path: dependency/step17_grompp_md/output_tpr_path
+    output_str_path: imaged_structure.gro
   properties:
-      selection: Protein
+    selection: Protein
 
 step24_trjcat:
   tool: trjcat
   paths:
     input_trj_zip_path: all_trajectories.zip
     output_trj_path: all_trajectories.trr
-    
-
