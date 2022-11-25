@@ -22,7 +22,26 @@ step2_filter_cavities:
     input_summary: dependency/step1_cavity_analysis/output_summary
     output_filter_pockets_zip: filtered_pockets.zip
   properties:
-    score: [0.5, 1]
-    druggability_score: [0.6, 1]
-    volume: [150, 1000]
+    score: [0.1, 1]
+    druggability_score: [0.1, 1]
+    volume: [150, 2000]
 
+step3A_renumber_structure:
+  tool: renumber_structure
+  paths:
+    input_structure_path: 
+    output_structure_path: renumbered.pdb
+    output_mapping_json_path: mapping.json
+  properties:
+
+
+step3B_extract_model:
+  tool: extract_model
+  paths:
+  properties:
+    model: 0
+
+step3C_extract_residues:
+  tool:
+  paths:
+  properties:

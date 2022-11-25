@@ -19,7 +19,7 @@ step2_box:
     input_pdb_path: dependency/step1_fpocket_select/output_pocket_pqr
     output_pdb_path: box.pdb 
   properties:
-    offset: 12             
+    offset: 2             
     box_coordinates: True
 
 step3_str_check_add_hydrogens:
