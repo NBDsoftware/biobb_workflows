@@ -193,7 +193,7 @@ def findBestAltLocs(altloc_data):
 
     return best_altlocs
 
-def concatenateTrajs(num_trajs, output_path, mdrun_traj_path, paths_trjcat, props_trjcat):
+def concatenateTrajs(num_trajs, output_path, paths_image_traj, props_image_traj, paths_trjcat, props_trjcat):
     '''
     Creates a zip file with all trajectories and then concatenates them
 
@@ -202,23 +202,25 @@ def concatenateTrajs(num_trajs, output_path, mdrun_traj_path, paths_trjcat, prop
 
         num_trajs         (int): number of trajectories
         output_path       (str): output path for concatenated traj
-        mdrun_traj_path   (str): default path to "npt free" trajectory
+        paths_image_traj (dict): paths of trajectory imaging step
+        props_image_traj (dict): properties of trajectory imaging step
         paths_trjcat     (dict): paths of concatenating step
         props_trjcat     (dict): properties of concatenating step
 
     '''
 
     # Generic trajectory name
-    traj_name = Path(mdrun_traj_path).name
+    output_traj_path = paths_image_traj["output_traj_path"]
+    traj_name = Path(output_traj_path).name
 
-    # Path of npt free mdrun with all trajectories
-    mdrun_path = Path(mdrun_traj_path).parent
+    # Path of step imaging trajectories with traj0/ traj1/ traj2/
+    img_step_path = props_image_traj["path"]
 
     # Path for zip file expected by trjcat step
     zip_path = paths_trjcat["input_trj_zip_path"]
 
     # trjcat step folder
-    trjcat_step_path = Path(zip_path).parent
+    trjcat_step_path = props_trjcat["path"]
 
     # If the step folder is not created, create it
     if not os.path.exists(trjcat_step_path):
@@ -234,7 +236,7 @@ def concatenateTrajs(num_trajs, output_path, mdrun_traj_path, paths_trjcat, prop
         traj_folder = "traj" + str(traj_index)
 
         # Generic trajectory folder path
-        traj_folder_path = os.path.join(mdrun_path, traj_folder)
+        traj_folder_path = os.path.join(img_step_path, traj_folder)
 
         # Generic trajectory file path
         traj_file_path = os.path.join(traj_folder_path, traj_name)
@@ -967,8 +969,9 @@ def main_wf(input_pdb, configuration_path, output_path, last_step, mutation_list
     # Properties and paths of step
     paths_mdrun = global_paths["step18_mdrun_md"].copy()
 
-    concatenateTrajs(num_trajs, output_path, paths_mdrun["output_trr_path"], 
-                        paths_trjcat, props_trjcat)
+    concatenateTrajs(num_trajs = num_trajs, output_path = output_path, 
+                    paths_image_traj = paths_img, props_image_traj=props_img, 
+                    paths_trjcat = paths_trjcat, props_trjcat = props_trjcat)
 
     # Validate step
     if not validateStep(paths_trjcat["output_trj_path"]):
