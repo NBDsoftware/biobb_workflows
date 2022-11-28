@@ -386,6 +386,10 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # If trajectory path is given through CLI -> prioritize over input.yml
         if trajectory_path is not None:
             paths_clust.update({'input_traj_path' : trajectory_path})
+        
+        # If topology is given through CLI -> prioritize over input.yml
+        if topology_path is not None:
+            paths_clust.update({'input_structure_path' : topology_path})
 
         # NOTE: The clustering is done using all the atoms for the RMSD calculation. Is it possible to use a sub-set with gmx cluster? Maybe including ttclust project? or mdtraj?
         # Using gromos method the RMSD calculation is done with respect to a certain group... But it also aligns wrt this group... 
