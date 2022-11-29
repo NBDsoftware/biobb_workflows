@@ -614,7 +614,8 @@ def writeSMILES(SMILES, ligand_index, step_path):
 
     return smiles_path
 
-def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets_path = None, pocket_ID = None, pocket_residues_path = None, input_structure_path = None):
+def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets_path = None, 
+              pocket_ID = None, pocket_residues_path = None, input_structure_path = None):
 
     # Added last two arguments for ensemble docking :) NOTE: improve docs
 
@@ -728,10 +729,8 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         ligand_IDs = prop_ligandLib['ligand_list']
         ligand_Names = [None]*len(ligand_IDs)
 
-    # If len(ligand_IDs) > 20 then save minimum number of files, 
-    # NOTE: if library is very big avoid prints per ligand, only warnings and errors
-    drugLibIsLarge = len(ligand_IDs) > 20
-    
+    # NOTE: if library is very big avoid prints per ligand, only warnings and errors - decide what to print and use lock to access same global_log
+
     for ligand_index in range(len(ligand_IDs)):
 
         ligand_ID = ligand_IDs[ligand_index]
@@ -798,12 +797,11 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
             # Action: Convert pose to PDB
             babel_convert(**paths_poseConv, properties=prop_poseConv)
 
-            # If drug library is large remove unnecessary files 
-            if (drugLibIsLarge):
-                removeFiles(paths_ligandLib['output_sdf_path'], 
-                            paths_ligandLib['output_path'],
-                            paths_ligConv['output_path'],
-                            paths_autodock['output_pdbqt_path'])
+            # Remove unnecessary files 
+            removeFiles(paths_ligandLib['output_sdf_path'], 
+                        paths_ligandLib['output_path'],
+                        paths_ligConv['output_path'],
+                        paths_autodock['output_pdbqt_path'])
         
         # If step 4 was not successful
         else:
