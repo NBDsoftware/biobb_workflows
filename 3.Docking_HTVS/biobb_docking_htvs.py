@@ -414,7 +414,7 @@ def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
     # Modify the default output path 
     # According to ligand ID (unless SMILES is ID) or ligand Name if there is any
     addLigandSuffixToPaths(paths, ligand_ID, ligand_Name, ligand_index,
-                            'output_sdf_path')
+                            'output_sdf_path', 'output_path')
 
  # If ligand_ID is a PDB entry ID
     if (ID_format == 'PDB'):
@@ -428,9 +428,6 @@ def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
         except:
             return False
 
-        # Check output exists and is not empty (to skip corrupt ligand identifiers)
-        successful_step = validateStep(paths['output_sdf_path'])
-
  # If ligand_ID is a Drug Bank ID
     elif (ID_format == 'DB'):
 
@@ -442,9 +439,6 @@ def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
             drugbank(**paths, properties=prop)
         except:
             return False
-
-        # Check output exists and is not empty (to skip corrupt ligand identifiers)
-        successful_step = validateStep(paths['output_sdf_path'])
         
  # If ligand_ID is a SMILES code
     elif (ID_format == 'SMILES'):
@@ -461,7 +455,6 @@ def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
 
         # Update paths
         paths.update({'input_path': smiles_path})
-        paths.update({'output_path' : paths['output_sdf_path']})
 
         # Action: format conversion using Open Babel (SMILES -> sdf)
         try:
@@ -472,8 +465,8 @@ def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
         # Erase tmp SMILES file
         removeFiles(smiles_path)
 
-        # Check output exists and is not empty (to skip corrupt ligand identifiers)
-        successful_step = validateStep(paths['output_path'])
+    # Check output exists and is not empty (to skip corrupt ligand identifiers)
+    successful_step = validateStep(paths['output_path']) or validateStep(paths['output_sdf_path'])
 
     return successful_step
 
