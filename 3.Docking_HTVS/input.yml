@@ -36,8 +36,7 @@ step3_str_check_add_hydrogens:
 step4_source_lig:
   paths:
     output_sdf_path: ligand.sdf
-  properties:
-    ligand_list: ['COCCOC1=C(C=C2C(=C1)C(=NC=N2)NC3=CC=CC(=C3)C#C)OCCOC','AQ4', 'DB00530']    # ['DB00530', 'DB14195'] SMILES (+ 4 char), 3-letter PDB Ligand ID's or Drug Bank ID's
+    output_path: ligand.sdf
 
 step5_babel_prepare_lig:
   tool: babel_convert
