@@ -166,99 +166,58 @@ def printAvailablePockets(pockets_path, global_log):
 
     return
 
-def findTopLigands(paths, properties, ligand_IDs, ligand_Names, global_log):
+def findAffinityInLog(log_path):
     '''
-    Find top scoring ligands according to binding affinity calculated in step 6. 
-    The number of ligands considered is determined in the properties of step 8 or 
-    the maximum number of ligands
+    Find best binding affinity among different poses
     
     Inputs
     ------
-        paths         (dict): paths of step 8 
-        properties    (dict): properties of step 8
-        ligand_IDs    (list): list of ligand identifiers
-        ligand_Names  (list): list of ligand names
-        global_log  (Logger):
+        log_path (str): paths of log file with results
 
     Outputs
     -------
-        bestLigandAffinities  (list): list with lowest affinities 
-        bestLigandIDs         (list): list with corresponding ligand identifiers/names
+        affinity (float): best affinity among poses  
     '''
 
-# 1. Create 2 lists: one with binding affinities and another with ligandID_indices 
+    # Find affinity of best pose from log
+    affinity = float(findMatchingStr(pattern=r'\s+1\s+(\S+)\s+', filepath=log_path))
 
-    affinities = []
-    ligand_indices = []
+    return affinity
 
-    # Default path for docking log, convert from string to Path class
-    dockingLogsPath = Path(paths["docking_logs"])
+def printTopLigands(affinities_list, properties, global_log):
+    '''
+    Print top ligands 
+
+    Inputs
+    ------
+        affinities_list  (list): list with tuples -> (affinity, ligand identifier)
+        properties       (dict): properties of step 8
+        global_log     (logger): global log
     
-    # Step path for docking step
-    stepPath = dockingLogsPath.parent
+    Output
+    ------
 
-    # "output_vina*log"
-    logNamePattern = dockingLogsPath.stem + "*" + dockingLogsPath.suffix
+        affinities_list        (list): list with top ligand tuples -> (affinity, ligand identifier) ordered by affinity
+    '''
+    # NOTE: perhaps print csv with data?
 
-    # List all files matching the pattern
-    logList = stepPath.rglob(logNamePattern)
+    # Sort list according to affinity
+    affinities_list = sorted(affinities_list)
 
-    # For each docked ligand
-    for log in logList:
+    # Find number of ligands to print in global log
+    numLigandsToPrint = min(properties['number_top_ligands'], len(affinities_list)) 
 
-        # Find index of ligand from log name
-        logName = log.name
-        ligand_index = findNumberInString(logName.strip(dockingLogsPath.stem))
-
-        # Find affinity of best pose from log
-        affinity = float(findMatchingStr(pattern=r'\s+1\s+(\S+)\s+', filepath=str(log)))
-
-        # Save both: best affinity and index
-        affinities.append(affinity)
-        ligand_indices.append(ligand_index)
-
-# 2. Find min and its index, save in another list, remove min. Repeat "number_top_ligands" times
-    
-    # Read how many ligands to include in the top
-    numTopLigands = min(properties["number_top_ligands"], len(affinities)) 
-
-    bestLigandAffinities = []
-    bestLigandIDs = []
-    bestLigandNames = []
-
-    # Number of top ligands should not be larger than docked ligands
-    for i in range(numTopLigands):
-
-        # Find minimum affinity
-        bestLigandAffinity = min(affinities)
-
-        # Index of minimum affinity
-        bestAffinityIndex = affinities.index(bestLigandAffinity)
-
-        # Corresponding ligand ID index - as given in log file name
-        bestLigandIndex = ligand_indices[bestAffinityIndex]
-
-        # Save affinity
-        bestLigandAffinities.append(bestLigandAffinity)
-
-        # Save corresponding ligandID
-        bestLigandIDs.append(ligand_IDs[bestLigandIndex])
-
-        # Save corresponding ligand Name
-        bestLigandNames.append(ligand_Names[bestLigandIndex])
-
-        # Remove affinity
-        affinities.remove(bestLigandAffinity)
-
-        # Remove ligand index
-        ligand_indices.remove(bestLigandIndex)
+    # Exclude the rest
+    affinities_list = affinities_list[:numLigandsToPrint]
 
     # Print best ligands and their affinities in log file
-    for i in range(len(bestLigandAffinities)):
+    for item in affinities_list:
 
-        global_log.info("    Affinity: {} for ligand {}".format(bestLigandAffinities[i], bestLigandIDs[i]))
+        ligand_affinity, ligand_identifier = item
 
-    return bestLigandAffinities, bestLigandIDs, bestLigandNames
+        global_log.info("    Affinity: {} for ligand {}".format(ligand_affinity, ligand_identifier))
+
+    return affinities_list
 
 def validateStep(*output_paths):
     '''
@@ -521,7 +480,8 @@ def addLigandSuffixToPaths(all_paths, ligand_ID, ligand_Name, ligand_index, *key
     Output
     ------
 
-        all_paths  (dict): all new paths
+        suffix      (str): suffix used to modify paths
+        (Implicit) all_paths paths are modified
 
     For example:
 
@@ -565,7 +525,7 @@ def addLigandSuffixToPaths(all_paths, ligand_ID, ligand_Name, ligand_index, *key
         # Update paths dictionary
         all_paths.update({key : newpath})
 
-    return all_paths
+    return suffix
 
 def writeSMILES(SMILES, ligand_index, step_path):
     '''
@@ -630,9 +590,6 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
 
         # STEP 4: Source ligand in sdf format
 
-            # Write next action to global log
-            #global_log.info("step4_source_lig: Extracting small molecule from library")
-
             # Copy original paths to modify them
             paths_ligandLib = global_paths["step4_source_lig"].copy()
 
@@ -647,14 +604,11 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
             
             # STEP 5: Convert ligand from sdf format to pdbqt format
 
-                # Write next action to global log
-                #global_log.info("step5_babel_prepare_lig: Preparing small molecule (ligand) for docking")
-
                 # Copy original paths to modify them
                 paths_ligConv = global_paths["step5_babel_prepare_lig"].copy()
                 
                 # Modify paths according to ligand info
-                addLigandSuffixToPaths(paths_ligConv, ligand_ID, ligand_Name, ligand_index,
+                ligand_identifier = addLigandSuffixToPaths(paths_ligConv, ligand_ID, ligand_Name, ligand_index,
                                         'input_path','output_path')
                 
                 # Add ligand index to log file names
@@ -665,9 +619,6 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
 
 
             # STEP 6: Autodock vina
-
-                # Write action to global log
-                #global_log.info("step6_autodock_vina_run: Running the docking")
 
                 # Copy original paths to modify them
                 paths_autodock = global_paths["step6_autodock_vina_run"].copy()            
@@ -681,12 +632,14 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
 
                 # Action: Run autodock vina
                 autodock_vina_run(**paths_autodock, properties=prop_autodock)
+                
+                # Find best affinity among different poses - the rest can be checked from step7 output 
+                affinity = findAffinityInLog(log_path = paths_autodock['output_log_path'])
 
+                # Append result
+                affinities_list.append((affinity, ligand_identifier))
 
-            # STEP 7: Convert poses to PDB
-
-                # Write action to global log
-                #global_log.info("step7_babel_prepare_pose: Converting ligand pose to PDB format")  
+            # STEP 7: Convert poses to PDB 
 
                 # Copy original paths to modify them
                 paths_poseConv = global_paths["step7_babel_prepare_pose"].copy()    
@@ -706,12 +659,6 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
                             paths_ligandLib['output_path'],
                             paths_ligConv['output_path'],
                             paths_autodock['output_pdbqt_path'])
-            
-            # If step 4 was not successful
-            #else:
-
-                #global_log.info("    WARNING: failed to source ligand {} with ligand ID: {}".format(ligand_index, ligand_ID))
-                #global_log.info("            Skipping to next ligand")
 
 
 
@@ -856,21 +803,17 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
 
             ligands_queue.put(ligand_line)
 
+    # Join all workers
     for process in pool:
 
         process.join()
-    
 
 # STEP 8: Find top ligands (according to lowest affinity)
     
     # Write action to global log
-    #global_log.info("step8_show_top_ligands: print identifiers of top ligands ranked by lowest affinity")  
+    global_log.info("step8_show_top_ligands: print identifiers of top ligands ranked by lowest affinity")  
 
-    # Find and print top ligands in log file
-    #bestAffinities, bestLigandIDs, bestLigandNames = findTopLigands(paths = global_paths["step8_show_top_ligands"], 
-    #                                                        properties = global_prop["step8_show_top_ligands"], 
-    #                                                        ligand_IDs = ligand_IDs, ligand_Names = ligand_Names, 
-    #                                                        global_log = global_log)
+    bestAffinities =  printTopLigands(affinities_list, global_prop['step8_show_top_ligands'], global_log)
 
     # Print timing info only if we are not calling docking_htvs from another script
     if None in (input_pockets_path, pocket_ID, input_structure_path):
@@ -887,7 +830,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
         global_log.info('')
 
-    return # conf.get_working_dir_path(), bestAffinities, bestLigandIDs, bestLigandNames
+    return conf.get_working_dir_path(), bestAffinities
 
 if __name__ == '__main__':
     
@@ -908,6 +851,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # _,_,_,_= main_wf(args.config_path, args.ligand_lib, args.to_do)
+    _,_= main_wf(args.config_path, args.ligand_lib, args.to_do)
 
-    main_wf(args.config_path, args.ligand_lib, args.to_do)
+

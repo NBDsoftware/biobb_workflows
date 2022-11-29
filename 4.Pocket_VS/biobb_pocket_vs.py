@@ -521,10 +521,6 @@ def main(args):
                                                 paths = paths_model,
                                                 model = model)
 
-            print("******")            
-            print(output_structure_path)
-            print("******")
-
             # Extract residues defining pocket
             global_log.info("   step3C_extract_residues: Extracting residues")
 
@@ -540,11 +536,12 @@ def main(args):
             global_log.info("   step4: Docking probe ligands")
 
             # Dock all ligands using residues to define box
-            output_dir, bestAffinities, bestIDs, bestNames = docking_htvs(configuration_path = args.htvs_config_path, 
-                                                                        ligand_lib_path = args.ligand_lib, 
-                                                                        last_step = "all", 
-                                                                        pocket_residues_path = pocket_residues_path,
-                                                                        input_structure_path = output_structure_path)
+            # NOTE: change this, now is a list of tuples (affinity, ligand identifier)
+            output_dir, bestAffinities = docking_htvs(configuration_path = args.htvs_config_path, 
+                                                                    ligand_lib_path = args.ligand_lib, 
+                                                                    last_step = "all", 
+                                                                    pocket_residues_path = pocket_residues_path,
+                                                                    input_structure_path = output_structure_path)
             # New path to save docking_vs results
             new_output_dir = os.path.join(wdir, model + "_VS")
 

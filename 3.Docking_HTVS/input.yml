@@ -1,6 +1,7 @@
 working_dir_path: output
-can_write_console_log: True
+can_write_console_log: False
 restart: True
+remove_tmp: True
 
 # Section 1: Pocket selection and receptor preparation
 
@@ -69,7 +70,5 @@ step7_babel_prepare_pose:
     obabel_path: obabel
 
 step8_show_top_ligands:
-  paths:
-    docking_logs: dependency/step6_autodock_vina_run/output_log_path
   properties:
-    number_top_ligands: 4
+    number_top_ligands: 50
