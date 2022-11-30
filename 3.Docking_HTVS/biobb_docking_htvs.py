@@ -184,7 +184,7 @@ def findAffinityInLog(log_path):
 
     return affinity
 
-def printTopLigands(affinities_list, properties, global_log):
+def findTopLigands(affinities_list, properties):
     '''
     Print top ligands 
 
@@ -209,13 +209,6 @@ def printTopLigands(affinities_list, properties, global_log):
 
     # Exclude the rest
     affinities_list = affinities_list[:numLigandsToPrint]
-
-    # Print best ligands and their affinities in log file
-    for item in affinities_list:
-
-        ligand_affinity, ligand_identifier = item
-
-        global_log.info("    Affinity: {} for ligand {}".format(ligand_affinity, ligand_identifier))
 
     return affinities_list
 
@@ -500,18 +493,18 @@ def addLigandSuffixToPaths(all_paths, ligand_ID, ligand_Name, ligand_index, *key
 
     # Add name information if any
     if ligand_Name is None:
-        ligandName = ""
+        ligand_Name = ""
     else:
-        ligandName = "_" + ligandName
+        ligand_Name = "_" + ligand_Name
     
     # SMILES code has problematic characters and is too long - just put "SMILES" in name
     if (ID_format == 'SMILES'):
 
-        suffix = str(ligand_index) + ligandName + "_SMILES"
+        suffix = str(ligand_index) + ligand_Name + "_SMILES"
         
     # If format is PDB or DB - print code in file name
     else:
-        suffix = str(ligand_index) + ligandName + "_" + str(ligand_ID) 
+        suffix = str(ligand_index) + ligand_Name + "_" + str(ligand_ID) 
     
     # For all keys passed in keywords, modify path 
     for key in keywords:
@@ -717,7 +710,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         paths = global_paths["step1_fpocket_select"]
 
         # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
-        if None not in (input_pockets_path, pocket_ID, input_structure_path):
+        if None not in (input_pockets_path, pocket_ID):
 
             paths.update({'input_pockets_zip' : input_pockets_path})
             props.update({'pocket' : pocket_ID})
@@ -747,7 +740,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     paths_box = global_paths["step2_box"]
     
     # If model and pocket_residues_path are provided through arguments -> prioritize over input.yml (ensemble docking with residues defining pocket)
-    if None not in (pocket_residues_path, input_structure_path):
+    if pocket_residues_path is not None:
 
         paths_box.update({'input_pdb_path' : pocket_residues_path})
 
@@ -764,7 +757,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     paths_addH = global_paths["step3_str_check_add_hydrogens"]
 
     # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
-    if None not in (input_pockets_path, pocket_ID, input_structure_path):
+    if input_structure_path is not None:
 
         paths_addH.update({'input_structure_path' : input_structure_path})
 
@@ -813,10 +806,17 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     # Write action to global log
     global_log.info("step8_show_top_ligands: print identifiers of top ligands ranked by lowest affinity")  
 
-    bestAffinities =  printTopLigands(affinities_list, global_prop['step8_show_top_ligands'], global_log)
+    bestAffinities =  findTopLigands(affinities_list, global_prop['step8_show_top_ligands'])
 
-    # Print timing info only if we are not calling docking_htvs from another script
-    if None in (input_pockets_path, pocket_ID, input_structure_path):
+    # Print more info only if we are not calling docking_htvs from another script
+    if (input_pockets_path  == None) and (pocket_ID == None) and (input_structure_path == None):
+
+        # Print best ligands and their affinities in log file
+        for item in bestAffinities:
+
+            ligand_affinity, ligand_identifier = item
+
+            global_log.info("    Affinity: {} for ligand {}".format(ligand_affinity, ligand_identifier))
         
         # Timing information
         elapsed_time = time.time() - start_time

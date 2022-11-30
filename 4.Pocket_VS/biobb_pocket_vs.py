@@ -548,8 +548,17 @@ def main(args):
             # Move output_dir so it's not overwritten
             shutil.move(output_dir, new_output_dir)
 
-            # Average affinity
-            average_affinity = sum(bestAffinities)/len(bestAffinities)
+            # Compute average affinity over docked ligands
+            average_affinity = 0
+
+            # Go over all tuples (affinity, ligand identifier)
+            for ligand_info_tuple in bestAffinities:
+                
+                # Sum all the affinities 
+                average_affinity += ligand_info_tuple[0]
+            
+            # Divide over total
+            average_affinity = average_affinity/len(bestAffinities)
 
             # Print results for this pocket in global log
             global_log.info("     Yields average affinity of * {} * ".format(round(average_affinity, 3)))
@@ -558,28 +567,23 @@ def main(args):
             avg_affinity_history.append(average_affinity)
 
             # Print detailed affinities per compound
-            for lig_index in range(len(bestAffinities)):
+            for ligand_info_tuple in bestAffinities:
 
-                if bestNames[lig_index] is None:
-                    ligand = bestIDs[lig_index]
-                else:
-                    ligand = bestNames[lig_index]
+                global_log.info("        Ligand {} yields affinity of {}".format(ligand_info_tuple[1], round(ligand_info_tuple[0],3)))
 
-                global_log.info("        Ligand {} yields affinity of {}".format(ligand, bestAffinities[lig_index]))
-
-        # If residues defining pocket are not provided -> dock ligands to all pockets found
+        # If residues defining pocket are not provided -> dock ligands to all pockets found 
         else:
 
             # For each pocket
             for pocket_ID in pockets_dict[model]:
 
                 # Dock all ligands and save results
-                output_dir, bestAffinities, bestIDs, bestNames = docking_htvs(configuration_path = args.htvs_config_path, 
-                                                                        ligand_lib_path = args.ligand_lib, 
-                                                                        last_step = "all", 
-                                                                        input_pockets_path = input_pockets_path, 
-                                                                        pocket_ID = pocket_ID,
-                                                                        input_structure_path = input_structure_path)
+                output_dir, bestAffinities = docking_htvs(configuration_path = args.htvs_config_path, 
+                                                            ligand_lib_path = args.ligand_lib, 
+                                                            last_step = "all", 
+                                                            input_pockets_path = input_pockets_path, 
+                                                            pocket_ID = pocket_ID,
+                                                            input_structure_path = input_structure_path)
 
                 # New path to save docking_vs results
                 new_output_dir = os.path.join(wdir, model + "_" + str(pocket_ID) + "_VS")
@@ -587,21 +591,25 @@ def main(args):
                 # Move output_dir so it's not overwritten
                 shutil.move(output_dir, new_output_dir)
 
-                # Average affinity
-                average_affinity = sum(bestAffinities)/len(bestAffinities)
+                # Compute average affinity over docked ligands
+                average_affinity = 0
+
+                # Go over all tuples (affinity, ligand identifier)
+                for ligand_info_tuple in bestAffinities:
+                    
+                    # Sum all the affinities 
+                    average_affinity += ligand_info_tuple[0]
+                
+                # Divide over total
+                average_affinity = average_affinity/len(bestAffinities)
 
                 # Print results for this pocket in global log
                 global_log.info("        Pocket {} yields average affinity of {}".format(pocket_ID, round(average_affinity, 3)))
 
                 # Print detailed affinities per compound
-                for lig_index in range(len(bestAffinities)):
+                for ligand_info_tuple in bestAffinities:
 
-                    if bestNames[lig_index] is None:
-                        ligand = bestIDs[lig_index]
-                    else:
-                        ligand = bestNames[lig_index]
-
-                    global_log.info("            Ligand {} yields affinity of {} \n".format(ligand, round(bestAffinities[lig_index]),3))
+                    global_log.info("        Ligand {} yields affinity of {}".format(ligand_info_tuple[1], round(ligand_info_tuple[0],3)))
     
     if args.pocket_res:
 

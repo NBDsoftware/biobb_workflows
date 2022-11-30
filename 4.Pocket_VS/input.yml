@@ -1,5 +1,5 @@
 working_dir_path: output                              # Workflow output directory
-can_write_console_log: True                           # Output log to console
+can_write_console_log: False                           # Output log to console
 restart: True                                         # Do not execute steps if output files are already created
 remove_tmp: True
 
