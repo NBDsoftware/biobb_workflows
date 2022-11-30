@@ -521,10 +521,6 @@ def main(args):
                                                 paths = paths_model,
                                                 model = model)
 
-            print("******")            
-            print(output_structure_path)
-            print("******")
-
             # Extract residues defining pocket
             global_log.info("   step3C_extract_residues: Extracting residues")
 
