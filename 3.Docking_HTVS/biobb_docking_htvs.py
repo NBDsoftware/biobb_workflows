@@ -654,7 +654,7 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
                 # Action: Convert pose to PDB
                 babel_convert(**paths_poseConv, properties=prop_poseConv)
 
-                # Remove unnecessary files 
+                # Remove unnecessary files - NOTE: for screening of large libraries, all files should be removed? Except global log with ranking?
                 removeFiles(paths_ligandLib['output_sdf_path'], 
                             paths_ligandLib['output_path'],
                             paths_ligConv['output_path'],
