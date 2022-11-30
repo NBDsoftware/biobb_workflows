@@ -164,7 +164,7 @@ def printAvailablePockets(pockets_path, global_log):
 
     return
 
-def findTopLigands(paths, properties, ligand_IDs, ligand_Names, global_log):
+def findTopLigands(paths, properties, ligand_IDs, ligand_Names):
     '''
     Find top scoring ligands according to binding affinity calculated in step 6. 
     The number of ligands considered is determined in the properties of step 8 or 
@@ -250,11 +250,6 @@ def findTopLigands(paths, properties, ligand_IDs, ligand_Names, global_log):
 
         # Remove ligand index
         ligand_indices.remove(bestLigandIndex)
-
-    # Print best ligands and their affinities in log file
-    for i in range(len(bestLigandAffinities)):
-
-        global_log.info("    Affinity: {} for ligand {}".format(bestLigandAffinities[i], bestLigandIDs[i]))
 
     return bestLigandAffinities, bestLigandIDs, bestLigandNames
 
@@ -552,18 +547,18 @@ def addLigandSuffixToPaths(all_paths, ligand_ID, ligand_Name, ligand_index, *key
 
     # Add name information if any
     if ligand_Name is None:
-        ligandName = ""
+        ligand_Name = ""
     else:
-        ligandName = "_" + ligandName
+        ligand_Name = "_" + ligand_Name
     
     # SMILES code has problematic characters and is too long - just put "SMILES" in name
     if (ID_format == 'SMILES'):
 
-        suffix = str(ligand_index) + ligandName + "_SMILES"
+        suffix = str(ligand_index) + ligand_Name + "_SMILES"
         
     # If format is PDB or DB - print code in file name
     else:
-        suffix = str(ligand_index) + ligandName + "_" + str(ligand_ID) 
+        suffix = str(ligand_index) + ligand_Name + "_" + str(ligand_ID) 
     
     # For all keys passed in keywords, modify path 
     for key in keywords:
@@ -646,7 +641,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         paths = global_paths["step1_fpocket_select"]
 
         # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
-        if None not in (input_pockets_path, pocket_ID, input_structure_path):
+        if None not in (input_pockets_path, pocket_ID):
 
             paths.update({'input_pockets_zip' : input_pockets_path})
             props.update({'pocket' : pocket_ID})
@@ -676,7 +671,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     paths_box = global_paths["step2_box"]
     
     # If model and pocket_residues_path are provided through arguments -> prioritize over input.yml (ensemble docking with residues defining pocket)
-    if None not in (pocket_residues_path, input_structure_path):
+    if pocket_residues_path is not None:
 
         paths_box.update({'input_pdb_path' : pocket_residues_path})
 
@@ -693,7 +688,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     paths_addH = global_paths["step3_str_check_add_hydrogens"]
 
     # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
-    if None not in (input_pockets_path, pocket_ID, input_structure_path):
+    if input_structure_path is not None:
 
         paths_addH.update({'input_structure_path' : input_structure_path})
 
@@ -810,11 +805,15 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     # Find and print top ligands in log file
     bestAffinities, bestLigandIDs, bestLigandNames = findTopLigands(paths = global_paths["step8_show_top_ligands"], 
                                                             properties = global_prop["step8_show_top_ligands"], 
-                                                            ligand_IDs = ligand_IDs, ligand_Names = ligand_Names, 
-                                                            global_log = global_log)
+                                                            ligand_IDs = ligand_IDs, ligand_Names = ligand_Names)
 
-    # Print timing info only if we are not calling docking_htvs from another script
-    if None in (input_pockets_path, pocket_ID, input_structure_path):
+    # Print more info only if we are not calling docking_htvs from another script
+    if (input_pockets_path == None) and (pocket_ID == None) and (input_structure_path == None):
+
+        # Print best ligands and their affinities in log file
+        for i in range(len(bestAffinities)):
+
+            global_log.info("    Affinity: {} for ligand {}".format(bestAffinities[i], bestLigandIDs[i]))
         
         # Timing information
         elapsed_time = time.time() - start_time

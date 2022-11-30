@@ -36,8 +36,7 @@ step3_str_check_add_hydrogens:
 step4_source_lig:
   paths:
     output_sdf_path: ligand.sdf
-  properties:
-    ligand_list: ['a','b', 'c']
+    output_path: ligand.sdf
 
 step5_babel_prepare_lig:
   tool: babel_convert

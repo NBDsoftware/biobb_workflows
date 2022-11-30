@@ -164,7 +164,7 @@ def printAvailablePockets(pockets_path, global_log):
 
     return
 
-def findTopLigands(paths, properties, ligand_IDs, ligand_Names, global_log):
+def findTopLigands(paths, properties, ligand_IDs, ligand_Names):
     '''
     Find top scoring ligands according to binding affinity calculated in step 6. 
     The number of ligands considered is determined in the properties of step 8 or 
@@ -250,11 +250,6 @@ def findTopLigands(paths, properties, ligand_IDs, ligand_Names, global_log):
 
         # Remove ligand index
         ligand_indices.remove(bestLigandIndex)
-
-    # Print best ligands and their affinities in log file
-    for i in range(len(bestLigandAffinities)):
-
-        global_log.info("    Affinity: {} for ligand {}".format(bestLigandAffinities[i], bestLigandIDs[i]))
 
     return bestLigandAffinities, bestLigandIDs, bestLigandNames
 
@@ -414,7 +409,7 @@ def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
     # Modify the default output path 
     # According to ligand ID (unless SMILES is ID) or ligand Name if there is any
     addLigandSuffixToPaths(paths, ligand_ID, ligand_Name, ligand_index,
-                            'output_sdf_path')
+                            'output_sdf_path', 'output_path')
 
  # If ligand_ID is a PDB entry ID
     if (ID_format == 'PDB'):
@@ -428,9 +423,6 @@ def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
         except:
             return False
 
-        # Check output exists and is not empty (to skip corrupt ligand identifiers)
-        successful_step = validateStep(paths['output_sdf_path'])
-
  # If ligand_ID is a Drug Bank ID
     elif (ID_format == 'DB'):
 
@@ -442,9 +434,6 @@ def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
             drugbank(**paths, properties=prop)
         except:
             return False
-
-        # Check output exists and is not empty (to skip corrupt ligand identifiers)
-        successful_step = validateStep(paths['output_sdf_path'])
         
  # If ligand_ID is a SMILES code
     elif (ID_format == 'SMILES'):
@@ -461,7 +450,6 @@ def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
 
         # Update paths
         paths.update({'input_path': smiles_path})
-        paths.update({'output_path' : paths['output_sdf_path']})
 
         # Action: format conversion using Open Babel (SMILES -> sdf)
         try:
@@ -472,8 +460,8 @@ def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
         # Erase tmp SMILES file
         removeFiles(smiles_path)
 
-        # Check output exists and is not empty (to skip corrupt ligand identifiers)
-        successful_step = validateStep(paths['output_path'])
+    # Check output exists and is not empty (to skip corrupt ligand identifiers)
+    successful_step = validateStep(paths['output_path']) or validateStep(paths['output_sdf_path'])
 
     return successful_step
 
@@ -614,7 +602,8 @@ def writeSMILES(SMILES, ligand_index, step_path):
 
     return smiles_path
 
-def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets_path = None, pocket_ID = None, pocket_residues_path = None, input_structure_path = None):
+def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets_path = None, 
+              pocket_ID = None, pocket_residues_path = None, input_structure_path = None):
 
     # Added last two arguments for ensemble docking :) NOTE: improve docs
 
@@ -652,7 +641,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         paths = global_paths["step1_fpocket_select"]
 
         # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
-        if None not in (input_pockets_path, pocket_ID, input_structure_path):
+        if None not in (input_pockets_path, pocket_ID):
 
             paths.update({'input_pockets_zip' : input_pockets_path})
             props.update({'pocket' : pocket_ID})
@@ -682,7 +671,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     paths_box = global_paths["step2_box"]
     
     # If model and pocket_residues_path are provided through arguments -> prioritize over input.yml (ensemble docking with residues defining pocket)
-    if None not in (pocket_residues_path, input_structure_path):
+    if pocket_residues_path is not None:
 
         paths_box.update({'input_pdb_path' : pocket_residues_path})
 
@@ -728,10 +717,8 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         ligand_IDs = prop_ligandLib['ligand_list']
         ligand_Names = [None]*len(ligand_IDs)
 
-    # If len(ligand_IDs) > 20 then save minimum number of files, 
-    # NOTE: if library is very big avoid prints per ligand, only warnings and errors
-    drugLibIsLarge = len(ligand_IDs) > 20
-    
+    # NOTE: if library is very big avoid prints per ligand, only warnings and errors - decide what to print and use lock to access same global_log
+
     for ligand_index in range(len(ligand_IDs)):
 
         ligand_ID = ligand_IDs[ligand_index]
@@ -798,12 +785,11 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
             # Action: Convert pose to PDB
             babel_convert(**paths_poseConv, properties=prop_poseConv)
 
-            # If drug library is large remove unnecessary files 
-            if (drugLibIsLarge):
-                removeFiles(paths_ligandLib['output_sdf_path'], 
-                            paths_ligandLib['output_path'],
-                            paths_ligConv['output_path'],
-                            paths_autodock['output_pdbqt_path'])
+            # Remove unnecessary files 
+            removeFiles(paths_ligandLib['output_sdf_path'], 
+                        paths_ligandLib['output_path'],
+                        paths_ligConv['output_path'],
+                        paths_autodock['output_pdbqt_path'])
         
         # If step 4 was not successful
         else:
@@ -819,11 +805,15 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     # Find and print top ligands in log file
     bestAffinities, bestLigandIDs, bestLigandNames = findTopLigands(paths = global_paths["step8_show_top_ligands"], 
                                                             properties = global_prop["step8_show_top_ligands"], 
-                                                            ligand_IDs = ligand_IDs, ligand_Names = ligand_Names, 
-                                                            global_log = global_log)
+                                                            ligand_IDs = ligand_IDs, ligand_Names = ligand_Names)
 
-    # Print timing info only if we are not calling docking_htvs from another script
-    if None in (input_pockets_path, pocket_ID, input_structure_path):
+    # Print more info only if we are not calling docking_htvs from another script
+    if (input_pockets_path == None) and (pocket_ID == None) and (input_structure_path == None):
+
+        # Print best ligands and their affinities in log file
+        for i in range(len(bestAffinities)):
+
+            global_log.info("    Affinity: {} for ligand {}".format(bestAffinities[i], bestLigandIDs[i]))
         
         # Timing information
         elapsed_time = time.time() - start_time
