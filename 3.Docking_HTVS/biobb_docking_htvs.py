@@ -168,7 +168,7 @@ def printAvailablePockets(pockets_path, global_log):
 
 def findAffinityInLog(log_path):
     '''
-    Find best binding affinity among different poses
+    Find best binding affinity among different poses, returns None is no affinity is found
     
     Inputs
     ------
@@ -180,8 +180,11 @@ def findAffinityInLog(log_path):
     '''
 
     # Find affinity of best pose from log
-    affinity = float(findMatchingStr(pattern=r'\s+1\s+(\S+)\s+', filepath=log_path))
+    affinity = findMatchingStr(pattern=r'\s+1\s+(\S+)\s+', filepath=log_path)
 
+    if affinity is not None:
+        affinity = float(affinity)
+    
     return affinity
 
 def findTopLigands(affinities_list, properties):
@@ -629,8 +632,11 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
                 # Find best affinity among different poses - the rest can be checked from step7 output 
                 affinity = findAffinityInLog(log_path = paths_autodock['output_log_path'])
 
-                # Append result
-                affinities_list.append((affinity, ligand_identifier))
+                # If autodock was successful
+                if affinity is not None:
+                    
+                    # Append result
+                    affinities_list.append((affinity, ligand_identifier))
 
             # STEP 7: Convert poses to PDB 
 
