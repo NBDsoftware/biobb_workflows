@@ -209,11 +209,14 @@ def findTopLigands(paths, properties, ligand_IDs, ligand_Names):
         ligand_index = findNumberInString(logName.strip(dockingLogsPath.stem))
 
         # Find affinity of best pose from log
-        affinity = float(findMatchingStr(pattern=r'\s+1\s+(\S+)\s+', filepath=str(log)))
-
-        # Save both: best affinity and index
-        affinities.append(affinity)
-        ligand_indices.append(ligand_index)
+        affinity = findMatchingStr(pattern=r'\s+1\s+(\S+)\s+', filepath=str(log))
+        
+        # If autodock was successful and we find an affinity in log
+        if affinity is not None:
+        
+            # Save both: best affinity and index
+            affinities.append(float(affinity))
+            ligand_indices.append(ligand_index)
 
 # 2. Find min and its index, save in another list, remove min. Repeat "number_top_ligands" times
     
