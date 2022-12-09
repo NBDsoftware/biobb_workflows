@@ -10,7 +10,7 @@ step0_gmx_select_fit:
     input_structure_path: /home/nbd-pablo/repos/eucanshare_wfs/1.MD_setup_mutation/output/step23_dry/imaged_structure.gro 
     output_ndx_path: index_Fit.ndx
   properties:
-    selection: '"FitGroup" group "Backbone" and not residue 7 to 106'           
+    selection: '"FitGroup" group "Backbone"'           
 
 step0_gmx_select_output:                                       
   tool: gmxselect
@@ -34,7 +34,7 @@ step1_gmx_cluster:
     output_selection: OutputGroup        
     dista: False
     method: linkage                      # What happens with gromos? group for least squares fit and RMSD calculation and group for output. If nofit could be included...
-    cutoff: 0.35                         # nm (RMSD cut-off)
+    cutoff: 0.06                          # nm (RMSD cut-off)
 
 step2_extract_models:
   tool: extract_model

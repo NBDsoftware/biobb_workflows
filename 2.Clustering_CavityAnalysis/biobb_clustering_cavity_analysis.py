@@ -191,8 +191,8 @@ def joinFiles(source_file_path, destination_file_path):
     Inputs
     ------
 
-    source_file_path       (str): path to source file
-    destination_file_path  (str): path to destination path
+        source_file_path       (str): path to source file
+        destination_file_path  (str): path to destination path
     '''
 
     # Open the source file in read mode 
@@ -247,19 +247,20 @@ def addSuffixToPaths(all_paths, suffix, *keywords):
 def checkInput(trajectory_path, topology_path, clustering_path, global_log):
     '''
     Checks either a trajectory and a topology path or, alternatively, a clustering path are given.
-    If its not the case, print an error.
+    If it's not the case, print an error.
 
     Inputs
     ------
-    trajectory_path (str): path to trajectory
-    topology_path   (str): path to topology
-    clustering_path (str): path to clustering
-    global_log   (logger): used to print the error
+
+        trajectory_path (str): path to trajectory
+        topology_path   (str): path to topology
+        clustering_path (str): path to clustering
+        global_log   (logger): used to print the error
 
     Output
     ------
 
-    check (bool): True if inputs OK, False if inputs are missing.
+        check (bool): True if inputs OK, False if inputs are missing.
     '''
 
     check = False
@@ -271,7 +272,7 @@ def checkInput(trajectory_path, topology_path, clustering_path, global_log):
             # Check is True
             check = True
 
-    # If these path was provided
+    # If this path was provided
     if clustering_path is not None:
         # And it exists
         if os.path.isdir(clustering_path):
@@ -292,7 +293,28 @@ def checkInput(trajectory_path, topology_path, clustering_path, global_log):
 
 
 def main_wf(configuration_path, trajectory_path = None, topology_path = None, clustering_path = None, last_step = None):
-    
+    '''
+    Main clustering and cavity analysis workflow. This workflow clusters a given trajectory and analyzes the cavities of the most representative
+    structures. Then filters the cavities according to a pre-defined criteria and outputs the pockets that passed the filter.
+
+    Inputs
+    ------
+
+        configuration_path (str): path to input.yml 
+        trajectory_path    (str): path to the trajectory that will be clustered, alternatively one can give the clustering path. (accepted formats: xtc, trr, cpt, gro, g96, pdb or tng)
+        topology_path      (str): path to the topology of the trajectory in trajectory_path (accepted formats: tpr, gro, g96, pdb or brk)
+        clustering_path    (str): path to the folder with the most representative structures in pdb format from an external clustering (*.pdb)
+        last_step          (str): last step of the workflow to execute ('ndx', 'cluster', 'cavity', 'all')
+
+    Outputs
+    -------
+
+        /output folder
+        clusters_path (str): path to clustering results (most representative clusters)
+        pockets_path  (str): path to filtered pockets (pockets that passed the filter)
+
+    '''
+
     start_time = time.time()
 
     # Set default value for 'last_step' arg
@@ -317,7 +339,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
 
     # Check input files are given: either trajectory + topology or clustering has to be given
     if not checkInput(trajectory_path, topology_path, clustering_path, global_log):
-        return
+        return None, None
 
     # If clustering is not given externally -> cluster the input trajectory
     if clustering_path is None:
@@ -341,7 +363,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # Validate step
         if not validateStep(paths_selFit["output_ndx_path"]):
             global_log.info("    ERROR: No index file was created. Check gmx_select_fit atom selection string")
-            return 0
+            return None, None
 
     # STEP 0: Output Index file creation
 
@@ -362,7 +384,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # Validate step
         if not validateStep(paths_selOut["output_ndx_path"]):
             global_log.info("    ERROR: No index file was created. Check gmx_select_output atom selection string")
-            return 0
+            return  None, None
 
         # Add FitGroup to index_Fit_Output.ndx 
         joinFiles(source_file_path = paths_selFit["output_ndx_path"], destination_file_path = paths_selOut["output_ndx_path"])
@@ -370,7 +392,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # Check if this should be the final step
         if last_step == 'ndx':
             global_log.info("Index files created.")
-            return 0
+            return None, None
 
     # STEP 1: Clustering with gmx_cluster
 
@@ -401,7 +423,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # Validate step
         if not validateStep(paths_clust["output_pdb_path"]):
             global_log.info("    ERROR: No PDB file was created.")
-            return 0
+            return None, None
 
         # Write next action to global log
         global_log.info( "step1_gmx_cluster: Reading clustering outcome, generating clusters JSON file")
@@ -450,12 +472,16 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
             # Validate step
             if not validateStep(paths_models["output_structure_path"]):
                 global_log.info("    ERROR: No model PDB was extracted.")
-                return 0
-        
+                return None, None
+
         # Check if this should be the final step
         if last_step == 'cluster':
+
             global_log.info("Clustering completed.")
-            return 0
+
+            clusters_path = prop_models["path"]
+
+            return clusters_path, None
 
 # STEP 3: Cavity analysis
 
@@ -477,7 +503,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # Obtain the full sorted list of pdb files from previous step path
         pdb_paths = sorted(glob.glob(os.path.join(str(models_path),"*.pdb")))
 
-    # Models to use
+    # Number of models to use
     modelsToUse = min(prop_fpocket['models_to_use'], len(pdb_paths))
 
     # Keep only the ones that will be used
@@ -504,12 +530,17 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # Validate step
         if not validateStep(paths_fpocket["output_pockets_zip"], paths_fpocket["output_summary"]):
             global_log.info("    ERROR: no output from fpocket.")
-            return 0
+            return None, None
 
     # Check if this should be the final step
     if last_step == 'cavity':
+
         global_log.info("Cavity analysis completed.")
-        return 0
+
+        clusters_path = prop_models["path"]
+        pockets_path = prop_fpocket["path"]
+
+        return clusters_path, pockets_path
 
 # STEP 4: Filtering cavities
 
@@ -547,7 +578,10 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
     global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
     global_log.info('')
 
-    return
+    clusters_path = prop_models["path"]
+    pockets_path = prop_filter["path"]
+
+    return clusters_path, pockets_path
 
 if __name__ == '__main__':
 
@@ -558,16 +592,16 @@ if __name__ == '__main__':
                         required=True)
 
     parser.add_argument('--input-traj', dest='input_traj',
-                        help="Input trajectory path (xtc, trr, cpt, gro, g96, pdb or tng format)", 
+                        help="Input trajectory path, prioritized over input.yml paths (xtc, trr, cpt, gro, g96, pdb or tng format)", 
                         required=False)
 
     parser.add_argument('--input-top', dest='input_topology',
-                        help="Input topology/structure path (tpr, gro, g96, pdb or brk format)", 
+                        help="Input topology/structure path, prioritized over input.yml paths (tpr, gro, g96, pdb or brk format)", 
                         required=False)
 
     # NOTE: add option to give external clustering result to wf - as this clustering has limitations
     parser.add_argument('--input-clust', dest='clust_path',
-                        help="Input from cluster centroids (pdb files, all will be used)", 
+                        help="Input path to representative structures (pdb files, all will be used)", 
                         required=False)
 
     # Execute workflow until 'last_step' -> all executes all steps (all is default)
@@ -577,6 +611,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main_wf(configuration_path = args.config_path, trajectory_path = args.input_traj, topology_path = args.input_topology, 
+    _,_ = main_wf(configuration_path = args.config_path, trajectory_path = args.input_traj, topology_path = args.input_topology, 
             clustering_path = args.clust_path, last_step = args.last_step)
 

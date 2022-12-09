@@ -18,7 +18,13 @@ python biobb_docking_htvs.py --help
 
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in input.yml.
 
-Modify run_local.sh if needed and launch:
+To run in an HPC environment adapt the run_HPC.sl script and send job to slurm queue:
+
+```bash
+sbatch run_HPC.sl
+```
+
+To run locally, modify run_local.sh if needed and launch:
 
 ```bash
 ./run_local.sh
@@ -32,7 +38,7 @@ This workflow has several main sections, the workflow can be run until the end o
 
 - **Section 1**: pocket selection and receptor preparation for docking.
 
-- **Section 2**: docking of all the ligands provided. Either through the input.yml (if there are few) or through --lig-lib command line option.
+- **Section 2**: docking of all the ligands provided through --lig-lib command line argument.
 
 Note that re-launching the workflow will skip the previously successful steps if restart is True. 
 

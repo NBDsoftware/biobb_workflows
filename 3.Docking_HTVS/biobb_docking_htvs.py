@@ -312,6 +312,8 @@ def identifyFormat(ligand_ID):
         ID_format (str): ligand_ID format ("PDB", "DB" or "SMILES")
     '''
 
+    # NOTE: a way to identify valid SMILES should be implemented
+
  # Drug Bank format starts with 'DB'
     if (ligand_ID[0:2] == 'DB'):
 
@@ -564,7 +566,8 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
     prop_autodock  = global_prop["step6_autodock_vina_run"]
     prop_poseConv  = global_prop["step7_babel_prepare_pose"]
 
-    # NOTE: if library is very big avoid prints per ligand, only warnings and errors - decide what to print and use lock to access same global_log
+    # NOTE: if library is very big avoid prints per ligand, only warnings and errors 
+    # decide what to print and use lock to access same global_log
 
     while True:
 
@@ -592,11 +595,12 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
             # Add ligand index to log file names
             prop_ligandLib.update({'prefix' : str(ligand_index)})
 
-            step4_successful = sourceLigand(ligand_ID, ligand_Name, ligand_index, 
+            # Source ligand and validate step
+            lastStep_successful = sourceLigand(ligand_ID, ligand_Name, ligand_index, 
                                                 paths_ligandLib, prop_ligandLib)
 
             # Skip corrupt ligand IDs 
-            if (step4_successful):
+            if (lastStep_successful):
             
             # STEP 5: Convert ligand from sdf format to pdbqt format
 
@@ -613,6 +617,11 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
                 # Action: format conversion using Open Babel
                 babel_convert(**paths_ligConv, properties=prop_ligConv)
 
+                # Validate step
+                lastStep_successful = validateStep(paths_ligConv['output_path'])
+
+            # Skip ligands that were not converted by Open Babel to pdbqt
+            if (lastStep_successful):
 
             # STEP 6: Autodock vina
 
@@ -637,7 +646,13 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
                     
                     # Append result
                     affinities_list.append((affinity, ligand_identifier))
-
+                
+                # Validate step
+                lastStep_successful = validateStep(paths_autodock['output_log_path'], paths_autodock['output_pdbqt_path'])
+            
+            # Skip ligands that couldn't be docked
+            if (lastStep_successful):
+            
             # STEP 7: Convert poses to PDB 
 
                 # Copy original paths to modify them
@@ -653,18 +668,38 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
                 # Action: Convert pose to PDB
                 babel_convert(**paths_poseConv, properties=prop_poseConv)
 
-                # Remove unnecessary files - NOTE: for screening of large libraries, all files should be removed? Except global log with ranking?
-                removeFiles(paths_ligandLib['output_sdf_path'], 
-                            paths_ligandLib['output_path'],
-                            paths_ligConv['output_path'],
-                            paths_autodock['output_pdbqt_path'])
-
+            # Remove unnecessary files - NOTE: for screening of large libraries, all files should be removed? Except global log with ranking?
+            removeFiles(paths_ligandLib['output_sdf_path'], 
+                        paths_ligandLib['output_path'],
+                        paths_ligConv['output_path'],
+                        paths_autodock['output_pdbqt_path'])
 
 
 def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets_path = None, 
               pocket_ID = None, pocket_residues_path = None, input_structure_path = None):
+    '''
+    Main HTVS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
+    and a receptor to screen the pocket of the receptor using the ligand library (Autodock).
 
-    # Added last two arguments for ensemble docking :) NOTE: improve docs
+    Inputs
+    ------
+
+        configuration_path   (str): path to input.yml 
+        ligand_lib_path      (str): path to ligand library with SMILES
+        last_step            (str): last step of the workflow to execute ('ndx', 'cluster', 'cavity', 'all')
+        input_pockets_path   (str): path to zip file with pockets from cavity analysis
+        pocket_ID            (int): pocket ID to choose among those in input_pockets_path
+        pocket_residues_path (str): path to residues that will define the box used for docking, alternative to input_pockets_path and pocket_ID
+        input_structure_path (str): path of receptor structure that will be used for docking
+
+    Outputs
+    -------
+
+        /output folder
+        working_dir_path (str): path to working directory 
+        bestAffinities  (list): list with top ligand tuples -> (affinity, ligand identifier) ordered by affinity
+
+    '''
 
     start_time = time.time()
 
@@ -715,7 +750,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         props = global_prop["step1_fpocket_select"]
         paths = global_paths["step1_fpocket_select"]
 
-        # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
+        # If pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
         if None not in (input_pockets_path, pocket_ID):
 
             paths.update({'input_pockets_zip' : input_pockets_path})
@@ -745,7 +780,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     props_box = global_prop["step2_box"]
     paths_box = global_paths["step2_box"]
     
-    # If model and pocket_residues_path are provided through arguments -> prioritize over input.yml (ensemble docking with residues defining pocket)
+    # If pocket_residues_path is provided through arguments -> prioritize over input.yml (ensemble docking with residues defining pocket)
     if pocket_residues_path is not None:
 
         paths_box.update({'input_pdb_path' : pocket_residues_path})
@@ -762,7 +797,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     props_addH = global_prop["step3_str_check_add_hydrogens"]
     paths_addH = global_paths["step3_str_check_add_hydrogens"]
 
-    # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
+    # If model is provided through arguments -> prioritize over input.yml (ensemble docking)
     if input_structure_path is not None:
 
         paths_addH.update({'input_structure_path' : input_structure_path})

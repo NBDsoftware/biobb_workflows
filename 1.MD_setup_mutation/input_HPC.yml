@@ -162,7 +162,7 @@ step8_grompp_min:
   properties:
     simulation_type: minimization
     mdp:
-      nsteps: 500 # 10000
+      nsteps: 50000 # 10000
       emtol: 500
 
 step9_mdrun_min:
@@ -174,9 +174,9 @@ step9_mdrun_min:
     output_edr_path: min.edr
     output_log_path: min.log
   properties:
-    gmx_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin: /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
-    mpi_np: 4
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
+    mpi_np: 8
 
 step10_energy_min:
   tool: gmx_energy
@@ -197,7 +197,7 @@ step11_grompp_nvt:
   properties:
     simulation_type: nvt
     mdp:
-      nsteps: 10000 # 50000
+      nsteps: 500000 # 50000
       dt: 0.002
       Define: -DPOSRES
       ref-t: 310 310
@@ -212,9 +212,9 @@ step12_mdrun_nvt:
     output_log_path: nvt.log
     output_cpt_path: nvt.cpt
   properties:
-    gmx_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin: /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
-    mpi_np: 4
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    mpi_bin: /cm/shared/apps/slurm/current/bin/srun 
+    mpi_np: 8
 
 step13_energy_nvt:
   tool: gmx_energy
@@ -236,7 +236,7 @@ step14_grompp_npt:
   properties:
     simulation_type: npt
     mdp:
-      nsteps: 10000 # 50000
+      nsteps: 500000 # 50000
       ref-t: 310 310
 
 step15_mdrun_npt:
@@ -249,9 +249,9 @@ step15_mdrun_npt:
     output_log_path: npt.log
     output_cpt_path: npt.cpt
   properties:
-    gmx_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin: /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
-    mpi_np: 4
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    mpi_bin: /cm/shared/apps/slurm/current/bin/srun 
+    mpi_np: 8
 
 step16_energy_npt:
   tool: gmx_energy
@@ -273,10 +273,10 @@ step17_grompp_md:
   properties:
     simulation_type: free
     mdp:
-      nsteps: 10000 # 50000000
+      nsteps: 5000000 # 50000000
       ref-t: 310 310
-      nstxout: 100 # 100000
-      nstxout-compressed: 100 # 100000
+      nstxout: 10000 # 100000
+      nstxout-compressed: 10000 # 100000
       nstvout: 0
       nstfout: 0
 
@@ -290,9 +290,9 @@ step18_mdrun_md:
     output_log_path: md.log
     output_cpt_path: md.cpt
   properties:
-    gmx_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin: /eb/x86_64/software/impi/2021.4.0-intel-compilers-2021.4.0/mpi/2021.4.0/bin/mpirun
-    mpi_np: 4
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
+    mpi_np: 8
 
 step19_rmsfirst:
   tool: gmx_rms
