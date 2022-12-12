@@ -5,6 +5,7 @@
 
 # Importing all the needed libraries
 import os
+import re
 import time
 import glob
 import argparse
@@ -291,6 +292,144 @@ def checkInput(trajectory_path, topology_path, clustering_path, global_log):
 
     return check
 
+def printAvailablePockets(pockets_path, global_log):
+    '''
+    Print in log file all available pockets for each model found in the input folder for the pocket selection step
+    
+    Inputs
+    ------
+        pockets_path  (str): Path to pockets folder 
+        global_log (Logger): Object of class Logger (dumps info to global log file of this workflow)
+    
+    Output
+    ------
+        Info dumped to log file
+        Dictionary with models and pockets  {modelname1 : [1,2,3], modelname2 : [2,4]}
+    '''
+
+    global_log.info("    Available models and pockets after filtering:")
+
+    # Dictionary where pockets will be saved
+    pockets_dict = {}
+
+    # Convert string to Path class
+    pockets_path = Path(pockets_path)
+
+    # Pattern for pocket filtering log files names
+    logNamePattern = pockets_path.name + "_log*.out"
+
+    # Find all log files matching pattern
+    logList = pockets_path.rglob(logNamePattern)
+
+    # Iterate through all log files -> print the model name + available pockets in the global log
+    for log in logList:
+
+        # Find model name NOTE: hardcoded name of step :(
+        modelName = findMatchingLine(pattern=r'step3_cavity_analysis/all_pockets_(\S+).zip', filepath=str(log))
+
+        # Find pockets 
+        pockets = findMatchingLines(pattern=r'pocket\d+$', filepath=str(log))
+
+        # Print to global log
+        if modelName is not None:
+
+            global_log.info("    Model {}".format(modelName))
+
+            if pockets is not None:
+
+                pocket_indices = []
+
+                for pocket in pockets:
+
+                    pattern = r'pocket(\d+)'
+
+                    match = re.search(pattern, pocket)
+                    
+                    global_log.info("        {}".format(pocket))
+
+                    pocket_indices.append(int(match[1]))
+
+                pockets_dict.update({modelName : pocket_indices})
+
+    return pockets_dict
+
+def findMatchingLine(pattern, filepath):
+    '''
+    Finds first line in file containing a given pattern
+
+    Inputs
+    ------
+        pattern  (regex pattern): regular expression pattern to search in file lines
+        filepath           (str): file path to search in
+    
+    Output
+    ------
+        line (str): line matching the pattern or None if no line matches the pattern
+    '''
+
+    # Open log file
+    file = open(filepath, 'r')
+    
+    # Read all lines
+    lines = file.readlines()
+
+    # Search matching string in each line
+    for line in lines:
+
+        match = re.search(pattern, line)
+
+        if match is not None:
+
+            # Close file
+            file.close()
+
+            return match[1]
+    
+    file.close()
+
+    return None
+
+def findMatchingLines(pattern, filepath):
+    '''
+    Finds all lines in file containing a given pattern
+
+    Inputs
+    ------
+        pattern  (regex pattern): regular expression pattern to search in file lines
+        filepath           (str): file path to search in
+    
+    Output
+    ------
+        lines (list(str)): lines matching the pattern or None if no line matches the pattern
+    '''
+
+    # Open log file
+    file = open(filepath, 'r')
+    
+    # Read all lines
+    lines = file.readlines()
+
+    # List to save matching lines
+    matchingLines = []
+
+    # Search matching string in each line
+    for line in lines:
+
+        match = re.search(pattern, line)
+
+        if match is not None:
+
+            matchingLines.append(match[0])
+
+    # Close file
+    file.close()
+
+    # If no lines contained the pattern, return None
+    if len(matchingLines) == 0:
+        matchingLines = None
+    
+    return matchingLines
+
 
 def main_wf(configuration_path, trajectory_path = None, topology_path = None, clustering_path = None, last_step = None):
     '''
@@ -310,9 +449,10 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
     -------
 
         /output folder
-        clusters_path (str): path to clustering results (most representative clusters)
-        pockets_path  (str): path to filtered pockets (pockets that passed the filter)
-
+        working_dir_path (str): path to working directory 
+        clusters_path    (str): path to clustering results (most representative clusters)
+        pockets_path     (str): path to filtered pockets (pockets that passed the filter)
+        pockets_dict    (dict): dictionary with model names and corresponding available pocket numbers
     '''
 
     start_time = time.time()
@@ -341,7 +481,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
     if not checkInput(trajectory_path, topology_path, clustering_path, global_log):
         return None, None
 
-    # If clustering is not given externally -> cluster the input trajectory
+    # If clustering is not given externally -> cluster the input trajectory and return cluster path
     if clustering_path is None:
     
     # STEP 0: Fit Index file creation
@@ -420,10 +560,13 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # Cluster trajectory
         gmx_cluster(**paths_clust, properties=prop_clust)
 
+        # Save cluster path
+        clusters_path = prop_models["path"]
+
         # Validate step
         if not validateStep(paths_clust["output_pdb_path"]):
             global_log.info("    ERROR: No PDB file was created.")
-            return None, None
+            return clusters_path, None
 
         # Write next action to global log
         global_log.info( "step1_gmx_cluster: Reading clustering outcome, generating clusters JSON file")
@@ -472,16 +615,26 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
             # Validate step
             if not validateStep(paths_models["output_structure_path"]):
                 global_log.info("    ERROR: No model PDB was extracted.")
-                return None, None
+                return clusters_path, None
+
+        # Obtain the full sorted list of pdb files from previous step path
+        pdb_paths = sorted(glob.glob(os.path.join(prop_models["path"],"*.pdb")))
 
         # Check if this should be the final step
         if last_step == 'cluster':
 
             global_log.info("Clustering completed.")
 
-            clusters_path = prop_models["path"]
-
             return clusters_path, None
+
+    # If clustering is given externally 
+    else:
+
+        # Path with clustering was given
+        clusters_path = clustering_path
+
+        # Obtain the full sorted list of pdb files from given path
+        pdb_paths = sorted(glob.glob(os.path.join(clustering_path,"*.pdb")))
 
 # STEP 3: Cavity analysis
 
@@ -490,18 +643,6 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
 
     # Properties of step
     prop_fpocket = global_prop["step3_cavity_analysis"]
-
-    # If clustering is given externally 
-    if clustering_path is not None:
-        # Obtain the full sorted list of pdb files from given path
-        pdb_paths = sorted(glob.glob(os.path.join(clustering_path,"*.pdb")))
-
-    # If clustering was done in the previous step
-    else:
-        # Previous step path
-        models_path = Path(paths_models['output_structure_path']).parent
-        # Obtain the full sorted list of pdb files from previous step path
-        pdb_paths = sorted(glob.glob(os.path.join(str(models_path),"*.pdb")))
 
     # Number of models to use
     modelsToUse = min(prop_fpocket['models_to_use'], len(pdb_paths))
@@ -532,13 +673,12 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
             global_log.info("    ERROR: no output from fpocket.")
             return None, None
 
+    pockets_path = prop_fpocket["path"]
+
     # Check if this should be the final step
     if last_step == 'cavity':
 
         global_log.info("Cavity analysis completed.")
-
-        clusters_path = prop_models["path"]
-        pockets_path = prop_fpocket["path"]
 
         return clusters_path, pockets_path
 
@@ -566,6 +706,13 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
 
         # Filter cavities
         fpocket_filter(**paths_filter, properties=prop_filter)
+    
+    # Find path to all pockets
+    pockets_path = prop_filter["path"]
+
+    # Find available models with pockets after filtering
+    pockets_dict = printAvailablePockets(pockets_path = pockets_path, 
+                                         global_log = global_log)
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -578,10 +725,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
     global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
     global_log.info('')
 
-    clusters_path = prop_models["path"]
-    pockets_path = prop_filter["path"]
-
-    return clusters_path, pockets_path
+    return conf.get_working_dir_path(), clusters_path, pockets_path, pockets_dict
 
 if __name__ == '__main__':
 
@@ -599,18 +743,19 @@ if __name__ == '__main__':
                         help="Input topology/structure path, prioritized over input.yml paths (tpr, gro, g96, pdb or brk format)", 
                         required=False)
 
-    # NOTE: add option to give external clustering result to wf - as this clustering has limitations
     parser.add_argument('--input-clust', dest='clust_path',
                         help="Input path to representative structures (pdb files, all will be used)", 
                         required=False)
 
-    # Execute workflow until 'last_step' -> all executes all steps (all is default)
     parser.add_argument('--until', dest='last_step', 
                         help="(Opt, default: all) Extent of the pipeline to execute (ndx, cluster, cavity, all)", 
                         required=False)
 
     args = parser.parse_args()
 
-    _,_ = main_wf(configuration_path = args.config_path, trajectory_path = args.input_traj, topology_path = args.input_topology, 
-            clustering_path = args.clust_path, last_step = args.last_step)
+    _,_,_,_ = main_wf(configuration_path = args.config_path, 
+                    trajectory_path = args.input_traj, 
+                    topology_path = args.input_topology, 
+                    clustering_path = args.clust_path, 
+                    last_step = args.last_step)
 
