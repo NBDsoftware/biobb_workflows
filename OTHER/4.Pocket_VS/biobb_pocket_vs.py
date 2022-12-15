@@ -237,7 +237,7 @@ def analyzeDockingResults(wdir, modelName, docking_output_dir, bestAffinities, g
     return
 
 def pocketsVirtualScreening(configuration_path, input_structures_path, ligand_lib_path, pocket_residues_list, 
-                            pockets_path, pockets_dict, global_conf, global_log):
+                            pockets_path, cavities_summary, global_conf, global_log):
 
     '''
     Virtual Screening of pockets using ligand library and (optionally) information regarding a specific region of interest
@@ -250,7 +250,7 @@ def pocketsVirtualScreening(configuration_path, input_structures_path, ligand_li
         ligand_lib_path         (str): path to ligand library
         pocket_residues_list   (list): list of pocket residues
         pockets_path            (str): path to filtered pockets
-        pockets_dict           (dict): dictionary with pockets for each model
+        cavities_summary       (dict): dictionary with models and pockets
         global_conf                  : global configuration loaded as a configuration object
         global_log                   : global log object
     
@@ -277,7 +277,7 @@ def pocketsVirtualScreening(configuration_path, input_structures_path, ligand_li
     all_filtered_pockets = sorted(glob.glob(os.path.join(pockets_path, "*.zip")))
 
     # List of all model names 
-    all_models = sorted(pockets_dict.keys())
+    all_models = sorted(cavities_summary.keys())
 
     # For each model
     for model_index in range(len(all_models)):
@@ -322,10 +322,11 @@ def pocketsVirtualScreening(configuration_path, input_structures_path, ligand_li
 
         # If residues defining pocket are not provided 
         # -> dock ligands to all pockets found 
+        # NOTE: this should be improved, maybe only best, or those close to a certain residue 
         else:
 
             # For each pocket
-            for pocket_ID in pockets_dict[modelName]:
+            for pocket_ID in cavities_summary[modelName]['pockets']:
 
                 # Dock all ligands and save results
                 docking_output_dir, bestAffinities = docking_htvs(configuration_path = configuration_path, 
@@ -399,7 +400,7 @@ def main_wf(pocket_vs_config, cavity_analysis_config, htvs_config,
     global_log.info("Cavity analysis and filtering: Compute protein cavities for each structure using fpocket and filter them")
 
     # Use cavity analysis workflow
-    cavity_output_dir, _ , pockets_path, pockets_dict = cavity_analysis(configuration_path = cavity_analysis_config, 
+    cavity_output_dir, _ , pockets_path, cavities_summary = cavity_analysis(configuration_path = cavity_analysis_config, 
                                                                         clustering_path = input_structures_path, 
                                                                         last_step = last_step)
 
@@ -414,7 +415,7 @@ def main_wf(pocket_vs_config, cavity_analysis_config, htvs_config,
 
     pocketsVirtualScreening(configuration_path = htvs_config, input_structures_path = input_structures_path, 
                             ligand_lib_path = ligand_lib_path, pocket_residues_list = pocket_residues_list, 
-                            pockets_path = pockets_path, pockets_dict = pockets_dict, 
+                            pockets_path = pockets_path, cavities_summary = cavities_summary, 
                             global_conf = conf,global_log = global_log)
 
     # New path to save cavity analysis results

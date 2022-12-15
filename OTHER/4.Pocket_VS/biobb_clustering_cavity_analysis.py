@@ -74,7 +74,7 @@ def moveFileIfItExists(origin_src, dest_src):
 
 def saveClusters(log_file, json_file, clustering_folder):
     '''
-    Reads the clusters' id and population from log_file, sorts the clusters by 
+    Reads the centroids' id from the clustering and populations from log_file, sorts the clusters by 
     population in descending order and writes the sorted list to a JSON file.
 
     Inputs
@@ -88,7 +88,7 @@ def saveClusters(log_file, json_file, clustering_folder):
     Outputs
     -------
 
-        clusters_iterator (list<tuple>): list with cluster information ordered by population
+        clusters_iterator (list<tuple>): list with tuples containing (population, cluster_ID) sorted by population
         (implicitly) JSON file with sorted cluster ids and populations
     '''
 
@@ -292,66 +292,121 @@ def checkInput(trajectory_path, topology_path, clustering_path, global_log):
 
     return check
 
-def printAvailablePockets(pockets_path, global_log):
+def createSummary(pockets_path, default_summary_path, models_population, global_log):
     '''
-    Print in log file all available pockets for each model found in the input folder for the pocket selection step
+    Print in log file all available pockets for each model found in the input folder for the pocket selection step. 
+    Include also information for each pocket and population for each model.
     
     Inputs
     ------
-        pockets_path  (str): Path to pockets folder 
-        global_log (Logger): Object of class Logger (dumps info to global log file of this workflow)
+
+        pockets_path         (str): Path to pockets folder 
+        default_summary_path (str): Default path to cavity summary with information for each pocket
+        models_population   (list): List with tuples containing (population, cluster_ID) ordered by population
+        global_log        (Logger): Object of class Logger (dumps info to global log file of this workflow)
     
     Output
     ------
-        Info dumped to log file
-        Dictionary with models and pockets  {modelname1 : [1,2,3], modelname2 : [2,4]}
-    '''
 
+        Info dumped to log file
+        global_summary (dict): dictionary with models and pockets. See example:
+        
+            {
+                modelname1 : {        
+                    population : 143, 
+                    pockets : [1 , 2], 
+                    pocket1 : {info pocket 1}, 
+                    pocket2 : {info pocket 2}
+                    }, 
+                modelname2 : {
+                    ...
+                } 
+            }
+    '''
+    
     global_log.info("    Available models and pockets after filtering:")
 
-    # Dictionary where pockets will be saved
-    pockets_dict = {}
+    # Pattern that can be used to extract ID from string with pocket name: (str) pocket3 -> (int) 3
+    pocketID_pattern = r'pocket(\d+)'
+
+    # Pattern that can be used to extract model ID from string with model name
+    # This ID reflects the ordering of the population, not the original ID of the clustering step
+    modelID_pattern = r'cluster_(\d+)'
+
+    # Dictionary where all available model_summary dictionaries will be saved
+    global_summary = {}
 
     # Convert string to Path class
     pockets_path = Path(pockets_path)
 
-    # Pattern for pocket filtering log files names
+    # Pattern for pocket filtering log file names
     logNamePattern = pockets_path.name + "_log*.out"
 
     # Find all log files matching pattern
     logList = pockets_path.rglob(logNamePattern)
 
-    # Iterate through all log files -> print the model name + available pockets in the global log
+    # Iterate through all log files -> find model name and available pockets if any
     for log in logList:
 
-        # Find model name NOTE: hardcoded name of step :(
+        # Find model name NOTE: hardcoded name of step and file, should be changed
         modelName = findMatchingLine(pattern=r'step3_cavity_analysis/all_pockets_(\S+).zip', filepath=str(log))
 
-        # Find pockets 
-        pockets = findMatchingLines(pattern=r'pocket\d+$', filepath=str(log))
+        # Find pockets  NOTE: is there a more robust way of finding models and pockets after filtering? 
+        pocket_lines = findMatchingLines(pattern=r'pocket\d+$', filepath=str(log))
 
-        # Print to global log
-        if modelName is not None:
+        # If some model and pocket/s are found in log
+        if None not in (modelName, pocket_lines):
 
-            global_log.info("    Model {}".format(modelName))
+            # Dictionary where pockets, model population and information of each pocket will be saved
+            model_summary = {}
 
-            if pockets is not None:
+            # If clustering was done externally we might not have this information 
+            if models_population is not None:
 
-                pocket_indices = []
+                # Search for the model ID in model name
+                match = re.search(modelID_pattern, modelName)
+                model_ID = int(match[1])
 
-                for pocket in pockets:
+                # Save population of model (model = centroid of cluster)
+                model_summary.update({'population' : models_population[model_ID][0]})
 
-                    pattern = r'pocket(\d+)'
+            # Path to this model's summary with information for all pocket found
+            summary_path = addSuffix(original_path=Path(default_summary_path), suffix=modelName)
 
-                    match = re.search(pattern, pocket)
-                    
-                    global_log.info("        {}".format(pocket))
+            # Load all pockets summary as dictionary
+            with open(summary_path) as json_file:
+                all_pockets_summary = json.load(json_file)
 
-                    pocket_indices.append(int(match[1]))
+            # list with pocket IDs for this model
+            pocket_IDs = []
 
-                pockets_dict.update({modelName : pocket_indices})
+            # For each filtered pocket: pocket1, pocket4 ...
+            for pocket_line in pocket_lines:
 
-    return pockets_dict
+                # Strip whitespace if any
+                pocket_line = pocket_line.strip()
+
+                # Save entry with pocket information
+                model_summary.update({pocket_line : all_pockets_summary[pocket_line]})
+
+                # Search for the pocket ID in pocket name
+                match = re.search(pocketID_pattern, pocket_line)
+
+                # Append pocket ID to list
+                pocket_IDs.append(int(match[1]))
+
+            # Save pocket IDs
+            model_summary.update({'pockets' : pocket_IDs})
+
+            # Update global_summary
+            global_summary.update({modelName : model_summary})
+
+    # Print in log file with readable format
+    pretty_summary = json.dumps(global_summary, indent=2)
+
+    global_log.info(pretty_summary)
+
+    return global_summary
 
 def findMatchingLine(pattern, filepath):
     '''
@@ -452,7 +507,19 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         working_dir_path (str): path to working directory 
         clusters_path    (str): path to clustering results (most representative clusters)
         pockets_path     (str): path to filtered pockets (pockets that passed the filter)
-        pockets_dict    (dict): dictionary with model names and corresponding available pocket numbers
+        global_summary  (dict): dictionary with models and pockets. See example:
+        
+            {
+                modelname1 : {
+                    population : 143,  
+                    pockets: [1, 2],
+                    pocket1 : {info pocket 1}, 
+                    pocket2 : {info pocket 2}
+                    }, 
+                modelname2 : {
+                    ...
+                } 
+            }
     '''
 
     start_time = time.time()
@@ -560,8 +627,8 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # Cluster trajectory
         gmx_cluster(**paths_clust, properties=prop_clust)
 
-        # Save cluster path
-        clusters_path = prop_models["path"]
+        # Save path of clustering results
+        clusters_path = prop_clust["path"]
 
         # Validate step
         if not validateStep(paths_clust["output_pdb_path"]):
@@ -571,8 +638,8 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # Write next action to global log
         global_log.info( "step1_gmx_cluster: Reading clustering outcome, generating clusters JSON file")
 
-        # Save Clusters' id and population in JSON file
-        clusters = saveClusters(log_file = "step1_gmx_cluster_cluster.log", 
+        # Save Model's (centroids of clusters) ID and population in JSON file
+        models_population = saveClusters(log_file = "step1_gmx_cluster_cluster.log", 
                                 json_file = os.path.join(step_dir, "clusters.json"), 
                                 clustering_folder = step_dir)
 
@@ -594,7 +661,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         paths_models = global_paths["step2_extract_models"]
 
         # The models that will be extracted are: min(models2extract, number_clusters)
-        modelsToExtract = min(prop_models['models_to_extract'], len(clusters))
+        modelsToExtract = min(prop_models['models_to_extract'], len(models_population))
 
         # Extract the most populated models from the pdb with all centroids
         for i in range(modelsToExtract):
@@ -606,8 +673,8 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
             addSuffixToPaths(paths_models, str(i),
                             "output_structure_path")
 
-            # Update 'models' property
-            prop_models.update({'models':[clusters[i][1]]})
+            # Update 'models' property (ID)
+            prop_models.update({'models':[models_population[i][1]]})
 
             # Extract the model 
             extract_model(**paths_models, properties=prop_models)
@@ -619,6 +686,9 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
 
         # Obtain the full sorted list of pdb files from previous step path
         pdb_paths = sorted(glob.glob(os.path.join(prop_models["path"],"*.pdb")))
+
+        # Save cluster path
+        clusters_path = prop_models["path"]
 
         # Check if this should be the final step
         if last_step == 'cluster':
@@ -635,6 +705,10 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
 
         # Obtain the full sorted list of pdb files from given path
         pdb_paths = sorted(glob.glob(os.path.join(clustering_path,"*.pdb")))
+
+        # Population information will not be available NOTE: it would be nice to give this as well as 
+        # part of the external clustering results
+        models_population = None
 
 # STEP 3: Cavity analysis
 
@@ -707,12 +781,14 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # Filter cavities
         fpocket_filter(**paths_filter, properties=prop_filter)
     
-    # Find path to all pockets
+    # Find path to all filtered pockets
     pockets_path = prop_filter["path"]
 
-    # Find available models with pockets after filtering
-    pockets_dict = printAvailablePockets(pockets_path = pockets_path, 
-                                         global_log = global_log)
+    # Create and print available models with their pockets and populations after filtering
+    global_summary = createSummary(pockets_path = pockets_path, 
+                                 default_summary_path = global_paths['step3_cavity_analysis']['output_summary'],
+                                 models_population = models_population, 
+                                 global_log = global_log)
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -725,7 +801,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
     global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
     global_log.info('')
 
-    return conf.get_working_dir_path(), clusters_path, pockets_path, pockets_dict
+    return conf.get_working_dir_path(), clusters_path, pockets_path, global_summary
 
 if __name__ == '__main__':
 
