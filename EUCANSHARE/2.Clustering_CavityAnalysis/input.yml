@@ -67,5 +67,5 @@ step4_filter_cavities:
     output_filter_pockets_zip: filtered_pockets.zip
   properties:
     score: [0.3, 1]
-    druggability_score: [0.5, 1]
+    druggability_score: [0.3, 1]
     volume: [200, 5000]

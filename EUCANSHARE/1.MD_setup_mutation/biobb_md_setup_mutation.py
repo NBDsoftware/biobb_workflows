@@ -915,7 +915,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
         # Execute step
         gmx_rms(**paths_rmsExp, properties=props_rmsExp)
 
-    # STEP 21: dump Radius of gyration 
+    # STEP 21: dump Radius of gyration NOTE: add computation of RMSF, PCA and projection onto PC for visualization
 
         # Write next action to global log 
         global_log.info("step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")

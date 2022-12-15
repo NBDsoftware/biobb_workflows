@@ -7,7 +7,7 @@ import time
 import argparse
 import itertools 
 from pathlib import Path
-import multiprocessing as mp
+import multiprocessing as mp # NOTE: could we use RAY for this? better for large jobs in principle or pycompss
 from biobb_io.api.drugbank import drugbank
 from biobb_io.api.ideal_sdf import ideal_sdf
 from biobb_common.configuration import settings

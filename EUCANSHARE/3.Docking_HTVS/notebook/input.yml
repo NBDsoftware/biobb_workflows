@@ -8,11 +8,11 @@ remove_tmp: True
 step1_fpocket_select:
   tool: fpocket_select
   paths:
-    input_pockets_zip:  file:../../2.Clustering_CavityAnalysis/output/step4_filter_cavities/filtered_pockets_cluster_0.zip
+    input_pockets_zip:  file:../../2.Clustering_CavityAnalysis/output/step4_filter_cavities/filtered_pockets_cluster_2.zip
     output_pocket_pdb: fpocket_cavity.pdb
     output_pocket_pqr: fpocket_pocket.pqr
   properties:
-    pocket: 5
+    pocket: 3
 
 step2_box:
   tool: box
