@@ -35,7 +35,7 @@ step3_str_check_add_hydrogens:
 
 step4_source_lig:
   paths:
-    output_sdf_path: ligand.sdf
+    output_sdf_path: ligand.sdf # Depending if tool is drugbank API, pdb API or openbabel we need one or the other, use the same name
     output_path: ligand.sdf
 
 step5_babel_prepare_lig:

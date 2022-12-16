@@ -531,7 +531,8 @@ def addLigandSuffixToPaths(all_paths, ligand_ID, ligand_Name, ligand_index, *key
     Output
     ------
 
-        all_paths  (dict): all new paths
+        suffix      (str): suffix used to modify paths
+        (Implicit) all_paths paths are modified
 
     For example:
 
@@ -575,7 +576,7 @@ def addLigandSuffixToPaths(all_paths, ligand_ID, ligand_Name, ligand_index, *key
         # Update paths dictionary
         all_paths.update({key : newpath})
 
-    return all_paths
+    return suffix
 
 def writeSMILES(SMILES, ligand_index, step_path):
     '''
@@ -607,8 +608,29 @@ def writeSMILES(SMILES, ligand_index, step_path):
 
 def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets_path = None, 
               pocket_ID = None, pocket_residues_path = None, input_structure_path = None):
+    '''
+    Main HTVS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
+    and a receptor to screen the pocket of the receptor using the ligand library (Autodock).
 
-    # Added last two arguments for ensemble docking :) NOTE: improve docs
+    Inputs
+    ------
+
+        configuration_path   (str): path to input.yml 
+        ligand_lib_path      (str): path to ligand library with SMILES
+        last_step            (str): last step of the workflow to execute ('ndx', 'cluster', 'cavity', 'all')
+        input_pockets_path   (str): path to zip file with pockets from cavity analysis
+        pocket_ID            (int): pocket ID to choose among those in input_pockets_path
+        pocket_residues_path (str): path to residues that will define the box used for docking, alternative to input_pockets_path and pocket_ID
+        input_structure_path (str): path of receptor structure that will be used for docking
+
+    Outputs
+    -------
+
+        /output folder
+        working_dir_path (str): path to working directory 
+        bestAffinities  (list): list with top ligand tuples -> (affinity, ligand identifier) ordered by affinity
+
+    '''
 
     start_time = time.time()
 
@@ -632,8 +654,9 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     # identified by the corresponding step name
     # Writing information about each step to the global log 
 
-    # If "pocket_residues_path" provided, skip step 1, box will be formed using pocket residues
+    # If "pocket_residues_path" provided, skip step 1, box will be formed using pocket residues instead of pocket .pqr file
     if pocket_residues_path is None:
+        
     # STEP 1: Pocket selection from filtered list 
 
         # Write next action to global log
@@ -842,7 +865,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--lig-lib', dest='ligand_lib',
                         help="Path to file with ligand library. The file should contain one ligand identifier (Ligand PDB code, SMILES or Drug Bank ID) per line.",
-                        required=False)
+                        required=True)
     
     # Execute workflow until 'to_do' step -> all executes all steps (all is default)
     parser.add_argument('--until', dest='to_do', 
