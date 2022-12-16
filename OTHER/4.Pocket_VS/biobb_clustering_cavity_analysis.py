@@ -162,12 +162,10 @@ def validateStep(*output_paths):
     
     Inputs
     ------
-
         *output_paths (str): variable number of paths to output file/s
 
     Output
     ------
-
         validation_result (bool): result of validation
     '''
 
@@ -452,13 +450,11 @@ def findMatchingLines(pattern, filepath):
 
     Inputs
     ------
-
         pattern  (regex pattern): regular expression pattern to search in file lines
         filepath           (str): file path to search in
     
     Output
     ------
-
         lines (list(str)): lines matching the pattern or None if no line matches the pattern
     '''
 
@@ -595,7 +591,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         # Validate step
         if not validateStep(paths_selOut["output_ndx_path"]):
             global_log.info("    ERROR: No index file was created. Check gmx_select_output atom selection string")
-            return None, None
+            return  None, None
 
         # Add FitGroup to index_Fit_Output.ndx 
         joinFiles(source_file_path = paths_selFit["output_ndx_path"], destination_file_path = paths_selOut["output_ndx_path"])
@@ -687,7 +683,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
             if not validateStep(paths_models["output_structure_path"]):
                 global_log.info("    ERROR: No model PDB was extracted.")
                 return clusters_path, None
-        
+
         # Obtain the full sorted list of pdb files from previous step path
         pdb_paths = sorted(glob.glob(os.path.join(prop_models["path"],"*.pdb")))
 
@@ -696,7 +692,9 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
 
         # Check if this should be the final step
         if last_step == 'cluster':
+
             global_log.info("Clustering completed.")
+
             return clusters_path, None
 
     # If clustering is given externally 
@@ -753,7 +751,9 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
 
     # Check if this should be the final step
     if last_step == 'cavity':
+
         global_log.info("Cavity analysis completed.")
+
         return clusters_path, pockets_path
 
 # STEP 4: Filtering cavities

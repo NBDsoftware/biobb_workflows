@@ -1,6 +1,7 @@
 working_dir_path: htvs_output
-can_write_console_log: True
+can_write_console_log: False
 restart: True
+remove_tmp: True
 
 # Section 1: Pocket selection and receptor preparation
 
@@ -36,7 +37,7 @@ step3_str_check_add_hydrogens:
 step4_source_lig:
   paths:
     output_sdf_path: ligand.sdf
-    output_path: ligand.sdf
+    output_path: ligand.sdf 
 
 step5_babel_prepare_lig:
   tool: babel_convert
@@ -72,6 +73,6 @@ step8_show_top_ligands:
   paths:
     docking_logs: dependency/step6_autodock_vina_run/output_log_path
   properties:
-    number_top_ligands: 10
+    number_top_ligands: 50
 
 

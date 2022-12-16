@@ -323,6 +323,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
         trajectory_path (str): path to imaged trajectory
 
     '''
+    
     start_time = time.time()
 
     # Set default value for 'last_step' arg
@@ -636,7 +637,6 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
         global_log.info("Fix completed. Final structure saved on " + paths_renum["output_structure_path"])
         return paths_renum["output_structure_path"], None
     
-    
 # STEP 3: add H atoms, generate coordinate (.gro) and topology (.top) file
 
     # Properties and paths of step
@@ -742,7 +742,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
         global_log.info("    ERROR: output .gro file was not generated")
         return None, None
     
-# STEP 10: dump potential energy evolution
+# STEP 10: dump potential energy evolution NOTE: create plots automatically
 
     # Write next action to global log and execute step
     global_log.info("step10_energy_min: Compute potential energy during minimization")
@@ -793,7 +793,6 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     if last_step == 'nvt':
         global_log.info("NVT Equilibration completed. Final structure saved on " + paths["output_gro_path"])
         return paths["output_gro_path"], None
-
 
 # STEP 14: NPT equilibration pre-processing
 
@@ -916,7 +915,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
         # Execute step
         gmx_rms(**paths_rmsExp, properties=props_rmsExp)
 
-    # STEP 21: dump Radius of gyration 
+    # STEP 21: dump Radius of gyration NOTE: add computation of RMSF, PCA and projection onto PC for visualization
 
         # Write next action to global log 
         global_log.info("step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
@@ -996,7 +995,6 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     trajectory_path = paths_trjcat["output_trj_path"]
 
     return structure_path, trajectory_path
-
 
 if __name__ == "__main__":
 

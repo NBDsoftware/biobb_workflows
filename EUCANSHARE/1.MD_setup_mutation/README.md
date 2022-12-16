@@ -28,7 +28,6 @@ sbatch run_HPC.sl
 ```
 
 To run locally, modify run_local.sh if needed and launch:
-Modify run_local.sh if needed and launch:
 
 ```bash
 ./run_local.sh
@@ -91,3 +90,4 @@ And the production run:
 ```bash
 python biobb_md_setup_mutation.py -i pdb:4LOO --config input.yml --until all
 ```
+
