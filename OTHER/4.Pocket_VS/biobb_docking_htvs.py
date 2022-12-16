@@ -7,7 +7,7 @@ import time
 import argparse
 import itertools 
 from pathlib import Path
-import multiprocessing as mp # NOTE: could we use RAY for this? better for large jobs in principle or pycompss
+import multiprocessing as mp
 from biobb_io.api.drugbank import drugbank
 from biobb_io.api.ideal_sdf import ideal_sdf
 from biobb_common.configuration import settings
@@ -158,13 +158,11 @@ def printAvailablePockets(pockets_path, global_log):
         # Find name of centroid
         centroidName = findMatchingStr(pattern=r'/all_pockets_(\S+).zip', filepath=str(log))
 
-        if None not in (pockets, centroidName):
+        # Print to global log
+        global_log.info("   Model: {}".format(centroidName))
 
-            # Print to global log
-            global_log.info("   Model: {}".format(centroidName))
-
-            for pocket in pockets:
-                global_log.info("        {}".format(pocket))
+        for pocket in pockets:
+            global_log.info("        {}".format(pocket))
 
     return
 
@@ -593,8 +591,6 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
 
             # Copy original paths to modify them
             paths_ligandLib = global_paths["step4_source_lig"].copy()
-            paths_autodock = global_paths["step6_autodock_vina_run"].copy() 
-            paths_ligConv = global_paths["step5_babel_prepare_lig"].copy()
 
             # Add ligand index to log file names
             prop_ligandLib.update({'prefix' : str(ligand_index)})
@@ -607,6 +603,9 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
             if (lastStep_successful):
             
             # STEP 5: Convert ligand from sdf format to pdbqt format
+
+                # Copy original paths to modify them
+                paths_ligConv = global_paths["step5_babel_prepare_lig"].copy()
                 
                 # Modify paths according to ligand info
                 ligand_identifier = addLigandSuffixToPaths(paths_ligConv, ligand_ID, ligand_Name, ligand_index,
@@ -624,7 +623,10 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
             # Skip ligands that were not converted by Open Babel to pdbqt
             if (lastStep_successful):
 
-            # STEP 6: Autodock vina      
+            # STEP 6: Autodock vina
+
+                # Copy original paths to modify them
+                paths_autodock = global_paths["step6_autodock_vina_run"].copy()            
 
                 # Modify paths according to ligand info
                 addLigandSuffixToPaths(paths_autodock, ligand_ID, ligand_Name, ligand_index,
