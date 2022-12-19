@@ -3,6 +3,7 @@
 # Importing all the needed libraries
 import os
 import re
+import json
 import time
 import argparse
 import itertools 
@@ -168,11 +169,7 @@ def printAvailablePockets(pockets_path, global_log):
 
     return
 
-<<<<<<< HEAD:OTHER/4.Pocket_VS/biobb_docking_htvs.py
-def findTopLigands(paths, properties, ligand_IDs, ligand_Names):
-=======
 def findAffinityInLog(log_path):
->>>>>>> multiprocessing:EUCANSHARE/3.Docking_HTVS/biobb_docking_htvs_mp.py
     '''
     Find best binding affinity among different poses, returns None is no affinity is found
     
@@ -193,37 +190,63 @@ def findAffinityInLog(log_path):
     
     return affinity
 
-def findTopLigands(affinities_list, properties):
+def createSummary(affinities_list, properties):
     '''
-    Print top ligands 
+    Create dictionary of ligands with affinity and ID for each of them, ordered by affinity.
 
     Inputs
     ------
-        affinities_list  (list): list with tuples -> (affinity, ligand identifier)
+        affinities_list  (list): list with tuples -> (affinity, ligand identifier, ligand_ID)
         properties       (dict): properties of step 8
         global_log     (logger): global log
     
     Output
     ------
 
-        affinities_list        (list): list with top ligand tuples -> (affinity, ligand identifier) ordered by affinity
+        global_summary   (dict): dictionary with top ligands ordered by affinity
+
+            {
+                ligandName1 : {        
+                    affinity : -8.5, 
+                    ID : SB4
+                    }, 
+                ligandName2 : {
+                    affinity : -8.3, 
+                    ID : DB450112
+                },
+                ...
+            }
     '''
-    # NOTE: perhaps print csv with data?
 
     # Sort list according to affinity
     affinities_list = sorted(affinities_list)
 
-<<<<<<< HEAD:OTHER/4.Pocket_VS/biobb_docking_htvs.py
-    return bestLigandAffinities, bestLigandIDs, bestLigandNames
-=======
-    # Find number of ligands to print in global log
+    # Find number of ligands to save in global_summary
     numLigandsToPrint = min(properties['number_top_ligands'], len(affinities_list)) 
 
     # Exclude the rest
     affinities_list = affinities_list[:numLigandsToPrint]
 
-    return affinities_list
->>>>>>> multiprocessing:EUCANSHARE/3.Docking_HTVS/biobb_docking_htvs_mp.py
+    # Initialize global_summary
+    global_summary = {}
+
+    # Create dictionary
+    for item in affinities_list:
+
+        # Dictionary with affinity and ID
+        ligand_info = {}
+
+        # Update affinity
+        ligand_info.update({'affinity' : item[0]})
+
+        # Update ID
+        ligand_info.update({'ID' : item[2]})
+
+        # Update ligand entry
+        global_summary.update({item[1] : ligand_info})
+
+
+    return global_summary
 
 def validateStep(*output_paths):
     '''
@@ -421,11 +444,7 @@ def sourceLigand(ligand_ID, ligand_Name, ligand_index, paths, prop):
         removeFiles(smiles_path)
 
     # Check output exists and is not empty (to skip corrupt ligand identifiers)
-<<<<<<< HEAD:OTHER/4.Pocket_VS/biobb_docking_htvs.py
-    successful_step = validateStep(paths['output_path']) or validateStep(paths['output_sdf_path'])
-=======
     successful_step = validateStep(paths['output_sdf_path']) or validateStep(paths['output_path'])
->>>>>>> multiprocessing:EUCANSHARE/3.Docking_HTVS/biobb_docking_htvs_mp.py
 
     return successful_step
 
@@ -571,7 +590,12 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
     ------
         ligands_queue    (Queue from multiprocessing): queue shared between processes with tuples containing 
                                                         the ligand index and corresponding line from input library
-        affinities_list                        (list): results list containing the affinity for each ligand and ligand details 
+        affinities_list                        (list): empty list 
+
+    Outputs
+    -------
+
+        affinities_list (list): results, list with tuples -> (affinity, ligand identifier, ligand_ID)
     '''
     
     # Properties of steps
@@ -585,13 +609,14 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
 
     while True:
 
-        # Get item from shared queue
+        # Get item from shared queue among processes
         queue_item = ligands_queue.get()
 
         # Each valid item has a ligand index and ligand information
         ligand_index, ligand_line = queue_item
 
-        # If ligand information is None, we have reached the end, exit
+        # If ligand information is None, we have reached the end
+        # This process exits the docking
         if ligand_line == None:
             return
 
@@ -620,7 +645,7 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
             
             # STEP 5: Convert ligand from sdf format to pdbqt format
                 
-                # Modify paths according to ligand info
+                # Modify paths according to ligand info, save added suffix as ligand_identifier
                 ligand_identifier = addLigandSuffixToPaths(paths_ligConv, ligand_ID, ligand_Name, ligand_index,
                                         'input_path','output_path')
                 
@@ -655,7 +680,7 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
                 if affinity is not None:
                     
                     # Append result
-                    affinities_list.append((affinity, ligand_identifier))
+                    affinities_list.append((affinity, ligand_identifier, ligand_ID))
                 
                 # Validate step
                 lastStep_successful = validateStep(paths_autodock['output_log_path'], paths_autodock['output_pdbqt_path'])
@@ -706,9 +731,21 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     -------
 
         /output folder
-        working_dir_path (str): path to working directory 
-        bestAffinities  (list): list with top ligand tuples -> (affinity, ligand identifier) ordered by affinity
+        global_paths    (dict): dictionary with all paths of workflow
+        global_prop     (dict): dictionary with all properties of workflow
+        global_summary  (dict): dictionary with top ligands ordered by affinity
 
+            {
+                ligandName1 : {        
+                    affinity : -8.5, 
+                    ID : SB4
+                    }, 
+                ligandName2 : {
+                    affinity : -8.3, 
+                    ID : DB450112
+                },
+                ...
+            }
     '''
 
     start_time = time.time()
@@ -760,11 +797,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         props = global_prop["step1_fpocket_select"]
         paths = global_paths["step1_fpocket_select"]
 
-<<<<<<< HEAD:OTHER/4.Pocket_VS/biobb_docking_htvs.py
-        # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
-=======
         # If pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
->>>>>>> multiprocessing:EUCANSHARE/3.Docking_HTVS/biobb_docking_htvs_mp.py
         if None not in (input_pockets_path, pocket_ID):
 
             paths.update({'input_pockets_zip' : input_pockets_path})
@@ -783,7 +816,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
             # Print available pockets in input folder
             printAvailablePockets(paths["input_pockets_zip"], global_log)
 
-            return 
+            return global_paths, global_prop, None
 
 # STEP 2: Generate box around selected cavity
 
@@ -794,11 +827,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     props_box = global_prop["step2_box"]
     paths_box = global_paths["step2_box"]
     
-<<<<<<< HEAD:OTHER/4.Pocket_VS/biobb_docking_htvs.py
-    # If model and pocket_residues_path are provided through arguments -> prioritize over input.yml (ensemble docking with residues defining pocket)
-=======
     # If pocket_residues_path is provided through arguments -> prioritize over input.yml (ensemble docking with residues defining pocket)
->>>>>>> multiprocessing:EUCANSHARE/3.Docking_HTVS/biobb_docking_htvs_mp.py
     if pocket_residues_path is not None:
 
         paths_box.update({'input_pdb_path' : pocket_residues_path})
@@ -815,11 +844,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     props_addH = global_prop["step3_str_check_add_hydrogens"]
     paths_addH = global_paths["step3_str_check_add_hydrogens"]
 
-<<<<<<< HEAD:OTHER/4.Pocket_VS/biobb_docking_htvs.py
-    # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
-=======
     # If model is provided through arguments -> prioritize over input.yml (ensemble docking)
->>>>>>> multiprocessing:EUCANSHARE/3.Docking_HTVS/biobb_docking_htvs_mp.py
     if input_structure_path is not None:
 
         paths_addH.update({'input_structure_path' : input_structure_path})
@@ -830,7 +855,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     # Check if this should be the final step
     if last_step == 'prepare':
         global_log.info("Receptor preparation completed.")
-        return 
+        return global_paths, global_prop, None
 
 # STEPS 4-5-6-7: For each ligand in library: obtain molecule, prepare ligand, run docking, prepare poses
 
@@ -869,32 +894,15 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     # Write action to global log
     global_log.info("step8_show_top_ligands: print identifiers of top ligands ranked by lowest affinity")  
 
-<<<<<<< HEAD:OTHER/4.Pocket_VS/biobb_docking_htvs.py
-    # Find and print top ligands in log file
-    bestAffinities, bestLigandIDs, bestLigandNames = findTopLigands(paths = global_paths["step8_show_top_ligands"], 
-                                                            properties = global_prop["step8_show_top_ligands"], 
-                                                            ligand_IDs = ligand_IDs, ligand_Names = ligand_Names)
-
-    # Print more info only if we are not calling docking_htvs from another script
-    if (input_pockets_path == None) and (pocket_ID == None) and (input_structure_path == None):
-
-        # Print best ligands and their affinities in log file
-        for i in range(len(bestAffinities)):
-
-            global_log.info("    Affinity: {} for ligand {}".format(bestAffinities[i], bestLigandIDs[i]))
-=======
-    bestAffinities =  findTopLigands(affinities_list, global_prop['step8_show_top_ligands'])
+    global_summary =  createSummary(affinities_list, global_prop['step8_show_top_ligands'])
 
     # Print more info only if we are not calling docking_htvs from another script
     if (input_pockets_path  == None) and (pocket_ID == None) and (input_structure_path == None):
+        
+        # Print in log file with readable format
+        pretty_summary = json.dumps(global_summary, indent=2)
 
-        # Print best ligands and their affinities in log file
-        for item in bestAffinities:
-
-            ligand_affinity, ligand_identifier = item
-
-            global_log.info("    Affinity: {} for ligand {}".format(ligand_affinity, ligand_identifier))
->>>>>>> multiprocessing:EUCANSHARE/3.Docking_HTVS/biobb_docking_htvs_mp.py
+        global_log.info(pretty_summary)
         
         # Timing information
         elapsed_time = time.time() - start_time
@@ -908,7 +916,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
         global_log.info('')
 
-    return conf.get_working_dir_path(), bestAffinities
+    return global_paths, global_prop, global_summary
 
 if __name__ == '__main__':
     
@@ -929,6 +937,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    _,_= main_wf(args.config_path, args.ligand_lib, args.to_do)
+    _,_,_= main_wf(args.config_path, args.ligand_lib, args.to_do)
 
 

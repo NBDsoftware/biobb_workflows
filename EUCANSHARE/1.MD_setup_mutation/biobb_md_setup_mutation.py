@@ -319,8 +319,8 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     -------
 
         /output folder
-        structure_path  (str): path to equilibrated imaged structure
-        trajectory_path (str): path to imaged trajectory
+        global_paths    (dict): dictionary with all workflow paths
+        global_prop     (dict): dictionary with all workflow properties
 
     '''
     
@@ -389,7 +389,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths_pdb["output_pdb_path"]):
         global_log.info("    ERROR: No PDB file was fetched. Check PDB code or input file")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 1 (B): extracts molecule of interest: protein
 
@@ -404,7 +404,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths_extract["output_molecule_path"]):
         global_log.info("    ERROR: Extraction of molecule failed.")
-        return None, None
+        return global_paths, global_prop
 
     # Properties and paths of step
     props_structureChk = global_prop["step1C_structure_check"]
@@ -447,7 +447,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths_altloc["output_pdb_path"]):
         global_log.info("    ERROR: fixing alternative locations failed.")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 2 (B): Add mutations if requested
 
@@ -471,7 +471,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths_mut["output_pdb_path"]):
         global_log.info("    ERROR: mutation failed.")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 2 (C-D): model missing heavy atoms of backbone NOTE: if break is long only caps, How?
 
@@ -514,7 +514,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths_fxBCK["output_pdb_path"]):
         global_log.info("    ERROR: Fixing backbone failed. Check input PDB")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 2 (E): model missing heavy atoms of side chains
 
@@ -537,7 +537,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths_fxSC["output_pdb_path"]):
         global_log.info("    ERROR: Fixing side chains failed. Check input PDB")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 2 (F): model SS bonds (CYS -> CYX) if necessary
 
@@ -560,7 +560,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths_ss["output_pdb_path"]):
         global_log.info("    ERROR: Fixing SS bonds failed.")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 2 (G): Fix amides
 
@@ -583,7 +583,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths_famds["output_pdb_path"]):
         global_log.info("    ERROR: ERROR while fixing clashing amides")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 2 (H): Fix chirality
 
@@ -605,7 +605,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths_fchir["output_pdb_path"]):
         global_log.info("    ERROR: ERROR while fixing chirality of residues")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 2 (H): renumber structure atoms and residues
 
@@ -620,7 +620,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths_renum["output_structure_path"]):
         global_log.info("    ERROR: ERROR while renumbering structure")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 2 (I): Final check of the PDB structure and creation of a report for the user
 
@@ -650,7 +650,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_gro_path"], paths["output_top_zip_path"]):
         global_log.info("    ERROR: Coordinates and/or topology were not generated. Check input PDB")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 4: Create simulation box
 
@@ -665,7 +665,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_gro_path"]):
         global_log.info("    ERROR: Simulation box not created. Check properties of step")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 5: Add solvent molecules
 
@@ -680,7 +680,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_gro_path"], paths["output_top_zip_path"]):
         global_log.info("    ERROR: solvate failed to add solvent molecules.")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 6: ion generation pre-processing
 
@@ -695,7 +695,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_tpr_path"]):
         global_log.info("    ERROR: grompp didn't generate the tpr file")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 7: ion generation 
 
@@ -710,7 +710,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_gro_path"], paths["output_top_zip_path"]):
         global_log.info("    ERROR: genion didn't generate output files")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 8: minimization pre-processing
 
@@ -725,7 +725,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_tpr_path"]):
         global_log.info("    ERROR: grompp didn't generate the tpr file")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 9: minimization
 
@@ -740,7 +740,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_gro_path"]):
         global_log.info("    ERROR: output .gro file was not generated")
-        return None, None
+        return global_paths, global_prop
     
 # STEP 10: dump potential energy evolution NOTE: create plots automatically
 
@@ -766,7 +766,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_tpr_path"]):
         global_log.info("    ERROR: grompp didn't generate the tpr file")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 12: NVT equilibration
 
@@ -781,7 +781,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_gro_path"]):
         global_log.info("    ERROR: output .gro file was not generated")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 13: dump temperature evolution
 
@@ -807,7 +807,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_tpr_path"]):
         global_log.info("    ERROR: grompp didn't generate the tpr file")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 15: NPT equilibration
 
@@ -822,7 +822,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_gro_path"]):
         global_log.info("    ERROR: output .gro file was not generated")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 16: dump density and pressure evolution
 
@@ -848,7 +848,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths["output_tpr_path"]):
         global_log.info("    ERROR: grompp didn't generate the tpr file")
-        return None, None
+        return global_paths, global_prop
 
 # STEP 18: free NPT production run
 
@@ -877,7 +877,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
         # Validate step NOTE: different processes accessing same global log, if we were to parallelize this?
         if not validateStep(paths_mdrun["output_gro_path"]):
             global_log.info("    ERROR: output .gro file was not generated")
-            return None, None
+            return global_paths, global_prop
 
     # STEP 19: dump RMSD with respect to equilibrated structure (first frame) NOTE: add computation of RMSF, PCA and projection onto PC for visualization
 
@@ -978,7 +978,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     # Validate step
     if not validateStep(paths_trjcat["output_trj_path"]):
         global_log.info("    ERROR: Concatenation of trajectories failed.")
-        return None, None
+        return global_paths, global_prop
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -991,10 +991,7 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
     global_log.info('')
 
-    structure_path = global_paths["step23_dry"]["output_str_path"]
-    trajectory_path = paths_trjcat["output_trj_path"]
-
-    return structure_path, trajectory_path
+    return global_paths, global_prop
 
 if __name__ == "__main__":
 
@@ -1022,9 +1019,6 @@ if __name__ == "__main__":
                         required=False)    
     
     args = parser.parse_args()
-
-    # Define global constants
-    global HOMOLOGY_MAX_RES
 
     # NOTE: feature not implemented yet
     # Maximum number of residues to be created using homology modelling
