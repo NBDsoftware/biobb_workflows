@@ -1,0 +1,10 @@
+name: biobb_sumd
+channels:
+  - anaconda
+  - conda-forge
+  - bioconda
+dependencies:
+  - mdtraj
+  - scipy
+  - biobb_gromacs>=3.8.1
+  - conda

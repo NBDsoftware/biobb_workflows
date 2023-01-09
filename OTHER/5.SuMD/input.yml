@@ -1,0 +1,38 @@
+# Configuration of the Supervised MD algorithm
+
+sumd:
+  colvar:                      # Collective variable definition: distance between COM of group1 and COM of group2
+    group1_selection: 'resname JZ4'     # Group 1 selection, see Atom Selection Language in MDTraj
+    group2_selection: 'backbone and (resid 77 or resid 83 or resid 86 to 87 or resid 98 or resid 113 or resid 116 to 117)'   # Group 2 selection
+    target: 2                  # Target value of colvar in nm
+    threshold: 0.5             # Go to unsupervised MD once within threshold of target
+  num_steps:
+    max_total: 100             # Maximum number of total steps
+    same_conditions: 10        # Maximum number of tries for same initial conditions
+  slope_threshold: 0.5         # Slope threshold in absolute value in nm/ns
+  files:
+    trajectory: trajectory.xtc # Name of the trajectory resulting from the accepted steps
+
+# Configuration of each MD
+
+md:
+  properties:
+    simulation_type: free
+    remove_tmp: True
+    mdp:
+      integrator: md           # integrator algorithm
+      dt: 0.002                # time step (ps)
+      nsteps: 5000             # total number of time steps
+      ref-t: 300 300           # reference temperature for coupling
+      nstxout: 0               # freq. of .trr trajectory (coordinates) writing in time steps
+      nstxout-compressed: 1000 # freq. of .xtc trajectory (coordinates) writing in time steps
+      nstvout: 0               # freq. of .trr trajectory (velocities) writing in time steps
+      nstfout: 0               # freq. of .trr trajectory (forces) writing in time steps
+      continuation: 'no'
+      gen-vel: 'yes'           # generate new velocities
+      gen-temp: 300            # temperature at which velocities are generated
+      pbc: xyz                 # Periodic boundary conditions
+
+analysis:
+
+# Configuration of results analysis
