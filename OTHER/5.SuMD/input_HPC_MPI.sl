@@ -5,10 +5,10 @@ sumd:
     group1_selection: 'resname JZ4'     # Group 1 selection, see Atom Selection Language in MDTraj
     group2_selection: 'backbone and (resid 77 or resid 83 or resid 86 to 87 or resid 98 or resid 113 or resid 116 to 117)'   # Group 2 selection
     target: 2                  # Target value of colvar in nm
-    threshold: 0.5             # (not implemented yet, will simply stop) Go to unsupervised MD once within threshold of target
+    threshold: 0.5             # Go to unsupervised MD once within threshold of target
   num_steps:
     max_total: 100             # Maximum number of total steps
-    same_conditions: 10        # (not implemented yet) Maximum number of tries for same initial conditions
+    same_conditions: 10        # Maximum number of tries for same initial conditions
   slope_threshold: 0.5         # Slope threshold in absolute value in nm/ns
   files:
     trajectory: trajectory.xtc # Name of the trajectory resulting from the accepted steps
@@ -19,10 +19,13 @@ md:
   properties:
     simulation_type: free
     remove_tmp: True
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
+    mpi_np: 4
     mdp:
       integrator: md           # integrator algorithm
       dt: 0.002                # time step (ps)
-      nsteps: 25000            # total number of time steps
+      nsteps: 5000             # total number of time steps
       ref-t: 300 300           # reference temperature for coupling
       nstxout: 0               # freq. of .trr trajectory (coordinates) writing in time steps
       nstxout-compressed: 1000 # freq. of .xtc trajectory (coordinates) writing in time steps
