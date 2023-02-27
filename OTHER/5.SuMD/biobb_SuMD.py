@@ -154,86 +154,6 @@ def removeFiles(*file_path):
     
     return
 
-def launchContinuationMD(MD_paths, MD_properties):
-    """
-    Launch MD using last accepted structure, last accepted checkpoint and without generating new velocities.
-
-    Inputs
-    ------
-
-    MD_paths      (dict): paths of input and output files of short MD
-    MD_properties (dict): properties of short MD
-    
-    Output
-    ------
-
-    (Implicitly)
-    Ouput files of short MD simulation
-        
-    """
-
-    logging.info('+++++++++ Continuation of previous step...')
-
-    # Modify properties
-    MD_properties['mdp'].update({'continuation' : 'yes'})
-    MD_properties['mdp'].update({'gen-vel' : 'no'})
-    _ = MD_properties['mdp'].pop('gen-temp', None)
-
-    # Execute a short MD simulation, restarting from last checkpoint
-    grompp_mdrun(input_gro_path=MD_paths["last_gro_path"],
-            input_top_zip_path=MD_paths["topology"],
-            input_cpt_path=MD_paths["last_cpt_path"],
-            output_tpr_path=MD_paths["step_tpr_path"],
-            output_trr_path=MD_paths["step_trr_path"],
-            output_gro_path=MD_paths["step_gro_path"],
-            output_edr_path=MD_paths["step_edr_path"],
-            output_log_path=MD_paths["step_log_path"],
-            output_xtc_path=MD_paths["step_xtc_path"],
-            output_cpt_path=MD_paths["step_cpt_path"],
-            properties=MD_properties)
-
-    return
-
-def launchNewVelocitiesMD(MD_paths, MD_properties, T):
-    """
-    Launch MD using last accepted structure and generating new velocities.
-
-    Inputs
-    ------
-
-    MD_paths      (dict): paths of input and output files of short MD
-    MD_properties (dict): properties of short MD
-    T            (float): temperature
-    
-    Output
-    ------
-
-    (Implicitly)
-    Ouput files of short MD simulation
-        
-    """
-
-    logging.info('+++++++++ Generating new velocities...')
-
-    # Modify properties
-    MD_properties['mdp'].update({'continuation' : 'no'})
-    MD_properties['mdp'].update({'gen-vel' : 'yes'})
-    MD_properties['mdp'].update({'gen-temp' : T})
-
-    # Execute a short MD simulation, generating new velocities
-    grompp_mdrun(input_gro_path=MD_paths["last_gro_path"],
-            input_top_zip_path=MD_paths["topology"],
-            output_tpr_path=MD_paths["step_tpr_path"],
-            output_trr_path=MD_paths["step_trr_path"],
-            output_gro_path=MD_paths["step_gro_path"],
-            output_edr_path=MD_paths["step_edr_path"],
-            output_log_path=MD_paths["step_log_path"],
-            output_xtc_path=MD_paths["step_xtc_path"],
-            output_cpt_path=MD_paths["step_cpt_path"],
-            properties=MD_properties)
-
-    return
-
 def analyzeCV(MD_paths, Global_properties):
     """
     Analyze user-defined CV. The CV is defined as the distance between two atom selections from
@@ -380,7 +300,7 @@ def main_wf(args):
 
     The main idea is to run short MDs and track the evolution of a certain CV defined by the user. If the CV value approaches the 
     target value during the short MD simulation, then the final state of the system is accepted and used to perform the next short MD.
-    However, if the CV value departs from the target value, then the next simulation re-starts from the last accepted state generating 
+    However, if the CV gets away from the target value, then the next simulation re-starts from the last accepted state generating 
     new velocities to try to explore a different direction in conformational space.
 
     Inputs
@@ -498,14 +418,49 @@ def main_wf(args):
         if lastStepAccepted:
 
             # If last step was accepted, continue MD with same velocities 
-            launchContinuationMD(MD_paths, MD_properties)
+            logging.info('+++++++++ Continuation of previous step...')
+
+            # Modify properties
+            MD_properties['mdp'].update({'continuation' : 'yes'})
+            MD_properties['mdp'].update({'gen-vel' : 'no'})
+            _ = MD_properties['mdp'].pop('gen-temp', None)
+
+            # Execute a short MD simulation, restarting from last checkpoint
+            grompp_mdrun(input_gro_path=MD_paths["last_gro_path"],
+                    input_top_zip_path=MD_paths["topology"],
+                    input_cpt_path=MD_paths["last_cpt_path"],
+                    output_tpr_path=MD_paths["step_tpr_path"],
+                    output_trr_path=MD_paths["step_trr_path"],
+                    output_gro_path=MD_paths["step_gro_path"],
+                    output_edr_path=MD_paths["step_edr_path"],
+                    output_log_path=MD_paths["step_log_path"],
+                    output_xtc_path=MD_paths["step_xtc_path"],
+                    output_cpt_path=MD_paths["step_cpt_path"],
+                    properties=MD_properties)
 
             lastStepAccepted = False
 
         else:
             
             # Otherwise, restart from last accepted structure with new velocities 
-            launchNewVelocitiesMD(MD_paths, MD_properties, T)
+            logging.info('+++++++++ Generating new velocities...')
+
+            # Modify properties
+            MD_properties['mdp'].update({'continuation' : 'no'})
+            MD_properties['mdp'].update({'gen-vel' : 'yes'})
+            MD_properties['mdp'].update({'gen-temp' : T})
+
+            # Execute a short MD simulation, generating new velocities
+            grompp_mdrun(input_gro_path=MD_paths["last_gro_path"],
+                    input_top_zip_path=MD_paths["topology"],
+                    output_tpr_path=MD_paths["step_tpr_path"],
+                    output_trr_path=MD_paths["step_trr_path"],
+                    output_gro_path=MD_paths["step_gro_path"],
+                    output_edr_path=MD_paths["step_edr_path"],
+                    output_log_path=MD_paths["step_log_path"],
+                    output_xtc_path=MD_paths["step_xtc_path"],
+                    output_cpt_path=MD_paths["step_cpt_path"],
+                    properties=MD_properties)
 
         # Use MDTraj to analyze a certain CV (distance between 2 user-defined groups) 
         CV_mean, CV_slope = analyzeCV(MD_paths, Global_properties)
@@ -516,12 +471,12 @@ def main_wf(args):
             # We are within threshold!
             notWithinThreshold = False
 
-            logging.info('+++++++++ CV is within threshold of target!')
+            logging.info('+++++++++ CV is within threshold of target! :)')
         
         # Check slope is higher than CV slope threshold
         if abs(CV_slope) > slopeThreshold:
 
-            # Accept new structure if CV_mean ----> CV_target and m > 0
+            # Accept new structure if CV_mean < CV_target and m > 0
             if (CV_mean < CV_target) and (CV_slope > 0):
                 
                 # Accept last step
@@ -529,7 +484,7 @@ def main_wf(args):
  
                 lastStepAccepted = True
 
-            # Accept new structure if CV_target <---- CV_mean and m < 0
+            # Accept new structure if CV_mean > CV_target and m < 0
             elif (CV_mean > CV_target) and (CV_slope < 0): 
                 
                 # Accept last step 
