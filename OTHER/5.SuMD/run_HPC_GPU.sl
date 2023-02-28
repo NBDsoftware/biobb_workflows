@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=sumd
 #SBATCH --nodes=1                 # node count
-#SBATCH --ntasks=1                # total number of tasks across all nodes
-#SBATCH --cpus-per-task=8         # cpu-cores per task (>1 if multi-threaded tasks)
+#SBATCH --ntasks=2                # total number of tasks across all nodes
+#SBATCH --cpus-per-task=1         # cpu-cores per task (>1 if multi-threaded tasks)
 #SBATCH --constraint=gpu
 #SBATCH --mem-per-cpu=2000
 #SBATCH --gres=gpu:1              # number of gpus per node

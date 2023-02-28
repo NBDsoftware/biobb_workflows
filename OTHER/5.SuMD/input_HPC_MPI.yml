@@ -33,6 +33,9 @@ short_MD:
   properties:
     simulation_type: free
     remove_tmp: True
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
+    mpi_np: 4
     mdp:
       integrator: md           # integrator algorithm
       dt: 0.002                # time step (ps)
@@ -56,6 +59,3 @@ trajectory_cat:
   properties: 
     concatenate: True
     remove_tmp: True
-
-
-

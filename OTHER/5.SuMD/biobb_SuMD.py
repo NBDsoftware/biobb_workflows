@@ -9,7 +9,6 @@ import sys
 import yaml
 import time
 import shutil
-import logging
 import argparse
 import numpy as np
 import mdtraj as md
@@ -19,10 +18,12 @@ from pathlib import PurePath
 from zipfile import ZipFile
 
 # Import biobb
+from biobb_common.configuration import settings
+from biobb_common.tools import file_utils as fu
 from biobb_gromacs.gromacs.trjcat import trjcat
 from biobb_gromacs.gromacs.grompp_mdrun import grompp_mdrun
 
-def checkFilesExist(*file_path):
+def checkFilesExist(*file_path, logger):
     '''
     Returns true if all files exist
 
@@ -45,7 +46,7 @@ def checkFilesExist(*file_path):
 
         if not os.path.isfile(path):
 
-            logging.warning(" {} file was not found".format(path))
+            logger.warning(" {} file was not found".format(path))
             
     return exist
 
@@ -154,7 +155,7 @@ def removeFiles(*file_path):
     
     return
 
-def analyzeCV(MD_paths, Global_properties):
+def analyze_cv(short_MD_paths, short_MD_prop, sumd_prop, sumd_log):
     """
     Analyze user-defined CV. The CV is defined as the distance between two atom selections from
     the YAML configuration. Fits a line to the evolution of the CV and returns the CV average value and the slope of the fitted line
@@ -162,24 +163,26 @@ def analyzeCV(MD_paths, Global_properties):
     Inputs
     ------
 
-    MD_paths          (dict): paths of input and output files of short MD
-    Global_properties (dict): Atomic selections in Global_properties dictionary
+    short_MD_paths (dict): dictionary with paths to short MD files
+    short_MD_prop  (dict): dictionary with properties of the short MD protocol
+    sumd_prop      (dict): dictionary with properties of the SuMD protocol
+    sumd_log       (obj):  logger for the SuMD protocol
     
     Output
     ------
 
-    CV_mean  (float): average value of CV during short MD
-    CV_slope (float): slope of the fitted line to the CV evolution 
+    cv_mean  (float): average value of CV during short MD
+    cv_slope (float): slope of the fitted line to the CV evolution 
     """
 
-    logging.info('+++++++++ Analyzing CV...')
+    sumd_log.info('  Analyzing CV...')
 
     # Read trajectory and topology
-    step_traj = md.load(MD_paths["step_xtc_path"], top=MD_paths["step_gro_path"])
+    step_traj = md.load(short_MD_paths["output_xtc_path"], top=short_MD_paths["output_gro_path"])
 
     # Find the COM of each group selection for each frame (nm)
-    com_group1 = md.compute_center_of_mass(traj = step_traj, select = Global_properties['sumd']['colvar']['group1_selection'])
-    com_group2 = md.compute_center_of_mass(traj = step_traj, select = Global_properties['sumd']['colvar']['group2_selection'])
+    com_group1 = md.compute_center_of_mass(traj = step_traj, select = sumd_prop['colvar']['group1_selection'])
+    com_group2 = md.compute_center_of_mass(traj = step_traj, select = sumd_prop['colvar']['group2_selection'])
 
     # Find the vector joining the COMs for each frame
     distance_vectors = com_group1 - com_group2
@@ -187,31 +190,31 @@ def analyzeCV(MD_paths, Global_properties):
     # Find the norm of this vector for each frame (nm)
     CV = np.linalg.norm(distance_vectors, axis=1)
 
-    logging.info('+++++++++ CV: {}'.format(CV))
+    sumd_log.info('  CV: {}'.format(CV))
 
-    # Time array (index of frames)
+    # Time array (index of frames - arbitrary units)
     time_au = np.arange(0, len(CV))
 
     # Mean value of the CV
-    CV_mean = np.mean(CV)
+    cv_mean = np.mean(CV)
 
-    logging.info('+++++++++ CV mean: {}'.format(CV_mean))
+    sumd_log.info('  CV mean: {}'.format(cv_mean))
 
     # Compute linear regression 
     res = stats.linregress(time_au, CV)
 
     # Find slope in nm/frame
-    CV_slope = res.slope
+    cv_slope = res.slope
 
-    # Trajectory saving period in ps: time step (ps) * saving frequency (time steps)
-    traj_freq = Global_properties['md']['properties']['mdp']['dt']*Global_properties['md']['properties']['mdp']['nstxout-compressed']
+    # Trajectory saving period in ns: time step (ps) * saving frequency (time steps) / 1000 (ps/ns)
+    saving_period = short_MD_prop['mdp']['dt']*short_MD_prop['mdp']['nstxout-compressed']/1000
 
-    # Find slope m in nm/ns
-    CV_slope = CV_slope/traj_freq*1000
+    # Find slope in nm/ns
+    cv_slope = cv_slope/saving_period
 
-    logging.info('+++++++++ CV slope: {}'.format(CV_slope))
+    sumd_log.info('  CV slope: {}'.format(cv_slope))
 
-    return CV_mean, CV_slope
+    return cv_mean, cv_slope
 
 def acceptLastStep(MD_paths):
     """
@@ -233,7 +236,6 @@ def acceptLastStep(MD_paths):
     Files renamed and saved
     """
 
-    logging.info('+++++++++ Accepting step!')
 
     # Save xtc in final trajectory
     if os.path.exists(MD_paths["traj_path"]):
@@ -271,7 +273,7 @@ def acceptLastStep(MD_paths):
 
     return
 
-def removeTmpLogs(MD_paths):
+def remove_tmp_logs(MD_paths):
     """
     Remove temporal log files created by biobb_gromacs
 
@@ -293,7 +295,7 @@ def removeTmpLogs(MD_paths):
     return
 
 
-def main_wf(args):
+def main_wf(configuration_path, input_structure, topology_path, output_path):
     '''
     Main workflow that takes as input the GROMACs topology and structure files together with a certain configuration as global variables to
     perform Supervised Molecular Dynamics. 
@@ -306,202 +308,179 @@ def main_wf(args):
     Inputs
     ------
 
-    System structure (.gro)
-    gromacs topology (.zip of .top)
-    Configuration (different global variables)
-
+    configuration_path (str): path to YAML configuration file
+    input_structure    (str): path to GROMACS structure file (.gro)
+    topology_path      (str): path to GROMACS topology file (.zip of .top)
+    output_path        (str): path to output folder
     '''
 
-    if args.output_path:
-        # If output path is given
-        OUTPUT_PATH = args.output_path
-    else:
-        # If not -> default output path
-        OUTPUT_PATH = "output"
+    start_time = time.time()
 
-    # Create folder if necessary
-    createFolder(OUTPUT_PATH)
+    # Receiving the input configuration file (YAML)
+    conf = settings.ConfReader(configuration_path)
 
-    # Path to global log file
-    log_path = checkOutputExistence(OUTPUT_PATH, "suMD.log")
+    # Initialize a global log file
+    global_log, _ = fu.get_logs(path=conf.get_working_dir_path(), light_format=True, prefix='global')
 
-    # Determine logging level, format and handlers to print to log file and console
-    logging.basicConfig( 
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_path),
-            logging.StreamHandler(sys.stdout)   
-        ])
+    # Get global properties and paths 
+    global_prop = conf.get_prop_dic(global_log=global_log)
+    global_paths = conf.get_paths_dic()
 
-    # Print log title
-    logging.info("SuMD LOG FILE\n")
+    # Paths and Properties of short MD (generating new velocities)
+    new_vel_MD_paths = global_paths['short_MD'].copy()
+    new_vel_MD_prop = global_prop['short_MD'].copy()
+    _ = new_vel_MD_paths.pop('input_cpt_path', None)
 
-    # Parse configuration file   
-    if checkFilesExist(args.configuration):
-        # If configuration file exists -> open configuration file
-        with open(args.configuration) as config_file:
+    # Paths and Properties of short MD (continuation from last accepted state)
+    continuation_MD_paths = global_paths['short_MD'].copy()
+    continuation_MD_prop = global_prop['short_MD'].copy()
+    continuation_MD_prop['mdp'].update({'continuation' : 'yes'})
+    continuation_MD_prop['mdp'].update({'gen-vel' : 'no'})
+    _ = continuation_MD_prop['mdp'].pop('gen-temp', None)
 
-            # Load configuration file as dictionary
-            Global_properties = yaml.load(config_file, Loader = yaml.FullLoader)
-    else:
-        # Issue error
-        logging.error("Configuration file not found!")
-        logging.error("Check the configuration file exists: {}".format(args.configuration))
-        sys.exit()
+    # Properties and paths of concatenation step 
+    concat_prop = global_prop["trajectory_cat"]
+    concat_paths = global_paths["trajectory_cat"] 
 
-    # Dictionary with common MD simulation properties from input configuration
-    MD_properties = Global_properties['md']['properties'].copy()
+    # Initialize a SuMD log file
+    sumd_log, _ = fu.get_logs(path=conf.get_working_dir_path(), light_format=True, prefix='sumd')
 
-    # Working directory
-    workingPath = os.getcwd()
+    # Get SuMD properties
+    sumd_prop = conf.properties['sumd']
 
-    # Dictionary with paths
-    MD_paths = {}
+    if output_path is None:
+        # Default output path
+        output_path = conf.get_working_dir_path()
 
-    # Path to trajectory file: if there are previous trajectories, add number to new trajectory to avoid overwriting
-    MD_paths.update({"traj_path" : checkOutputExistence(OUTPUT_PATH, Global_properties['sumd']['files']['trajectory'])}) 
-    # Path to zip file 
-    MD_paths.update({"zip_path" : checkOutputExistence(OUTPUT_PATH, 'trajectory_bundle.zip')}) 
-    # Names of step temporal files (short MD results)
-    MD_paths.update({"step_tpr_path" : os.path.join(OUTPUT_PATH, "step.tpr")})
-    MD_paths.update({"step_trr_path" : os.path.join(OUTPUT_PATH, "step.trr")})
-    MD_paths.update({"step_gro_path" : os.path.join(OUTPUT_PATH, "step.gro")})
-    MD_paths.update({"step_edr_path" : os.path.join(OUTPUT_PATH, "step.edr")})
-    MD_paths.update({"step_log_path" : os.path.join(OUTPUT_PATH, "step.log")})
-    MD_paths.update({"step_xtc_path" : os.path.join(OUTPUT_PATH, "step.xtc")})
-    MD_paths.update({"step_cpt_path" : os.path.join(OUTPUT_PATH, "step.cpt")})
-    # log.err and log.out temporal file paths
-    MD_paths.update({"std_err_path" : os.path.join(workingPath, "log*.err")})
-    MD_paths.update({"std_out_path" : os.path.join(workingPath, "log*.out")})
-    # Paths for last accepted gro and cpt files
-    MD_paths.update({"last_cpt_path" : os.path.join(OUTPUT_PATH, "lastAcceptedStep.cpt")})
-    MD_paths.update({"last_gro_path" : os.path.join(OUTPUT_PATH, "lastAcceptedStep.gro")})
-    # Path to topology
-    MD_paths.update({"topology" : args.topology_path})
+    # Create short MD folder
+    if not os.path.exists(new_vel_MD_prop["path"]):
+        os.makedirs(new_vel_MD_prop["path"])
 
-    # Save input GRO file as lastAcceptedGRO
-    shutil.copyfile(args.input_path, MD_paths["last_gro_path"])
+    # Create concatenation folder
+    if not os.path.exists(concat_prop["path"]):
+        os.makedirs(concat_prop["path"])
+    
+    # Copy input structure and topology to short MD folder
+    shutil.copy(input_structure, continuation_MD_paths["input_gro_path"])
+    shutil.copy(topology_path, continuation_MD_paths["input_top_zip_path"])
 
-    # Initialize 'within threshold' condition
-    notWithinThreshold = True
+    # Initialize 'cv within threshold' condition
+    within_threshold = False
 
     # Initialize 'last step accepted' condition
-    lastStepAccepted = False
-
-    # Start timer
-    start_time = time.time()
+    last_step_accepted = False
 
     # Initialize total step counter 
     step_counter = 0
 
     # Find max number of steps (short MDs) to do
-    maxNumSteps = Global_properties['sumd']['num_steps']['max_total']
+    max_num_steps = sumd_prop['num_steps']['max_total']
 
     # Find target value of CV
-    CV_target = Global_properties['sumd']['colvar']['target']
+    cv_target = sumd_prop['colvar']['target']
 
     # Find threshold in the CV within which we start normal MD 
-    CV_threshold = Global_properties['sumd']['colvar']['threshold']
+    cv_threshold = sumd_prop['colvar']['threshold']
 
-    # Find threshold of slope fitting CV evolution
-    slopeThreshold = Global_properties['sumd']['slope_threshold']
-
-    # Find temperature of velocity generation
-    T = Global_properties["md"]["properties"]["mdp"]["gen-temp"]
+    # Find threshold for the slope fitting CV evolution
+    slope_threshold = sumd_prop['slope_threshold']
 
     # While all conditions True, keep running steps
-    while (step_counter < maxNumSteps) and notWithinThreshold:
+    while (step_counter < max_num_steps) and not within_threshold:
 
-        logging.info('++++++ STEP {}'.format(step_counter))
+        sumd_log.info('STEP {}'.format(step_counter))
 
-        if lastStepAccepted:
+        if last_step_accepted:
 
-            # If last step was accepted, continue MD with same velocities 
-            logging.info('+++++++++ Continuation of previous step...')
-
-            # Modify properties
-            MD_properties['mdp'].update({'continuation' : 'yes'})
-            MD_properties['mdp'].update({'gen-vel' : 'no'})
-            _ = MD_properties['mdp'].pop('gen-temp', None)
+            # Continue MD with same velocities 
+            sumd_log.info('  Continuation of previous step...')
 
             # Execute a short MD simulation, restarting from last checkpoint
-            grompp_mdrun(input_gro_path=MD_paths["last_gro_path"],
-                    input_top_zip_path=MD_paths["topology"],
-                    input_cpt_path=MD_paths["last_cpt_path"],
-                    output_tpr_path=MD_paths["step_tpr_path"],
-                    output_trr_path=MD_paths["step_trr_path"],
-                    output_gro_path=MD_paths["step_gro_path"],
-                    output_edr_path=MD_paths["step_edr_path"],
-                    output_log_path=MD_paths["step_log_path"],
-                    output_xtc_path=MD_paths["step_xtc_path"],
-                    output_cpt_path=MD_paths["step_cpt_path"],
-                    properties=MD_properties)
+            grompp_mdrun(**continuation_MD_paths, properties=continuation_MD_prop)
 
-            lastStepAccepted = False
+            last_step_accepted = False
 
         else:
             
-            # Otherwise, restart from last accepted structure with new velocities 
-            logging.info('+++++++++ Generating new velocities...')
-
-            # Modify properties
-            MD_properties['mdp'].update({'continuation' : 'no'})
-            MD_properties['mdp'].update({'gen-vel' : 'yes'})
-            MD_properties['mdp'].update({'gen-temp' : T})
+            # Restart from last accepted structure with new velocities 
+            sumd_log.info('  Generating new velocities...')
 
             # Execute a short MD simulation, generating new velocities
-            grompp_mdrun(input_gro_path=MD_paths["last_gro_path"],
-                    input_top_zip_path=MD_paths["topology"],
-                    output_tpr_path=MD_paths["step_tpr_path"],
-                    output_trr_path=MD_paths["step_trr_path"],
-                    output_gro_path=MD_paths["step_gro_path"],
-                    output_edr_path=MD_paths["step_edr_path"],
-                    output_log_path=MD_paths["step_log_path"],
-                    output_xtc_path=MD_paths["step_xtc_path"],
-                    output_cpt_path=MD_paths["step_cpt_path"],
-                    properties=MD_properties)
+            grompp_mdrun(**new_vel_MD_paths, properties=new_vel_MD_prop)
 
-        # Use MDTraj to analyze a certain CV (distance between 2 user-defined groups) 
-        CV_mean, CV_slope = analyzeCV(MD_paths, Global_properties)
+        # Use MDTraj to analyze the CV (distance between 2 user-defined groups) 
+        cv_mean, cv_slope = analyze_cv(continuation_MD_paths, continuation_MD_prop, sumd_prop, sumd_log)
 
         # Check if distance to target is smaller than CV threshold
-        if abs(CV_mean - CV_target) < CV_threshold:
+        if abs(cv_mean - cv_target) < cv_threshold:
 
-            # We are within threshold!
-            notWithinThreshold = False
+            sumd_log.info('  CV is within threshold of target! :)')
 
-            logging.info('+++++++++ CV is within threshold of target! :)')
+            within_threshold = True
         
-        # Check slope is higher than CV slope threshold
-        if abs(CV_slope) > slopeThreshold:
+        # Check if slope is higher than CV slope threshold
+        if abs(cv_slope) > slope_threshold:
 
-            # Accept new structure if CV_mean < CV_target and m > 0
-            if (CV_mean < CV_target) and (CV_slope > 0):
+            cv_increasing_towards_target = (cv_mean < cv_target) and (cv_slope > 0)
+            cv_decreasing_towards_target = (cv_mean > cv_target) and (cv_slope < 0)
+
+            # Accept last step
+            if cv_increasing_towards_target or cv_decreasing_towards_target:
                 
-                # Accept last step
-                acceptLastStep(MD_paths)
- 
-                lastStepAccepted = True
-
-            # Accept new structure if CV_mean > CV_target and m < 0
-            elif (CV_mean > CV_target) and (CV_slope < 0): 
+                sumd_log.info('  Accepting step!')
                 
-                # Accept last step 
-                acceptLastStep(MD_paths)
+                # First accepted step
+                if not os.path.exists(concat_paths["output_trj_path"]):
+                    
+                    # Copy short MD trajectory to concatenation folder
+                    shutil.copyfile(continuation_MD_paths["output_xtc_path"], concat_paths["output_trj_path"])
+                
+                # Subsequent accepted steps
+                else:
 
-                lastStepAccepted = True
+                    # remove previous zip trajectory bundle if it exists
+                    removeFiles(concat_paths["input_trj_zip_path"])
+
+                    # Create a ZipFile object
+                    zipObject = ZipFile(concat_paths["input_trj_zip_path"], 'w')
+
+                    # Add previously concatenated trajectory to zip file
+                    zipObject.write(concat_paths["output_trj_path"])
+
+                    # Add short MD trajectory to zip file
+                    zipObject.write(continuation_MD_paths["output_xtc_path"])
+
+                    # Close zip file
+                    zipObject.close()
+
+                    # Concatenate
+                    trjcat(**concat_paths, properties=concat_prop)
+
+                # Replace last accepted structure and checkpoint
+                shutil.copyfile(continuation_MD_paths["output_gro_path"], continuation_MD_paths["input_gro_path"])
+                shutil.copyfile(continuation_MD_paths["output_cpt_path"], continuation_MD_paths["input_cpt_path"])
+
+                last_step_accepted = True
 
         # Increase total counter
         step_counter += 1
 
         # Remove temporal log files
-        removeTmpLogs(MD_paths)
+        # remove_tmp_logs(MD_paths)
+
+        """
+        # log.err and log.out temporal file paths
+        MD_paths.update({"std_err_path" : os.path.join(conf.get_working_dir_path(), "log*.err")})
+        MD_paths.update({"std_out_path" : os.path.join(conf.get_working_dir_path(), "log*.out")})
+        """
     
+    # Move final trajectory to output path
+    shutil.move(concat_paths["output_trj_path"], output_path)
+
     # Print timing information to the log file
     elapsed_time = time.time() - start_time
 
-    logging.info('+++++++++ Elapsed time: {} minutes'.format(round(elapsed_time/60, 1)))
+    sumd_log.info('Elapsed time: {} minutes'.format(round(elapsed_time/60, 1)))
 
     return
 
@@ -514,10 +493,10 @@ if __name__ == '__main__':
                         required=True)
 
     parser.add_argument('-topology', dest='topology_path',
-                        help="Path to input topology (.zip)", 
+                        help="Path to compressed input topology (.zip of .top and .itp files)", 
                         required=True)
 
-    parser.add_argument('-config', dest='configuration',
+    parser.add_argument('-config', dest='config_path',
                         help="Path to configuration file (YAML)", 
                         required=True)
 
@@ -527,7 +506,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main_wf(args)
+    main_wf(configuration_path = args.config_path, input_structure = args.input_path, topology_path = args.topology_path, output_path = args.output_path)
 
     # NOTE: test with MPI + GPU - improve performance. Then test with longer simulation times
     
@@ -536,4 +515,3 @@ if __name__ == '__main__':
     # NOTE: Add system preparation with AnteChamber / GROMACS and analysis of the trajectory. Recall that MMPBSA needs mol2 file from AnteChamber!!
 
     # github.com/Valdes-Tresanco-MS/gmx_MMPBSA
-

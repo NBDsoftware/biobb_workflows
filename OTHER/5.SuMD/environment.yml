@@ -6,5 +6,5 @@ channels:
 dependencies:
   - mdtraj
   - scipy
-  - biobb_gromacs>=3.8.1
+  - biobb_gromacs>=3.9.0
   - conda
