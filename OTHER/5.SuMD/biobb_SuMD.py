@@ -5,8 +5,6 @@
 
 # Importing python modules
 import os
-import sys
-import yaml
 import time
 import shutil
 import argparse
@@ -23,124 +21,8 @@ from biobb_common.tools import file_utils as fu
 from biobb_gromacs.gromacs.trjcat import trjcat
 from biobb_gromacs.gromacs.grompp_mdrun import grompp_mdrun
 
-def checkFilesExist(*file_path, logger):
-    '''
-    Returns true if all files exist
 
-    Inputs
-    ------
-
-        file_path  (str): variable number of paths to files including filename
-    
-    Output
-    ------
-
-        exist (bool): True if they all exist. False if any of them doesnt exist
-    '''
-
-    exist = True
-
-    for path in file_path:
-
-        exist = exist and os.path.isfile(path)
-
-        if not os.path.isfile(path):
-
-            logger.warning(" {} file was not found".format(path))
-            
-    return exist
-
-def validateStep(*output_paths):
-    '''
-    Check all output files exist and are not empty
-    
-    Inputs
-    ------
-
-        *output_paths (str): variable number of paths to output file/s
-
-    Output
-    ------
-
-        validation_result (bool): result of validation
-
-    '''
-
-    # Initialize value 
-    validation_result = True
-
-    # Check existence of files
-    for path in output_paths:
-        validation_result = validation_result and os.path.exists(path)
-
-    # Check files are not empty if they exist
-    if (validation_result):
-
-        for path in output_paths:
-            file_not_empty = os.stat(path).st_size > 0
-            validation_result = validation_result and file_not_empty
-
-    return validation_result
-
-def createFolder(dir_path):
-    '''
-    Creates folder dir_path if it doesn't exist
-
-    Inputs
-    ------
-
-        dir_path  (str): path including folder name to create
-    '''
-
-    if not os.path.exists(dir_path):
-        os.mkdir(dir_path)
-    
-    return
-
-def checkOutputExistence(output_path, file_name):
-    """
-    Check the existence of a file called file_name in output_path. 
-    If necessary, creates a new name adding a number suffix -> new_file_name
-    Returns the complete path to the new file name output_path/new_file_name
-
-    Inputs
-    ----------
-
-        output_path    (str): path to output folder where the file will be written
-        file_name      (str): name of file
-    
-    Returns
-    -------
-        
-        file_path    (str): path to new file
-    """
-
-    # file name as Path
-    file_path = PurePath(file_name)
-
-    # Construct generic pattern for file, example: "rave_analysis*.log"
-    file_name_pattern = file_path.stem + "*" + file_path.suffix
-
-    # List all files matching the pattern in the output path
-    files_list = list(glob(os.path.join(output_path, file_name_pattern)))
-
-    # If no file matches the pattern
-    if len(files_list) == 0:    
-
-        # No need to modify the original name
-        file_path = os.path.join(output_path, file_name)
-
-    # If N files match the pattern
-    else:
-
-        # We modify the filename with N
-        new_file_name = file_path.stem + str(len(files_list)) + file_path.suffix
-
-        file_path = os.path.join(output_path, new_file_name)
-
-    return file_path
-
-def removeFiles(*file_path):
+def remove_files(*file_path):
     '''
     Removes files in '*file_path' if they exist
 
@@ -216,84 +98,40 @@ def analyze_cv(short_MD_paths, short_MD_prop, sumd_prop, sumd_log):
 
     return cv_mean, cv_slope
 
-def acceptLastStep(MD_paths):
+def remove_tmp_files(*paths):
     """
-    Accept last short MD simulation:
-
-        - Add short trajectory to total trajectory
-        - Set the step checkpoint file as the lastAcceptedCPT
-        - Set the step gro file as the lastAcceptedGRO
+    Remove temporal files created by biobb_gromacs if any
 
     Inputs
     ------
 
-    MD_paths   (dict): paths of input and output files of short MD
-
-    Output
-    ------
-
-    (Implicitly)
-    Files renamed and saved
+    paths   (str): variable number of paths to files including filename
     """
 
+    tmp_files = []
 
-    # Save xtc in final trajectory
-    if os.path.exists(MD_paths["traj_path"]):
-        
-        # remove previous zip trajectory bundle if it exists
-        removeFiles(MD_paths["zip_path"])
+    for path in paths:
+        matching_files = glob(path)
+        tmp_files.extend(matching_files)
 
-        # Create a ZipFile object
-        zipObject = ZipFile(MD_paths["zip_path"], 'w')
-        
-        # Add traj to zip file
-        zipObject.write(MD_paths["traj_path"])
-        zipObject.write(MD_paths["step_xtc_path"])
-
-        # Close zip file
-        zipObject.close()
-
-        prop = { 'concatenate': True }
-
-        # Concatenate
-        trjcat(input_trj_zip_path=MD_paths["zip_path"],
-                output_trj_path=MD_paths["traj_path"],
-                properties=prop)
-
-    else:
-
-        # Change name
-        os.rename(MD_paths["step_xtc_path"], MD_paths["traj_path"])
-
-    # Save checkpoint
-    os.rename(MD_paths["step_cpt_path"], MD_paths["last_cpt_path"])
-
-    # Save GRO file
-    os.rename(MD_paths["step_gro_path"], MD_paths["last_gro_path"])
+    for file in tmp_files:
+        os.remove(file)
 
     return
 
-def remove_tmp_logs(MD_paths):
+def get_tmp_folders(a_dir):
     """
-    Remove temporal log files created by biobb_gromacs
-
-    Inputs
-    ------
-
-    MD_paths   (dict): paths of input and output files of short MD
+    Get all the unique temporal directories created by grompp_mdrun. Exclude the input and output directories
     """
 
-    errLogList = glob(MD_paths["std_err_path"])
-    outLogList = glob(MD_paths["std_out_path"])
+    all_subdirs = [os.path.join(a_dir, name) for name in os.listdir(a_dir) if os.path.isdir(os.path.join(a_dir, name))]
 
-    for path in errLogList:
-        removeFiles(path)
-    
-    for path in outLogList:
-        removeFiles(path)
+    for path in all_subdirs:
 
-    return
+        if (PurePath(path).name == 'input') or (PurePath(path).name == 'output'):
+            all_subdirs.remove(path)
 
+    return all_subdirs
 
 def main_wf(configuration_path, input_structure, topology_path, output_path):
     '''
@@ -439,7 +277,7 @@ def main_wf(configuration_path, input_structure, topology_path, output_path):
                 else:
 
                     # remove previous zip trajectory bundle if it exists
-                    removeFiles(concat_paths["input_trj_zip_path"])
+                    remove_files(concat_paths["input_trj_zip_path"])
 
                     # Create a ZipFile object
                     zipObject = ZipFile(concat_paths["input_trj_zip_path"], 'w')
@@ -465,15 +303,22 @@ def main_wf(configuration_path, input_structure, topology_path, output_path):
         # Increase total counter
         step_counter += 1
 
-        # Remove temporal log files
-        # remove_tmp_logs(MD_paths)
+        # Find generic paths to log.err and log.out files
+        short_MD_stdout_path = os.path.join(continuation_MD_prop["path"], continuation_MD_prop["step"] + "_log*.out")
+        short_MD_stderr_path = os.path.join(continuation_MD_prop["path"], continuation_MD_prop["step"] + "_log*.err")
+        concat_stdout_path = os.path.join(concat_prop["path"], concat_prop["step"] + "_log*.out")
+        concat_stderr_path = os.path.join(concat_prop["path"], concat_prop["step"] + "_log*.err")
 
-        """
-        # log.err and log.out temporal file paths
-        MD_paths.update({"std_err_path" : os.path.join(conf.get_working_dir_path(), "log*.err")})
-        MD_paths.update({"std_out_path" : os.path.join(conf.get_working_dir_path(), "log*.out")})
-        """
-    
+        # Remove temporal log files from grompp_mdrun and trjcat 
+        remove_tmp_files(short_MD_stdout_path, short_MD_stderr_path, concat_stdout_path, concat_stderr_path)
+
+        # Get all temporal unique folders with internal.tpr from grompp_mdrun 
+        tmp_folders = get_tmp_folders(os.getcwd())
+
+        # Move all temporal unique folders with internal.tpr from grompp_mdrun to common folder
+        for tmp_folder in tmp_folders:
+            shutil.move(tmp_folder, os.path.join(os.getcwd(), "tmp"))
+
     # Move final trajectory to output path
     shutil.move(concat_paths["output_trj_path"], output_path)
 
