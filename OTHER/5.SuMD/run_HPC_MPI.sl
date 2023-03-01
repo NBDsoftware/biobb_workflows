@@ -35,5 +35,5 @@ INPUT_FOLDER=./input
 STRUCTURE=$INPUT_FOLDER/complex.gro
 TOPOLOGY=$INPUT_FOLDER/topology.zip
 
-/home/pnavarro/.conda/envs/biobb_sumd/bin/python biobb_SuMD.py -input $STRUCTURE -topology $TOPOLOGY -config input_HPC.yml 
+/home/pnavarro/.conda/envs/biobb_sumd/bin/python biobb_SuMD.py -structure $STRUCTURE -topology $TOPOLOGY -config input_HPC.yml 
 

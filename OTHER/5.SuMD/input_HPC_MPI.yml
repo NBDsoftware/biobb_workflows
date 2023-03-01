@@ -13,7 +13,7 @@ sumd:
     threshold: 0.5             # (not implemented yet, will simply stop) Go to unsupervised MD once within threshold of target
   num_steps:
     max_total: 10              # Maximum number of total steps
-    same_conditions: 10        # (not implemented yet) Maximum number of tries for same initial conditions
+    max_failed: 10        # (not implemented yet) Maximum number of tries for same initial conditions
   slope_threshold: 0.5         # Slope threshold in absolute value in nm/ns
 
 # Configuration of short MD simulation

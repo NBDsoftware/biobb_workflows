@@ -10,10 +10,10 @@ sumd:
     group1_selection: 'resname JZ4'     # Group 1 selection, see Atom Selection Language in MDTraj
     group2_selection: 'backbone and (resid 77 or resid 83 or resid 86 to 87 or resid 98 or resid 113 or resid 116 to 117)'   # Group 2 selection
     target: 2                  # Target value of colvar in nm
-    threshold: 0.5             # (not implemented yet, will simply stop) Go to unsupervised MD once within threshold of target
+    threshold: 0.5             # Go to unsupervised MD once within threshold of target
   num_steps:
-    max_total: 10              # Maximum number of total steps
-    same_conditions: 10        # (not implemented yet) Maximum number of tries for same initial conditions
+    max_total: 100              # Maximum number of total steps
+    max_failed: 20             # Maximum number of tries for same initial conditions
   slope_threshold: 0.5         # Slope threshold in absolute value in nm/ns
 
 # Configuration of short MD simulation
@@ -34,18 +34,18 @@ short_MD:
     simulation_type: free
     remove_tmp: True
     mdp:
-      integrator: md           # integrator algorithm
-      dt: 0.002                # time step (ps)
-      nsteps: 500              # total number of time steps
-      ref-t: 300 300           # reference temperature for coupling
-      nstxout: 0               # freq. of .trr trajectory (coordinates) writing in time steps
-      nstxout-compressed: 100  # freq. of .xtc trajectory (coordinates) writing in time steps (the one used to compute the CV)
-      nstvout: 0               # freq. of .trr trajectory (velocities) writing in time steps
-      nstfout: 0               # freq. of .trr trajectory (forces) writing in time steps
+      integrator: md             # integrator algorithm
+      dt: 0.002                  # time step (ps)
+      nsteps: 100000             # total number of time steps
+      ref-t: 300 300             # reference temperature for coupling
+      nstxout: 0                 # freq. of .trr trajectory (coordinates) writing in time steps
+      nstxout-compressed: 10000  # freq. of .xtc trajectory (coordinates) writing in time steps (the one used to compute the CV)
+      nstvout: 0                 # freq. of .trr trajectory (velocities) writing in time steps
+      nstfout: 0                 # freq. of .trr trajectory (forces) writing in time steps
       continuation: 'no'
-      gen-vel: 'yes'           # generate new velocities
-      gen-temp: 300            # temperature for new velocities
-      pbc: xyz                 # Periodic boundary conditions
+      gen-vel: 'yes'            # generate new velocities
+      gen-temp: 300             # temperature for new velocities
+      pbc: xyz                  # Periodic boundary conditions
 
 # Configuration of trajectory concatenation
 

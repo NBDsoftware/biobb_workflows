@@ -1,17 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=sumd
-#SBATCH --nodes=1                 # node count
-#SBATCH --ntasks=2                # total number of tasks across all nodes
-#SBATCH --cpus-per-task=1         # cpu-cores per task (>1 if multi-threaded tasks)
+#SBATCH --job-name=2lwk_SuMD_test
+#SBATCH --ntasks=4                                      # total number of tasks across all nodes
+#SBATCH --nodes=1
+#SBATCH --time=15:00:00
+#SBATCH --mem-per-cpu=1000
 #SBATCH --constraint=gpu
-#SBATCH --mem-per-cpu=2000
-#SBATCH --gres=gpu:1              # number of gpus per node
-#SBATCH --time=00:15:00
+#SBATCH --gres=gpu:1
 #SBATCH --output=report_%j.out
 #SBATCH --error=report_%j.err
-##SBATCH --mail-type=all          # send email when job begins, ends and fails
-##SBATCH --mail-user=user@mail.com
-
 
 # Purge loaded modules
 module purge 
@@ -26,18 +22,21 @@ module load GROMACS/2022.3-intel-2021b-CUDA.11.6.0
 module load slurm/slurm/21.08.6 
 
 # Activate previously created conda environment from environment.yml
-source activate /home/pnavarro/.conda/envs/biobb_sumd
+# source activate /home/pnavarro/.conda/envs/biobb_sumd
 
-#LD_LIBRARY_PATH=/home/pnavarro/.conda/envs/eucanshare_wf1/lib
+# LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/pnavarro/.conda/envs/biobb_sumd/lib
 
-#export LD_LIBRARY_PATH
-#echo $LD_LIBRARY_PATH
+# export LD_LIBRARY_PATH
+
+# export OMP_NUM_THREADS=1
 
 # Launch workflow
 
 INPUT_FOLDER=./input
-STRUCTURE=$INPUT_FOLDER/complex.gro
+STRUCTURE=$INPUT_FOLDER/npt.gro
 TOPOLOGY=$INPUT_FOLDER/topology.zip
+INDEX=$INPUT_FOLDER/index.ndx
 
-/home/pnavarro/.conda/envs/biobb_sumd/bin/python biobb_SuMD.py -input $STRUCTURE -topology $TOPOLOGY -config input_HPC.yml 
+/home/pnavarro/.conda/envs/biobb_sumd/bin/python biobb_SuMD.py -structure $STRUCTURE -topology $TOPOLOGY -index $INDEX -config input_HPC_GPU.yml 
+
 

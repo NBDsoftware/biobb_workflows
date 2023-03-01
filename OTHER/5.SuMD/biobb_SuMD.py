@@ -121,19 +121,27 @@ def remove_tmp_files(*paths):
 
 def get_tmp_folders(a_dir):
     """
-    Get all the unique temporal directories created by grompp_mdrun. Exclude the input and output directories
+    Temporal fix!
+    Get all the unique temporal directories created by grompp_mdrun. Exclude all other directories
     """
 
-    all_subdirs = [os.path.join(a_dir, name) for name in os.listdir(a_dir) if os.path.isdir(os.path.join(a_dir, name))]
+    all_subdirs = [name for name in os.listdir(a_dir) if os.path.isdir(os.path.join(a_dir, name))]
 
-    for path in all_subdirs:
+    paths = []
 
-        if (PurePath(path).name == 'input') or (PurePath(path).name == 'output'):
-            all_subdirs.remove(path)
+    for name in all_subdirs:
+        
+        # Remove all dirs with short names
+        if len(name) < 20:
+            all_subdirs.remove(name)
 
-    return all_subdirs
+        # Convert the rest into paths
+        else:
+            paths.append(os.path.join(a_dir, name))
 
-def main_wf(configuration_path, input_structure, topology_path, output_path):
+    return paths
+
+def main_wf(configuration_path, input_structure, topology_path, index_path, output_path):
     '''
     Main workflow that takes as input the GROMACs topology and structure files together with a certain configuration as global variables to
     perform Supervised Molecular Dynamics. 
@@ -149,6 +157,7 @@ def main_wf(configuration_path, input_structure, topology_path, output_path):
     configuration_path (str): path to YAML configuration file
     input_structure    (str): path to GROMACS structure file (.gro)
     topology_path      (str): path to GROMACS topology file (.zip of .top)
+    index_path         (str): path to GROMACS index file (.ndx)
     output_path        (str): path to output folder
     '''
 
@@ -172,9 +181,14 @@ def main_wf(configuration_path, input_structure, topology_path, output_path):
     # Paths and Properties of short MD (continuation from last accepted state)
     continuation_MD_paths = global_paths['short_MD'].copy()
     continuation_MD_prop = global_prop['short_MD'].copy()
-    continuation_MD_prop['mdp'].update({'continuation' : 'yes'})
-    continuation_MD_prop['mdp'].update({'gen-vel' : 'no'})
+    continuation_MD_prop['mdp']['continuation'] = 'yes'
+    continuation_MD_prop['mdp']['gen-vel'] = 'no'
     _ = continuation_MD_prop['mdp'].pop('gen-temp', None)
+
+    # Add index path to short MD paths if provided
+    if index_path is not None:
+        new_vel_MD_paths['input_ndx_path'] = index_path
+        continuation_MD_paths['input_ndx_path'] = index_path
 
     # Properties and paths of concatenation step 
     concat_prop = global_prop["trajectory_cat"]
@@ -186,8 +200,8 @@ def main_wf(configuration_path, input_structure, topology_path, output_path):
     # Get SuMD properties
     sumd_prop = conf.properties['sumd']
 
+    # Default output path
     if output_path is None:
-        # Default output path
         output_path = conf.get_working_dir_path()
 
     # Create short MD folder
@@ -202,14 +216,14 @@ def main_wf(configuration_path, input_structure, topology_path, output_path):
     shutil.copy(input_structure, continuation_MD_paths["input_gro_path"])
     shutil.copy(topology_path, continuation_MD_paths["input_top_zip_path"])
 
-    # Initialize 'cv within threshold' condition
-    within_threshold = False
-
     # Initialize 'last step accepted' condition
     last_step_accepted = False
 
     # Initialize total step counter 
     step_counter = 0
+
+    # Failed steps counter
+    failed_steps = 0
 
     # Find max number of steps (short MDs) to do
     max_num_steps = sumd_prop['num_steps']['max_total']
@@ -223,13 +237,15 @@ def main_wf(configuration_path, input_structure, topology_path, output_path):
     # Find threshold for the slope fitting CV evolution
     slope_threshold = sumd_prop['slope_threshold']
 
-    # While all conditions True, keep running steps
-    while (step_counter < max_num_steps) and not within_threshold:
+    while (step_counter < max_num_steps):
 
         sumd_log.info('STEP {}'.format(step_counter))
 
-        if last_step_accepted:
-
+        if last_step_accepted or (failed_steps > sumd_prop['num_steps']['max_failed']):
+            
+            if failed_steps > sumd_prop['num_steps']['max_failed']:
+                sumd_log.info('  Maximum number of failed steps reached, running non-supervised MD :(')
+                
             # Continue MD with same velocities 
             sumd_log.info('  Continuation of previous step...')
 
@@ -252,53 +268,65 @@ def main_wf(configuration_path, input_structure, topology_path, output_path):
         # Check if distance to target is smaller than CV threshold
         if abs(cv_mean - cv_target) < cv_threshold:
 
-            sumd_log.info('  CV is within threshold of target! :)')
-
-            within_threshold = True
+            sumd_log.info('  CV is within threshold of target :)')
+            sumd_log.info('  Accepting step')
+            last_step_accepted = True
         
-        # Check if slope is higher than CV slope threshold
+        # Check if slope is larger than CV slope's threshold
         if abs(cv_slope) > slope_threshold:
-
+            
+            # Check if CV is approaching target
             cv_increasing_towards_target = (cv_mean < cv_target) and (cv_slope > 0)
             cv_decreasing_towards_target = (cv_mean > cv_target) and (cv_slope < 0)
 
-            # Accept last step
             if cv_increasing_towards_target or cv_decreasing_towards_target:
-                
-                sumd_log.info('  Accepting step!')
-                
-                # First accepted step
-                if not os.path.exists(concat_paths["output_trj_path"]):
-                    
-                    # Copy short MD trajectory to concatenation folder
-                    shutil.copyfile(continuation_MD_paths["output_xtc_path"], concat_paths["output_trj_path"])
-                
-                # Subsequent accepted steps
-                else:
 
-                    # remove previous zip trajectory bundle if it exists
-                    remove_files(concat_paths["input_trj_zip_path"])
-
-                    # Create a ZipFile object
-                    zipObject = ZipFile(concat_paths["input_trj_zip_path"], 'w')
-
-                    # Add previously concatenated trajectory to zip file
-                    zipObject.write(concat_paths["output_trj_path"])
-
-                    # Add short MD trajectory to zip file
-                    zipObject.write(continuation_MD_paths["output_xtc_path"])
-
-                    # Close zip file
-                    zipObject.close()
-
-                    # Concatenate
-                    trjcat(**concat_paths, properties=concat_prop)
-
-                # Replace last accepted structure and checkpoint
-                shutil.copyfile(continuation_MD_paths["output_gro_path"], continuation_MD_paths["input_gro_path"])
-                shutil.copyfile(continuation_MD_paths["output_cpt_path"], continuation_MD_paths["input_cpt_path"])
-
+                sumd_log.info('  CV is approaching target :)')
+                sumd_log.info('  Accepting step')
                 last_step_accepted = True
+        
+        if last_step_accepted:
+
+            # First accepted step
+            if not os.path.exists(concat_paths["output_trj_path"]):
+                
+                # Copy short MD trajectory to concatenation folder
+                shutil.copyfile(continuation_MD_paths["output_xtc_path"], concat_paths["output_trj_path"])
+            
+            # Subsequent accepted steps
+            else:
+
+                # remove previous zip trajectory bundle if it exists
+                remove_files(concat_paths["input_trj_zip_path"])
+
+                # Create a ZipFile object
+                zipObject = ZipFile(concat_paths["input_trj_zip_path"], 'w')
+
+                # Add previously concatenated trajectory to zip file
+                zipObject.write(concat_paths["output_trj_path"])
+
+                # Add short MD trajectory to zip file
+                zipObject.write(continuation_MD_paths["output_xtc_path"])
+
+                # Close zip file
+                zipObject.close()
+
+                # Concatenate
+                trjcat(**concat_paths, properties=concat_prop)
+
+            # Reset failed steps counter
+            failed_steps = 0
+
+        else:
+
+            # Increase failed steps counter
+            failed_steps += 1
+
+        if last_step_accepted or (failed_steps > sumd_prop['num_steps']['max_failed']):
+            
+            # Replace last accepted structure and checkpoint for new ones
+            shutil.copyfile(continuation_MD_paths["output_gro_path"], continuation_MD_paths["input_gro_path"])
+            shutil.copyfile(continuation_MD_paths["output_cpt_path"], continuation_MD_paths["input_cpt_path"])
 
         # Increase total counter
         step_counter += 1
@@ -333,7 +361,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="Simple clustering, cavity analysis and docking pipeline using BioExcel Building Blocks")
 
-    parser.add_argument('-input', dest='input_path',
+    parser.add_argument('-structure', dest='structure_path',
                         help="Path to input structure (.gro)", 
                         required=True)
 
@@ -344,6 +372,10 @@ if __name__ == '__main__':
     parser.add_argument('-config', dest='config_path',
                         help="Path to configuration file (YAML)", 
                         required=True)
+    
+    parser.add_argument('-index', dest='index_path',
+                        help="Path to index file (.ndx)", 
+                        required=False)
 
     parser.add_argument('-output', dest='output_path',
                         help="Path where results will be dumped (./output by default)", 
@@ -351,12 +383,16 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main_wf(configuration_path = args.config_path, input_structure = args.input_path, topology_path = args.topology_path, output_path = args.output_path)
+    main_wf(configuration_path = args.config_path, input_structure = args.structure_path, topology_path = args.topology_path, index_path = args.index_path, output_path = args.output_path)
 
     # NOTE: test with MPI + GPU - improve performance. Then test with longer simulation times
     
     # NOTE: add limit to the number of failed steps from a given structure -> generate new starting conditions
 
     # NOTE: Add system preparation with AnteChamber / GROMACS and analysis of the trajectory. Recall that MMPBSA needs mol2 file from AnteChamber!!
+
+    # NOTE: one could estimate the CV fluctuations from the first step, and adjust the CV's slope threshold and the output frequency accordingly
+
+    # NOTE: refine the criteria for accepting a step: the slope with a few points is an approximation, we could check if the last value of the CV is closer to the target or not (taking into account the CV fluctuations) 
 
     # github.com/Valdes-Tresanco-MS/gmx_MMPBSA
