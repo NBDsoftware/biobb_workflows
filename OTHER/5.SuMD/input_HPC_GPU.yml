@@ -53,7 +53,7 @@ short_MD:
       lincs-iter: 1                  # accuracy of LINCS
       lincs-order: 4                 # also related to accuracy
       cutoff-scheme: 'Verlet'
-      nstlist: 10        
+      nstlist: 20        
       rlist: 1.4                 # short-range neighborlist cutoff (in nm)
       rcoulomb: 1.4              # short-range electrostatic cutoff (in nm)
       rvdw: 1.4                  # short-range van der Waals cutoff (in nm)
@@ -80,3 +80,18 @@ trajectory_cat:
   properties: 
     concatenate: True
     remove_tmp: True
+
+# Configuration of trajectory imaging 
+
+trajectory_imaging:
+  paths:
+    input_traj_path: dependency/trajectory_cat/output_trj_path
+    input_top_path: dependency/short_MD/output_tpr_path
+    output_traj_path: trajectory_imaged.xtc
+  properties:
+    fit_selection: non-Water_&_!Ion
+    center_selection: non-Water_&_!Ion 
+    output_selection: System
+    pbc: whole
+    fit: rot+trans
+    center: True

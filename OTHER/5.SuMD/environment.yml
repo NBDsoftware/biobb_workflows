@@ -7,4 +7,5 @@ dependencies:
   - mdtraj
   - scipy
   - biobb_gromacs>=3.9.0
+  - biobb_analysis>=3.9.0
   - conda

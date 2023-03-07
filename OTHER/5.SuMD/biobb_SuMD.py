@@ -12,7 +12,6 @@ import numpy as np
 import mdtraj as md
 from glob import glob
 from scipy import stats
-from pathlib import PurePath
 from zipfile import ZipFile
 
 # Import biobb
@@ -20,6 +19,7 @@ from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 from biobb_gromacs.gromacs.trjcat import trjcat
 from biobb_gromacs.gromacs.grompp_mdrun import grompp_mdrun
+from biobb_analysis.gromacs.gmx_image import gmx_image
 
 
 def remove_files(*file_path):
@@ -141,7 +141,21 @@ def get_tmp_folders(a_dir):
 
     return paths
 
-def main_wf(configuration_path, input_structure, topology_path, index_path, output_path):
+def get_tpr_file(paths):
+    """
+    Temporal fix!
+    Finds the internal.tpr file in the temporal directories created by grompp_mdrun
+    Returns the path to that file or None if it does not exist
+    """
+
+    for path in paths:
+        matching_files = glob(os.path.join(path, 'internal.tpr'))
+        if matching_files:
+            return matching_files[0]
+    
+    return None
+
+def main_wf(configuration_path, input_structure, topology_path, index_path):
     '''
     Main workflow that takes as input the GROMACs topology and structure files together with a certain configuration as global variables to
     perform Supervised Molecular Dynamics. 
@@ -158,7 +172,6 @@ def main_wf(configuration_path, input_structure, topology_path, index_path, outp
     input_structure    (str): path to GROMACS structure file (.gro)
     topology_path      (str): path to GROMACS topology file (.zip of .top)
     index_path         (str): path to GROMACS index file (.ndx)
-    output_path        (str): path to output folder
     '''
 
     start_time = time.time()
@@ -185,12 +198,17 @@ def main_wf(configuration_path, input_structure, topology_path, index_path, outp
     continuation_MD_prop['mdp']['gen-vel'] = 'no'
     _ = continuation_MD_prop['mdp'].pop('gen-temp', None)
 
-    # Add index path to short MD paths if provided
+    # Paths and properties of trajectory imaging step
+    traj_imaging_paths = global_paths['trajectory_imaging'].copy()
+    traj_imaging_prop = global_prop['trajectory_imaging'].copy()
+
+    # Add index path to paths if provided
     if index_path is not None:
         new_vel_MD_paths['input_ndx_path'] = index_path
         continuation_MD_paths['input_ndx_path'] = index_path
+        traj_imaging_paths['input_index_path'] = index_path
 
-    # Properties and paths of concatenation step 
+    # Paths and properties of concatenation step 
     concat_prop = global_prop["trajectory_cat"]
     concat_paths = global_paths["trajectory_cat"] 
 
@@ -200,17 +218,17 @@ def main_wf(configuration_path, input_structure, topology_path, index_path, outp
     # Get SuMD properties
     sumd_prop = conf.properties['sumd']
 
-    # Default output path
-    if output_path is None:
-        output_path = conf.get_working_dir_path()
-
-    # Create short MD folder
+    # Create short MD folder -> to copy input structure and topology inside before step execution
     if not os.path.exists(new_vel_MD_prop["path"]):
         os.makedirs(new_vel_MD_prop["path"])
 
-    # Create concatenation folder
+    # Create concatenation folder -> to put Zip file inside before step execution
     if not os.path.exists(concat_prop["path"]):
         os.makedirs(concat_prop["path"])
+
+    # Create gmx imaging folder -> temporal fix 
+    if not os.path.exists(traj_imaging_prop["path"]):
+        os.makedirs(traj_imaging_prop["path"])
     
     # Copy input structure and topology to short MD folder
     shutil.copy(input_structure, continuation_MD_paths["input_gro_path"])
@@ -236,6 +254,9 @@ def main_wf(configuration_path, input_structure, topology_path, index_path, outp
 
     # Find threshold for the slope fitting CV evolution
     slope_threshold = sumd_prop['slope_threshold']
+
+    # Initialize list for temporal folders with tpr files
+    tmp_folders = []
 
     while (step_counter < max_num_steps):
 
@@ -339,16 +360,23 @@ def main_wf(configuration_path, input_structure, topology_path, index_path, outp
 
         # Remove temporal log files from grompp_mdrun and trjcat 
         remove_tmp_files(short_MD_stdout_path, short_MD_stderr_path, concat_stdout_path, concat_stderr_path)
+    
+    # Get all temporal unique folders with internal.tpr from grompp_mdrun 
+    tmp_folders=get_tmp_folders(os.getcwd())
 
-        # Get all temporal unique folders with internal.tpr from grompp_mdrun 
-        tmp_folders = get_tmp_folders(os.getcwd())
+    # Find internal.tpr file 
+    tpr_path = get_tpr_file(tmp_folders)
 
-        # Move all temporal unique folders with internal.tpr from grompp_mdrun to common folder
-        for tmp_folder in tmp_folders:
-            shutil.move(tmp_folder, os.path.join(os.getcwd(), "tmp"))
+    # Copy internal.tpr file to input top path
+    shutil.copy(tpr_path, traj_imaging_paths["input_top_path"])
 
-    # Move final trajectory to output path
-    shutil.move(concat_paths["output_trj_path"], output_path)
+    # Image the trajectory 
+    gmx_image(**traj_imaging_paths, properties=traj_imaging_prop)
+
+    # Move all temporal unique folders with internal.tpr from grompp_mdrun to common folder
+    for tmp_folder in tmp_folders:
+        print(tmp_folder)
+        shutil.move(tmp_folder, os.path.join(os.getcwd(), "tmp"))
 
     # Print timing information to the log file
     elapsed_time = time.time() - start_time
@@ -377,22 +405,12 @@ if __name__ == '__main__':
                         help="Path to index file (.ndx)", 
                         required=False)
 
-    parser.add_argument('-output', dest='output_path',
-                        help="Path where results will be dumped (./output by default)", 
-                        required=False)
-
     args = parser.parse_args()
 
-    main_wf(configuration_path = args.config_path, input_structure = args.structure_path, topology_path = args.topology_path, index_path = args.index_path, output_path = args.output_path)
-
-    # NOTE: test with MPI + GPU - improve performance. Then test with longer simulation times
-    
-    # NOTE: add limit to the number of failed steps from a given structure -> generate new starting conditions
-
-    # NOTE: Add system preparation with AnteChamber / GROMACS and analysis of the trajectory. Recall that MMPBSA needs mol2 file from AnteChamber!!
+    main_wf(configuration_path = args.config_path, input_structure = args.structure_path, topology_path = args.topology_path, index_path = args.index_path)
 
     # NOTE: one could estimate the CV fluctuations from the first step, and adjust the CV's slope threshold and the output frequency accordingly
 
     # NOTE: refine the criteria for accepting a step: the slope with a few points is an approximation, we could check if the last value of the CV is closer to the target or not (taking into account the CV fluctuations) 
 
-    # github.com/Valdes-Tresanco-MS/gmx_MMPBSA
+    # NOTE: analysis, github.com/Valdes-Tresanco-MS/gmx_MMPBSA or SuMD-analyzer
