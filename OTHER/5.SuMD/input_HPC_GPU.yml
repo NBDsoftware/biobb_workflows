@@ -61,7 +61,7 @@ short_MD:
       pme-order: 4               # cubic interpolation
       fourierspacing: 0.16       # grid spacing for FFT
       tcoupl: 'V-rescale'          # modified Berendsen thermostat
-      tc-grps: 'non-Water_&_!Ion Water_and_ions'   # two coupling groups - more accurate
+      tc-grps: 'RNA_and_Ligand Water_and_ions'   # two coupling groups - more accurate
       tau-t: 0.1 0.1             # time constant, in ps
       pcoupl: 'Parrinello-Rahman'  # pressure coupling is on for NPT
       pcoupltype: 'isotropic'      # uniform scaling of box vectors
@@ -81,7 +81,7 @@ trajectory_cat:
     concatenate: True
     remove_tmp: True
 
-# Configuration of trajectory imaging 
+# Configuration of trajectory imaging - treatment of periodic boundary conditions
 
 trajectory_imaging:
   paths:
@@ -89,9 +89,19 @@ trajectory_imaging:
     input_top_path: dependency/short_MD/output_tpr_path
     output_traj_path: trajectory_imaged.xtc
   properties:
-    fit_selection: non-Water_&_!Ion
-    center_selection: non-Water_&_!Ion 
+    center_selection: RNA
     output_selection: System
-    pbc: whole
-    fit: rot+trans
+    pbc: nojump
     center: True
+
+# Configuration of trajectory fitting - alignment of the trajectory (cannot be done during imaging)
+
+trajectory_fitting:
+  paths:
+    input_traj_path: dependency/trajectory_imaging/output_trj_path
+    input_top_path: dependency/short_MD/output_tpr_path
+    output_traj_path: trajectory_imaged_fitted.xtc
+  properties:
+    fit_selection: RNA
+    output_selection: System
+    fit: rot+trans

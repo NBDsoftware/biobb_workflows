@@ -202,11 +202,16 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
     traj_imaging_paths = global_paths['trajectory_imaging'].copy()
     traj_imaging_prop = global_prop['trajectory_imaging'].copy()
 
+    # Paths and properties of trajectory fitting step
+    traj_fitting_paths = global_paths['trajectory_fitting'].copy()
+    traj_fitting_prop = global_prop['trajectory_fitting'].copy()
+
     # Add index path to paths if provided
     if index_path is not None:
         new_vel_MD_paths['input_ndx_path'] = index_path
         continuation_MD_paths['input_ndx_path'] = index_path
         traj_imaging_paths['input_index_path'] = index_path
+        traj_fitting_paths['input_index_path'] = index_path
 
     # Paths and properties of concatenation step 
     concat_prop = global_prop["trajectory_cat"]
@@ -372,6 +377,9 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
 
     # Image the trajectory 
     gmx_image(**traj_imaging_paths, properties=traj_imaging_prop)
+
+    # Fit the trajectory
+    gmx_image(**traj_fitting_paths, properties=traj_fitting_prop)
 
     # Move all temporal unique folders with internal.tpr from grompp_mdrun to common folder
     for tmp_folder in tmp_folders:
