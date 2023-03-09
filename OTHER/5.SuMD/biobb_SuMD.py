@@ -375,7 +375,6 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
 
     # Move all temporal unique folders with internal.tpr from grompp_mdrun to common folder
     for tmp_folder in tmp_folders:
-        print(tmp_folder)
         shutil.move(tmp_folder, os.path.join(os.getcwd(), "tmp"))
 
     # Print timing information to the log file
