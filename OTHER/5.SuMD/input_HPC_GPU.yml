@@ -8,9 +8,9 @@ remove_tmp: True
 sumd:
   colvar:                      # Collective variable definition: distance between COM of group1 and COM of group2
     group1_selection: 'resname MOL'     # Group 1 selection, see Atom Selection Language in MDTraj
-    group2_selection: 'resid 10 to 11 or resid 23 to 24'   # Group 2 selection
-    target: 0.5                  # Target value of colvar in nm
-    threshold: 0.5               # Go to unsupervised MD once within threshold of target
+    group2_selection: 'resid 9 or resid 21 or resid 24'   # Group 2 selection
+    target: 0.3                  # Target value of colvar in nm
+    threshold: 0.2               # Go to unsupervised MD once within threshold of target
   num_steps:
     max_total: 100              # Maximum number of total steps
     max_failed: 20              # Maximum number of tries for same initial conditions
@@ -38,7 +38,7 @@ short_MD:
     mdp:
       integrator: md           # integrator algorithm
       dt: 0.002                # time step (ps)
-      nsteps: 250000           # total number of time steps
+      nsteps: 200000           # total number of time steps
       ref-t: 300 300           # reference temperature for coupling
       nstxout: 0               # freq. of .trr trajectory (coordinates) writing in time steps
       nstxout-compressed: 10000  # freq. of .xtc trajectory (coordinates) writing in time steps (the one used to compute the CV)
@@ -98,7 +98,7 @@ trajectory_imaging:
 
 trajectory_fitting:
   paths:
-    input_traj_path: dependency/trajectory_imaging/output_trj_path
+    input_traj_path: dependency/trajectory_imaging/output_traj_path
     input_top_path: dependency/short_MD/output_tpr_path
     output_traj_path: trajectory_imaged_fitted.xtc
   properties:
