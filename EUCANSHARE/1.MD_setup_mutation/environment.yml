@@ -4,11 +4,12 @@ channels:
   - bioconda
   - salilab
 dependencies:
-  - modeller
+  # - python=3.9
+  # - modeller
+  # - yaml
   - biobb_io>=3.8.0
   - biobb_common>=3.8.1
   - biobb_structure_utils>=3.8.0
   - biobb_model>=3.8.1
   - biobb_gromacs>=3.8.1
   - biobb_analysis>=3.8.0
-  - conda
