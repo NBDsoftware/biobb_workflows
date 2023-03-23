@@ -42,55 +42,6 @@ from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 
 
-def validateStep(*output_paths):
-    '''
-    Check all output files exist and are not empty
-
-    Inputs
-    ------
-
-        *output_paths (str): variable number of paths to output file/s
-
-    Output
-    ------
-
-        validation_result (bool): result of validation
-
-    '''
-
-    # Initialize value
-    validation_result = True
-
-    # Check existence of files
-    for path in output_paths:
-        validation_result = validation_result and os.path.exists(path)
-
-    # Check files are not empty if they exist
-    if (validation_result):
-
-        for path in output_paths:
-            file_not_empty = os.stat(path).st_size > 0
-            validation_result = validation_result and file_not_empty
-
-    return validation_result
-
-
-def removeFiles(*file_path):
-    '''
-    Removes files in '*file_path' if they exist
-
-    Inputs
-    ------
-
-        file_path  (str): variable number of paths to files including filename
-    '''
-    for path in file_path:
-        if os.path.exists(path):
-            os.remove(path)
-
-    return
-
-
 def prep_output_file(input_file_path, output_file_path):
     '''
     Copy input_file_path to output_file_path
@@ -134,7 +85,7 @@ def write_pdb_from_gro(output_pdb_path, input_gro_path):
     )
 
 
-def readJSONSummary(summary_path):
+
 
     '''
     Reads information from structure_check JSON summary, and returns the contents of the JSON
@@ -159,46 +110,6 @@ def readJSONSummary(summary_path):
     pdb_defects_data = json.load(jsonFile)
 
     return pdb_defects_data
-
-
-def findBestAltLocs(altloc_data):
-    '''
-    Finds best alternative location for each residue
-
-    Inputs
-    ------
-
-        altloc_data (dict): dictionary with information regarding altlocs
-    '''
-
-    best_altlocs = []
-
-    for residue in altloc_data.keys():
-
-        res_descriptors = residue.split()
-
-        res_id = res_descriptors[1]
-
-        atomic_data = altloc_data[residue]
-
-        atoms = list(atomic_data.keys())
-
-        occupancy_data = atomic_data[atoms[0]]
-
-        max_occupancy = 0
-        chosen_label = "A"
-
-        for altloc in occupancy_data:
-
-            if altloc["occupancy"] > max_occupancy:
-
-                max_occupancy = altloc["occupancy"]
-                chosen_label = altloc["loc_label"]
-
-        best_altlocs.append(res_id + ":" + chosen_label)
-
-    return best_altlocs
-
 
 def concatenateTrajs(num_trajs, paths_image_traj, props_image_traj, paths_trjcat, props_trjcat):
     '''
@@ -308,7 +219,7 @@ def addFolderToPaths(all_paths, new_folder, *keywords):
     return all_paths
 
 
-def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
+def main_wf(configuration_path, last_step, mutation_list, num_trajs):
     '''
     Main MD Setup, mutation and run workflow. Can be used to retrieve a PDB, fix some defects of the structure,
     add specific mutations, prepare the system to simulate, minimize it, equilibrate it and finally do N production runs.
@@ -355,646 +266,479 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
 
-    # Declaring the steps of the workflow, one by one
-    # Using as inputs the global paths and global properties
-    # identified by the corresponding step name
-    # Writing information about each step to the global log
-
-# STEP 1 (A): Source PDB file
-
-    # Properties and paths of step
-    props_pdb = global_prop["step1A_pdb"]
-    paths_pdb = global_paths["step1A_pdb"]
-
-    # Initial value for PDB code - change it if user gives PDB code
-    pdbCode = None
-
-    if 'pdb:' in input_pdb:
-
-        # If the user gives the pdb ID as 'pdb:id' -> download PDB
-
-        # Just the id from 'pdb:id'
-        pdbCode = input_pdb.split(':')[1]
-
-        # Update properties dictionary
-        props_pdb.update({'pdb_code': pdbCode})
-
-        # Write action to global log and execute step
-        global_log.info("step1A_pdb: Downloading {} from PDB".format(pdbCode))
-        pdb(**paths_pdb, properties=props_pdb)
-
-    else:
-        # If the user gives the pdb file -> just copy to step folder
-
-        # Write action to global log and execute step
-        global_log.info("step1A_pdb: Adding input PDB ({}) to working dir".format(input_pdb))
-        prep_output_file(input_pdb, paths_pdb["output_pdb_path"])
-
-        # Search for pdb code in input.yml
-        if props_pdb['pdb_code']:
-            pdbCode = props_pdb['pdb_code']
-
-    # Validate step
-    if not validateStep(paths_pdb["output_pdb_path"]):
-        global_log.info("    ERROR: No PDB file was fetched. Check PDB code or input file")
-        return global_paths, global_prop
-
-# STEP 1 (B): extracts molecule of interest: protein
-
-    # Properties and paths of step
-    props_extract = global_prop["step1B_extractMolecule"]
-    paths_extract = global_paths["step1B_extractMolecule"]
-
-    # Write action to global log and execute step
-    global_log.info("step1B_extractMolecule: extract molecule of interest (protein)")
-    print(paths_extract)
-    extract_molecule(**paths_extract, properties=props_extract)
-
-    # Validate step
-    if not validateStep(paths_extract["output_molecule_path"]):
-        global_log.info("    ERROR: Extraction of molecule failed.")
-        return global_paths, global_prop
-
-    # Properties and paths of step
-    props_structureChk = global_prop["step1C_structure_check"]
-    paths_structureChk = global_paths["step1C_structure_check"]
-
-    # Write action to global log and execute step
-    global_log.info("step1C_structure_check: Checking the errors of the PDB structure and creating a JSON summary")
-    structure_check(**paths_structureChk, properties=props_structureChk)
-
-    # Read JSON summary and save it on dictionary
-    pdb_defects_data = readJSONSummary(paths_structureChk["output_summary_path"])
-
-    # Check if this should be the final step
-    if last_step == 'pdb':
-        global_log.info("Molecule extraction completed. Final structure saved on " + paths_extract["output_molecule_path"])
-        return paths_extract["output_molecule_path"], None
+# STEP 1: extracts molecule of interest: protein
+    global_log.info("step1_extractMolecule: extract molecule of interest (protein)")
+    extract_molecule(**global_paths["step1_extractMolecule"], properties=global_prop["step1_extractMolecule"])
 
 # STEP 2 (A): Fix alternative locations
-
-    # Properties and paths of step
-    props_altloc = global_prop["step2A_fixaltlocs"]
-    paths_altloc = global_paths["step2A_fixaltlocs"]
-
-    if pdb_defects_data["altloc"]:
-
-        # Find best alternative locations
-        best_altlocs = findBestAltLocs(pdb_defects_data["altloc"])
-
-        # Update properties dictionary
-        props_altloc.update({'altlocs': best_altlocs})
-
-        # Write action to global log and execute step
-        global_log.info("step2A_fixaltlocs: Fix alternative locations")
-        fix_altlocs(**paths_altloc, properties=props_altloc)
-
-    else:
-        # Just copy pdb to step folder
-        prep_output_file(paths_extract["output_molecule_path"], paths_altloc["output_pdb_path"])
-
-    # Validate step
-    if not validateStep(paths_altloc["output_pdb_path"]):
-        global_log.info("    ERROR: fixing alternative locations failed.")
-        return global_paths, global_prop
+    global_log.info("step2A_fixaltlocs: Fix alternative locations")
+    fix_altlocs(**global_paths["step2A_fixaltlocs"], properties=global_prop["step2A_fixaltlocs"])
 
 # STEP 2 (B): Add mutations if requested
+    global_log.info("step2B_mutations: Preparing mutated structure")
+    mutate(**global_paths["step2B_mutations"], properties=global_prop["step2B_mutations"])
 
-    # Properties and paths of step
-    props_mut = global_prop["step2B_mutations"]
-    paths_mut = global_paths["step2B_mutations"]
+# # STEP 2 (C): Get canonical FASTA 
+#     global_log.info("step2C_canonical_fasta: Get canonical FASTA")
+#     canonical_fasta(**global_paths["step2C_canonical_fasta"], properties=global_prop["step2C_canonical_fasta"])
 
-    if mutation_list:
+# # STEP 2 (D): Model missing heavy atoms of backbone 
+#     global_log.info("step2D_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
+#     fix_backbone(**global_paths["step2D_fixbackbone"], properties=global_prop["step2D_fixbackbone"])
 
-        # Update properties dictionary
-        props_mut.update({'mutation_list': mutation_list})
-
-        # Write action to global log and execute step
-        global_log.info("step2B_mutations: Preparing mutated structure")
-        mutate(**paths_mut, properties=props_mut)
-
-    else:
-        # Just copy pdb to step folder
-        prep_output_file(paths_altloc["output_pdb_path"], paths_mut["output_pdb_path"])
-
-    # Validate step
-    if not validateStep(paths_mut["output_pdb_path"]):
-        global_log.info("    ERROR: mutation failed.")
-        return global_paths, global_prop
-
-# STEP 2 (C-D): model missing heavy atoms of backbone NOTE: if break is long only caps, How?
-
-    # Properties and paths of step
-    props_fxBCK = global_prop["step2D_fixbackbone"]
-    paths_fxBCK = global_paths["step2D_fixbackbone"]
-
-    # Missing bck heavy atoms + known PDB code -> Model
-    if pdb_defects_data["backbone"] and pdbCode is not None:
-
-        # Properties and paths of step
-        props_fasta = global_prop["step2C_canonical_fasta"]
-        paths_fasta = global_paths["step2C_canonical_fasta"]
-
-        # Update properties
-        props_fasta.update({'pdb_code': pdbCode})
-
-        # Use PDB code to find canonical FASTA
-        canonical_fasta(**paths_fasta, properties=props_fasta)
-
-        # Write action to global log and execute step
-        global_log.info("step2C_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
-        fix_backbone(**paths_fxBCK, properties=props_fxBCK)
-
-    # Missing bck heavy atoms + no PDB code -> No Model + Warning
-    elif pdb_defects_data["backbone"] and pdbCode is None:
-
-        # Write warning to global log
-        global_log.info("    WARNING: Missing backbone atoms or breaks but PDB code not provided. Skipping fixbackbone step...")
-
-        # Just copy pdb to step folder
-        prep_output_file(paths_mut["output_pdb_path"], paths_fxBCK["output_pdb_path"])
-
-    # No missing bck heavy atoms -> No Model
-    # else:
-
-    #     # Just copy pdb to step folder
-    #     prep_output_file(paths_renum["output_structure_path"], paths_fxBCK["output_pdb_path"])
-
-    # Validate step
-    if not validateStep(paths_fxBCK["output_pdb_path"]):
-        global_log.info("    ERROR: Fixing backbone failed. Check input PDB")
-        return global_paths, global_prop
 
 # STEP 2 (E): model missing heavy atoms of side chains
+    global_log.info("step2E_fixsidechain: Modeling the missing heavy atoms in the structure side chains")
+    fix_side_chain(**global_paths["step2E_fixsidechain"], properties=global_prop["step2E_fixsidechain"])
 
-    # Properties and paths of step
-    props_fxSC = global_prop["step2E_fixsidechain"]
-    paths_fxSC = global_paths["step2E_fixsidechain"]
 
-    # Check if there are missing side chain heavy atoms
-    if pdb_defects_data["fixside"]:
+# # STEP 2 (F): model SS bonds (CYS -> CYX) if necessary
 
-        # Write action to global log and execute step
-        global_log.info("step2E_fixsidechain: Modeling the missing heavy atoms in the structure side chains")
-        fix_side_chain(**paths_fxSC, properties=props_fxSC)
+#     # Properties and paths of step
+#     props_ss = global_prop["step2F_fixssbonds"]
+#     paths_ss = global_paths["step2F_fixssbonds"]
 
-    else:
+#     # Check if there are SS bonds
+#     if pdb_defects_data["getss"]:
 
-        # Just copy pdb to step folder
-        prep_output_file(paths_fxBCK["output_pdb_path"], paths_fxSC["output_pdb_path"])
+#         # Write action to global log and execute step
+#         global_log.info("step2F_fixssbonds: Fix SS bonds")
+#         fix_ssbonds(**paths_ss, properties=props_ss)
 
-    # Validate step
-    if not validateStep(paths_fxSC["output_pdb_path"]):
-        global_log.info("    ERROR: Fixing side chains failed. Check input PDB")
-        return global_paths, global_prop
+#     else:
 
-# STEP 2 (F): model SS bonds (CYS -> CYX) if necessary
+#         # Just copy pdb to step folder
+#         prep_output_file(paths_fxSC["output_pdb_path"], paths_ss["output_pdb_path"])
 
-    # Properties and paths of step
-    props_ss = global_prop["step2F_fixssbonds"]
-    paths_ss = global_paths["step2F_fixssbonds"]
+#     # Validate step
+#     if not validateStep(paths_ss["output_pdb_path"]):
+#         global_log.info("    ERROR: Fixing SS bonds failed.")
+#         return global_paths, global_prop
 
-    # Check if there are SS bonds
-    if pdb_defects_data["getss"]:
+# # STEP 2 (G): Fix amides
 
-        # Write action to global log and execute step
-        global_log.info("step2F_fixssbonds: Fix SS bonds")
-        fix_ssbonds(**paths_ss, properties=props_ss)
+#     # Properties and paths of step
+#     props_famds = global_prop["step2G_fixamides"]
+#     paths_famds = global_paths["step2G_fixamides"]
 
-    else:
+#     if pdb_defects_data["amide"]:
 
-        # Just copy pdb to step folder
-        prep_output_file(paths_fxSC["output_pdb_path"], paths_ss["output_pdb_path"])
+#         # Write action to global log and execute step
+#         global_log.info("step2G_fixamides: fix clashing amides")
+#         fix_amides(**paths_famds, properties=props_famds)
 
-    # Validate step
-    if not validateStep(paths_ss["output_pdb_path"]):
-        global_log.info("    ERROR: Fixing SS bonds failed.")
-        return global_paths, global_prop
+#     else:
 
-# STEP 2 (G): Fix amides
+#         # Just copy pdb to step folder
+#         prep_output_file(paths_ss["output_structure_path"], paths_famds["output_pdb_path"])
 
-    # Properties and paths of step
-    props_famds = global_prop["step2G_fixamides"]
-    paths_famds = global_paths["step2G_fixamides"]
+#     # Validate step
+#     if not validateStep(paths_famds["output_pdb_path"]):
+#         global_log.info("    ERROR: ERROR while fixing clashing amides")
+#         return global_paths, global_prop
 
-    if pdb_defects_data["amide"]:
+# # STEP 2 (H): Fix chirality
 
-        # Write action to global log and execute step
-        global_log.info("step2G_fixamides: fix clashing amides")
-        fix_amides(**paths_famds, properties=props_famds)
+#     # Properties and paths of step
+#     props_fchir = global_prop["step2H_fixchirality"]
+#     paths_fchir = global_paths["step2H_fixchirality"]
 
-    else:
+#     # NOTE: this is not the same as chirality problems... read from log file?
+#     if pdb_defects_data["chiral"] or pdb_defects_data["chiral_bck"]:
 
-        # Just copy pdb to step folder
-        prep_output_file(paths_ss["output_structure_path"], paths_famds["output_pdb_path"])
+#         # Write action to global log and execute step
+#         global_log.info("step2H_fixchirality: fix chirality of residues")
+#         fix_chirality(**paths_fchir, properties=props_fchir)
 
-    # Validate step
-    if not validateStep(paths_famds["output_pdb_path"]):
-        global_log.info("    ERROR: ERROR while fixing clashing amides")
-        return global_paths, global_prop
+#     else:
+#         # Just copy pdb to step folder
+#         prep_output_file(paths_famds["output_pdb_path"], paths_fchir["output_pdb_path"])
 
-# STEP 2 (H): Fix chirality
+#     # Validate step
+#     if not validateStep(paths_fchir["output_pdb_path"]):
+#         global_log.info("    ERROR: ERROR while fixing chirality of residues")
+#         return global_paths, global_prop
 
-    # Properties and paths of step
-    props_fchir = global_prop["step2H_fixchirality"]
-    paths_fchir = global_paths["step2H_fixchirality"]
+# # STEP 2 (H): renumber structure atoms and residues
 
-    # NOTE: this is not the same as chirality problems... read from log file?
-    if pdb_defects_data["chiral"] or pdb_defects_data["chiral_bck"]:
+#     # Properties and paths of step
+#     props_renum = global_prop["step2I_renumberstructure"]
+#     paths_renum = global_paths["step2I_renumberstructure"]
 
-        # Write action to global log and execute step
-        global_log.info("step2H_fixchirality: fix chirality of residues")
-        fix_chirality(**paths_fchir, properties=props_fchir)
+#     # Write action to global log and execute step
+#     global_log.info("step2I_renumberstructure: renumber structure")
+#     renumber_structure(**paths_renum, properties=props_renum)
 
-    else:
-        # Just copy pdb to step folder
-        prep_output_file(paths_famds["output_pdb_path"], paths_fchir["output_pdb_path"])
+#     # Validate step
+#     if not validateStep(paths_renum["output_structure_path"]):
+#         global_log.info("    ERROR: ERROR while renumbering structure")
+#         return global_paths, global_prop
 
-    # Validate step
-    if not validateStep(paths_fchir["output_pdb_path"]):
-        global_log.info("    ERROR: ERROR while fixing chirality of residues")
-        return global_paths, global_prop
+# # STEP 2 (I): Final check of the PDB structure and creation of a report for the user
 
-# STEP 2 (H): renumber structure atoms and residues
+#     # Properties and paths of step
+#     props_check = global_prop["step2J_checkPDB"]
+#     paths_check = global_paths["step2J_checkPDB"]
+#     Path(paths_check["output_log_path"]).parent.mkdir(parents=True, exist_ok=True)
 
-    # Properties and paths of step
-    props_renum = global_prop["step2I_renumberstructure"]
-    paths_renum = global_paths["step2I_renumberstructure"]
+#     # Write action to global log and execute step
+#     global_log.info("step2J_checkPDB: check the errors of a PDB structure and create a report log file")
+#     checking_log(**paths_check, properties=props_check)
 
-    # Write action to global log and execute step
-    global_log.info("step2I_renumberstructure: renumber structure")
-    renumber_structure(**paths_renum, properties=props_renum)
+#     # Check if this should be the final step
+#     if last_step == 'fix':
+#         global_log.info("Fix completed. Final structure saved on " + paths_renum["output_structure_path"])
+#         return paths_renum["output_structure_path"], None
 
-    # Validate step
-    if not validateStep(paths_renum["output_structure_path"]):
-        global_log.info("    ERROR: ERROR while renumbering structure")
-        return global_paths, global_prop
+# # STEP 3: add H atoms, generate coordinate (.gro) and topology (.top) file
 
-# STEP 2 (I): Final check of the PDB structure and creation of a report for the user
+#     # Properties and paths of step
+#     props = global_prop["step3_pdb2gmx"]
+#     paths = global_paths["step3_pdb2gmx"]
 
-    # Properties and paths of step
-    props_check = global_prop["step2J_checkPDB"]
-    paths_check = global_paths["step2J_checkPDB"]
-    Path(paths_check["output_log_path"]).parent.mkdir(parents=True, exist_ok=True)
+#     # Write action to global log and execute step
+#     global_log.info("step3_pdb2gmx: Generate the topology")
+#     pdb2gmx(**paths, properties=props)
 
-    # Write action to global log and execute step
-    global_log.info("step2J_checkPDB: check the errors of a PDB structure and create a report log file")
-    checking_log(**paths_check, properties=props_check)
+#     # Validate step
+#     if not validateStep(paths["output_gro_path"], paths["output_top_zip_path"]):
+#         global_log.info("    ERROR: Coordinates and/or topology were not generated. Check input PDB")
+#         return global_paths, global_prop
 
-    # Check if this should be the final step
-    if last_step == 'fix':
-        global_log.info("Fix completed. Final structure saved on " + paths_renum["output_structure_path"])
-        return paths_renum["output_structure_path"], None
+# # STEP 4: Create simulation box
 
-# STEP 3: add H atoms, generate coordinate (.gro) and topology (.top) file
+#     # Properties and paths of step
+#     props = global_prop["step4_editconf"]
+#     paths = global_paths["step4_editconf"]
+#     Path(paths["output_gro_path"]).parent.mkdir(parents=True, exist_ok=True)
 
-    # Properties and paths of step
-    props = global_prop["step3_pdb2gmx"]
-    paths = global_paths["step3_pdb2gmx"]
+#     # Write action to global log and execute step
+#     global_log.info("step4_editconf: Create the solvent box")
+#     editconf(**paths, properties=props)
 
-    # Write action to global log and execute step
-    global_log.info("step3_pdb2gmx: Generate the topology")
-    pdb2gmx(**paths, properties=props)
-
-    # Validate step
-    if not validateStep(paths["output_gro_path"], paths["output_top_zip_path"]):
-        global_log.info("    ERROR: Coordinates and/or topology were not generated. Check input PDB")
-        return global_paths, global_prop
+#     # Validate step
+#     if not validateStep(paths["output_gro_path"]):
+#         global_log.info("    ERROR: Simulation box not created. Check properties of step")
+#         return global_paths, global_prop
 
-# STEP 4: Create simulation box
+# # STEP 5: Add solvent molecules
 
-    # Properties and paths of step
-    props = global_prop["step4_editconf"]
-    paths = global_paths["step4_editconf"]
-    Path(paths["output_gro_path"]).parent.mkdir(parents=True, exist_ok=True)
+#     # Properties and paths of step
+#     props = global_prop["step5_solvate"]
+#     paths = global_paths["step5_solvate"]
 
-    # Write action to global log and execute step
-    global_log.info("step4_editconf: Create the solvent box")
-    editconf(**paths, properties=props)
+#     # Write next action to global log and execute step
+#     global_log.info("step5_solvate: Fill the solvent box with water molecules")
+#     solvate(**paths, properties=props)
 
-    # Validate step
-    if not validateStep(paths["output_gro_path"]):
-        global_log.info("    ERROR: Simulation box not created. Check properties of step")
-        return global_paths, global_prop
+#     # Validate step
+#     if not validateStep(paths["output_gro_path"], paths["output_top_zip_path"]):
+#         global_log.info("    ERROR: solvate failed to add solvent molecules.")
+#         return global_paths, global_prop
 
-# STEP 5: Add solvent molecules
+# # STEP 6: ion generation pre-processing
 
-    # Properties and paths of step
-    props = global_prop["step5_solvate"]
-    paths = global_paths["step5_solvate"]
+#     # Properties and paths of step
+#     props = global_prop["step6_grompp_genion"]
+#     paths = global_paths["step6_grompp_genion"]
+#     Path(paths["output_tpr_path"]).parent.mkdir(parents=True, exist_ok=True)
 
-    # Write next action to global log and execute step
-    global_log.info("step5_solvate: Fill the solvent box with water molecules")
-    solvate(**paths, properties=props)
+#     # Write next action to global log and execute step
+#     global_log.info("step6_grompp_genion: Preprocess ion generation")
+#     grompp(**paths, properties=props)
 
-    # Validate step
-    if not validateStep(paths["output_gro_path"], paths["output_top_zip_path"]):
-        global_log.info("    ERROR: solvate failed to add solvent molecules.")
-        return global_paths, global_prop
+#     # Validate step
+#     if not validateStep(paths["output_tpr_path"]):
+#         global_log.info("    ERROR: grompp didn't generate the tpr file")
+#         return global_paths, global_prop
 
-# STEP 6: ion generation pre-processing
+# # STEP 7: ion generation
 
-    # Properties and paths of step
-    props = global_prop["step6_grompp_genion"]
-    paths = global_paths["step6_grompp_genion"]
-    Path(paths["output_tpr_path"]).parent.mkdir(parents=True, exist_ok=True)
+#     # Properties and paths of step
+#     props = global_prop["step7_genion"]
+#     paths = global_paths["step7_genion"]
+#     Path(paths["output_gro_path"]).parent.mkdir(parents=True, exist_ok=True)
 
-    # Write next action to global log and execute step
-    global_log.info("step6_grompp_genion: Preprocess ion generation")
-    grompp(**paths, properties=props)
+#     # Write next action to global log and execute step
+#     global_log.info("step7_genion: Ion generation")
+#     genion(**paths, properties=props)
 
-    # Validate step
-    if not validateStep(paths["output_tpr_path"]):
-        global_log.info("    ERROR: grompp didn't generate the tpr file")
-        return global_paths, global_prop
+#     # Validate step
+#     if not validateStep(paths["output_gro_path"], paths["output_top_zip_path"]):
+#         global_log.info("    ERROR: genion didn't generate output files")
+#         return global_paths, global_prop
 
-# STEP 7: ion generation
+# # STEP 8: minimization pre-processing
 
-    # Properties and paths of step
-    props = global_prop["step7_genion"]
-    paths = global_paths["step7_genion"]
-    Path(paths["output_gro_path"]).parent.mkdir(parents=True, exist_ok=True)
+#     # Properties and paths of step
+#     props = global_prop["step8_grompp_min"]
+#     paths = global_paths["step8_grompp_min"]
+#     Path(paths["output_tpr_path"]).parent.mkdir(parents=True, exist_ok=True)
 
-    # Write next action to global log and execute step
-    global_log.info("step7_genion: Ion generation")
-    genion(**paths, properties=props)
+#     # Write next action to global log and execute step
+#     global_log.info("step8_grompp_min: Preprocess energy minimization")
+#     grompp(**paths, properties=props)
 
-    # Validate step
-    if not validateStep(paths["output_gro_path"], paths["output_top_zip_path"]):
-        global_log.info("    ERROR: genion didn't generate output files")
-        return global_paths, global_prop
+#     # Validate step
+#     if not validateStep(paths["output_tpr_path"]):
+#         global_log.info("    ERROR: grompp didn't generate the tpr file")
+#         return global_paths, global_prop
 
-# STEP 8: minimization pre-processing
+# # STEP 9: minimization
 
-    # Properties and paths of step
-    props = global_prop["step8_grompp_min"]
-    paths = global_paths["step8_grompp_min"]
-    Path(paths["output_tpr_path"]).parent.mkdir(parents=True, exist_ok=True)
+#     # Properties and paths of step
+#     props = global_prop["step9_mdrun_min"]
+#     paths = global_paths["step9_mdrun_min"]
+#     Path(paths["output_gro_path"]).parent.mkdir(parents=True, exist_ok=True)
 
-    # Write next action to global log and execute step
-    global_log.info("step8_grompp_min: Preprocess energy minimization")
-    grompp(**paths, properties=props)
+#     # Write next action to global log and execute step
+#     global_log.info("step9_mdrun_min: Execute energy minimization")
+#     mdrun(**paths, properties=props)
 
-    # Validate step
-    if not validateStep(paths["output_tpr_path"]):
-        global_log.info("    ERROR: grompp didn't generate the tpr file")
-        return global_paths, global_prop
+#     # Validate step
+#     if not validateStep(paths["output_gro_path"]):
+#         global_log.info("    ERROR: output .gro file was not generated")
+#         return global_paths, global_prop
 
-# STEP 9: minimization
+# # STEP 10: dump potential energy evolution NOTE: create plots automatically
 
-    # Properties and paths of step
-    props = global_prop["step9_mdrun_min"]
-    paths = global_paths["step9_mdrun_min"]
-    Path(paths["output_gro_path"]).parent.mkdir(parents=True, exist_ok=True)
+#     # Write next action to global log and execute step
+#     global_log.info("step10_energy_min: Compute potential energy during minimization")
+#     gmx_energy(**global_paths["step10_energy_min"], properties=global_prop["step10_energy_min"])
 
-    # Write next action to global log and execute step
-    global_log.info("step9_mdrun_min: Execute energy minimization")
-    mdrun(**paths, properties=props)
+#     # Check if this should be the final step
+#     if last_step == 'min':
+#         global_log.info("Minimization completed. Final structure saved on " + paths["output_gro_path"])
+#         return paths["output_gro_path"], None
 
-    # Validate step
-    if not validateStep(paths["output_gro_path"]):
-        global_log.info("    ERROR: output .gro file was not generated")
-        return global_paths, global_prop
+# # STEP 11: NVT equilibration pre-processing
 
-# STEP 10: dump potential energy evolution NOTE: create plots automatically
+#     # Properties and paths of step
+#     props = global_prop["step11_grompp_nvt"]
+#     paths = global_paths["step11_grompp_nvt"]
 
-    # Write next action to global log and execute step
-    global_log.info("step10_energy_min: Compute potential energy during minimization")
-    gmx_energy(**global_paths["step10_energy_min"], properties=global_prop["step10_energy_min"])
+#     # Write next action to global log and execute step
+#     global_log.info("step11_grompp_nvt: Preprocess system temperature equilibration")
+#     grompp(**paths, properties=props)
 
-    # Check if this should be the final step
-    if last_step == 'min':
-        global_log.info("Minimization completed. Final structure saved on " + paths["output_gro_path"])
-        return paths["output_gro_path"], None
+#     # Validate step
+#     if not validateStep(paths["output_tpr_path"]):
+#         global_log.info("    ERROR: grompp didn't generate the tpr file")
+#         return global_paths, global_prop
 
-# STEP 11: NVT equilibration pre-processing
+# # STEP 12: NVT equilibration
 
-    # Properties and paths of step
-    props = global_prop["step11_grompp_nvt"]
-    paths = global_paths["step11_grompp_nvt"]
+#     # Properties and paths of step
+#     props = global_prop["step12_mdrun_nvt"]
+#     paths = global_paths["step12_mdrun_nvt"]
 
-    # Write next action to global log and execute step
-    global_log.info("step11_grompp_nvt: Preprocess system temperature equilibration")
-    grompp(**paths, properties=props)
+#     # Write next action to global log and execute step
+#     global_log.info("step12_mdrun_nvt: Execute system temperature equilibration")
+#     mdrun(**paths, properties=props)
 
-    # Validate step
-    if not validateStep(paths["output_tpr_path"]):
-        global_log.info("    ERROR: grompp didn't generate the tpr file")
-        return global_paths, global_prop
+#     # Validate step
+#     if not validateStep(paths["output_gro_path"]):
+#         global_log.info("    ERROR: output .gro file was not generated")
+#         return global_paths, global_prop
 
-# STEP 12: NVT equilibration
+# # STEP 13: dump temperature evolution
 
-    # Properties and paths of step
-    props = global_prop["step12_mdrun_nvt"]
-    paths = global_paths["step12_mdrun_nvt"]
+#     # Write next action to global log and execute step
+#     global_log.info("step13_energy_nvt: Compute temperature during NVT equilibration")
+#     gmx_energy(**global_paths["step13_energy_nvt"], properties=global_prop["step13_energy_nvt"])
 
-    # Write next action to global log and execute step
-    global_log.info("step12_mdrun_nvt: Execute system temperature equilibration")
-    mdrun(**paths, properties=props)
+#     # Check if this should be the final step
+#     if last_step == 'nvt':
+#         global_log.info("NVT Equilibration completed. Final structure saved on " + paths["output_gro_path"])
+#         return paths["output_gro_path"], None
 
-    # Validate step
-    if not validateStep(paths["output_gro_path"]):
-        global_log.info("    ERROR: output .gro file was not generated")
-        return global_paths, global_prop
+# # STEP 14: NPT equilibration pre-processing
 
-# STEP 13: dump temperature evolution
+#     # Properties and paths of step
+#     props = global_prop["step14_grompp_npt"]
+#     paths = global_paths["step14_grompp_npt"]
 
-    # Write next action to global log and execute step
-    global_log.info("step13_energy_nvt: Compute temperature during NVT equilibration")
-    gmx_energy(**global_paths["step13_energy_nvt"], properties=global_prop["step13_energy_nvt"])
+#     # Write next action to global log and execute step
+#     global_log.info("step14_grompp_npt: Preprocess system pressure equilibration")
+#     grompp(**paths, properties=props)
 
-    # Check if this should be the final step
-    if last_step == 'nvt':
-        global_log.info("NVT Equilibration completed. Final structure saved on " + paths["output_gro_path"])
-        return paths["output_gro_path"], None
+#     # Validate step
+#     if not validateStep(paths["output_tpr_path"]):
+#         global_log.info("    ERROR: grompp didn't generate the tpr file")
+#         return global_paths, global_prop
 
-# STEP 14: NPT equilibration pre-processing
+# # STEP 15: NPT equilibration
 
-    # Properties and paths of step
-    props = global_prop["step14_grompp_npt"]
-    paths = global_paths["step14_grompp_npt"]
+#     # Properties and paths of step
+#     props = global_prop["step15_mdrun_npt"]
+#     paths = global_paths["step15_mdrun_npt"]
 
-    # Write next action to global log and execute step
-    global_log.info("step14_grompp_npt: Preprocess system pressure equilibration")
-    grompp(**paths, properties=props)
+#     # Write next action to global log and execute step
+#     global_log.info("step15_mdrun_npt: Execute system pressure equilibration")
+#     mdrun(**paths, properties=props)
 
-    # Validate step
-    if not validateStep(paths["output_tpr_path"]):
-        global_log.info("    ERROR: grompp didn't generate the tpr file")
-        return global_paths, global_prop
+#     # Validate step
+#     if not validateStep(paths["output_gro_path"]):
+#         global_log.info("    ERROR: output .gro file was not generated")
+#         return global_paths, global_prop
 
-# STEP 15: NPT equilibration
+# # STEP 16: dump density and pressure evolution
 
-    # Properties and paths of step
-    props = global_prop["step15_mdrun_npt"]
-    paths = global_paths["step15_mdrun_npt"]
+#     # Write next action to global log and execute step
+#     global_log.info("step16_energy_npt: Compute Density & Pressure during NPT equilibration")
+#     gmx_energy(**global_paths["step16_energy_npt"], properties=global_prop["step16_energy_npt"])
 
-    # Write next action to global log and execute step
-    global_log.info("step15_mdrun_npt: Execute system pressure equilibration")
-    mdrun(**paths, properties=props)
+#     # Check if this should be the final step
+#     if last_step == 'npt':
+#         global_log.info("NPT Equilibration completed. Final structure saved on " + paths["output_gro_path"])
+#         return paths["output_gro_path"], None
 
-    # Validate step
-    if not validateStep(paths["output_gro_path"]):
-        global_log.info("    ERROR: output .gro file was not generated")
-        return global_paths, global_prop
+# # STEP 17: free NPT production run pre-processing
 
-# STEP 16: dump density and pressure evolution
+#     # Properties and paths of step
+#     props = global_prop["step17_grompp_md"]
+#     paths = global_paths["step17_grompp_md"]
 
-    # Write next action to global log and execute step
-    global_log.info("step16_energy_npt: Compute Density & Pressure during NPT equilibration")
-    gmx_energy(**global_paths["step16_energy_npt"], properties=global_prop["step16_energy_npt"])
+#     # Write next action to global log and execute step
+#     global_log.info("step17_grompp_md: Preprocess free dynamics")
+#     grompp(**paths, properties=props)
 
-    # Check if this should be the final step
-    if last_step == 'npt':
-        global_log.info("NPT Equilibration completed. Final structure saved on " + paths["output_gro_path"])
-        return paths["output_gro_path"], None
+#     # Validate step
+#     if not validateStep(paths["output_tpr_path"]):
+#         global_log.info("    ERROR: grompp didn't generate the tpr file")
+#         return global_paths, global_prop
 
-# STEP 17: free NPT production run pre-processing
+# # STEP 18: free NPT production run
 
-    # Properties and paths of step
-    props = global_prop["step17_grompp_md"]
-    paths = global_paths["step17_grompp_md"]
+#     # Write next action to global log
+#     global_log.info("step18_mdrun_md: Execute free molecular dynamics simulation")
+#     global_log.info("     Number of trajectories: {}".format(num_trajs))
 
-    # Write next action to global log and execute step
-    global_log.info("step17_grompp_md: Preprocess free dynamics")
-    grompp(**paths, properties=props)
+#     for traj_index in range(num_trajs):
 
-    # Validate step
-    if not validateStep(paths["output_tpr_path"]):
-        global_log.info("    ERROR: grompp didn't generate the tpr file")
-        return global_paths, global_prop
+#         # Properties and paths of step
+#         props_mdrun = global_prop["step18_mdrun_md"].copy()
+#         paths_mdrun = global_paths["step18_mdrun_md"].copy()
 
-# STEP 18: free NPT production run
+#         # Modify paths according to traj
+#         addFolderToPaths(paths_mdrun,
+#                          "traj" + str(traj_index),
+#                          "output_trr_path",
+#                          "output_gro_path",
+#                          "output_edr_path",
+#                          "output_log_path",
+#                          "output_cpt_path")
 
-    # Write next action to global log
-    global_log.info("step18_mdrun_md: Execute free molecular dynamics simulation")
-    global_log.info("     Number of trajectories: {}".format(num_trajs))
+#         # Execute step
+#         mdrun(**paths_mdrun, properties=props_mdrun)
 
-    for traj_index in range(num_trajs):
+#         # Validate step NOTE: different processes accessing same global log, if we were to parallelize this?
+#         if not validateStep(paths_mdrun["output_gro_path"]):
+#             global_log.info("    ERROR: output .gro file was not generated")
+#             return global_paths, global_prop
 
-        # Properties and paths of step
-        props_mdrun = global_prop["step18_mdrun_md"].copy()
-        paths_mdrun = global_paths["step18_mdrun_md"].copy()
+#     # STEP 19: dump RMSD with respect to equilibrated structure (first frame) NOTE: add computation of RMSF, PCA and projection onto PC for visualization
 
-        # Modify paths according to traj
-        addFolderToPaths(paths_mdrun,
-                         "traj" + str(traj_index),
-                         "output_trr_path",
-                         "output_gro_path",
-                         "output_edr_path",
-                         "output_log_path",
-                         "output_cpt_path")
+#         # Write next action to global log
+#         global_log.info("step19_rmsfirst: Compute Root Mean Square deviation against equilibrated structure (first)")
 
-        # Execute step
-        mdrun(**paths_mdrun, properties=props_mdrun)
+#         # Properties and paths of step
+#         props_rmsFst = global_prop["step19_rmsfirst"].copy()
+#         paths_rmsFst = global_paths["step19_rmsfirst"].copy()
 
-        # Validate step NOTE: different processes accessing same global log, if we were to parallelize this?
-        if not validateStep(paths_mdrun["output_gro_path"]):
-            global_log.info("    ERROR: output .gro file was not generated")
-            return global_paths, global_prop
+#         # Modify paths according to traj
+#         addFolderToPaths(paths_rmsFst,
+#                          "traj" + str(traj_index),
+#                          "input_traj_path",
+#                          "output_xvg_path")
 
-    # STEP 19: dump RMSD with respect to equilibrated structure (first frame) NOTE: add computation of RMSF, PCA and projection onto PC for visualization
+#         # Execute step
+#         gmx_rms(**paths_rmsFst, properties=props_rmsFst)
 
-        # Write next action to global log
-        global_log.info("step19_rmsfirst: Compute Root Mean Square deviation against equilibrated structure (first)")
+#     # STEP 20: dump RMSD with respect to minimized structure
 
-        # Properties and paths of step
-        props_rmsFst = global_prop["step19_rmsfirst"].copy()
-        paths_rmsFst = global_paths["step19_rmsfirst"].copy()
+#         # Write next action to global log
+#         global_log.info("step20_rmsexp: Compute Root Mean Square deviation against minimized structure (exp)")
 
-        # Modify paths according to traj
-        addFolderToPaths(paths_rmsFst,
-                         "traj" + str(traj_index),
-                         "input_traj_path",
-                         "output_xvg_path")
+#         # Properties and paths of step
+#         props_rmsExp = global_prop["step20_rmsexp"].copy()
+#         paths_rmsExp = global_paths["step20_rmsexp"].copy()
 
-        # Execute step
-        gmx_rms(**paths_rmsFst, properties=props_rmsFst)
+#         # Modify paths according to traj
+#         addFolderToPaths(paths_rmsExp,
+#                          "traj" + str(traj_index),
+#                          "input_traj_path",
+#                          "output_xvg_path")
 
-    # STEP 20: dump RMSD with respect to minimized structure
+#         # Execute step
+#         gmx_rms(**paths_rmsExp, properties=props_rmsExp)
 
-        # Write next action to global log
-        global_log.info("step20_rmsexp: Compute Root Mean Square deviation against minimized structure (exp)")
+#     # STEP 21: dump Radius of gyration NOTE: add computation of RMSF, PCA and projection onto PC for visualization
 
-        # Properties and paths of step
-        props_rmsExp = global_prop["step20_rmsexp"].copy()
-        paths_rmsExp = global_paths["step20_rmsexp"].copy()
+#         # Write next action to global log
+#         global_log.info("step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
 
-        # Modify paths according to traj
-        addFolderToPaths(paths_rmsExp,
-                         "traj" + str(traj_index),
-                         "input_traj_path",
-                         "output_xvg_path")
+#         # Properties and paths of step
+#         props_rgyr = global_prop["step21_rgyr"].copy()
+#         paths_rgyr = global_paths["step21_rgyr"].copy()
 
-        # Execute step
-        gmx_rms(**paths_rmsExp, properties=props_rmsExp)
+#         # Modify paths according to traj
+#         addFolderToPaths(paths_rgyr,
+#                          "traj" + str(traj_index),
+#                          "input_traj_path",
+#                          "output_xvg_path")
 
-    # STEP 21: dump Radius of gyration NOTE: add computation of RMSF, PCA and projection onto PC for visualization
+#         # Execute step
+#         gmx_rgyr(**paths_rgyr, properties=props_rgyr)
 
-        # Write next action to global log
-        global_log.info("step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
+#     # STEP 22: image (correct for PBC) the trajectory centering the protein and dumping only protein atoms
 
-        # Properties and paths of step
-        props_rgyr = global_prop["step21_rgyr"].copy()
-        paths_rgyr = global_paths["step21_rgyr"].copy()
+#         # Write next action to global log
+#         global_log.info("step22_image: Imaging the resulting trajectory")
 
-        # Modify paths according to traj
-        addFolderToPaths(paths_rgyr,
-                         "traj" + str(traj_index),
-                         "input_traj_path",
-                         "output_xvg_path")
+#         # Properties and paths of step
+#         props_img = global_prop["step22_image"].copy()
+#         paths_img = global_paths["step22_image"].copy()
 
-        # Execute step
-        gmx_rgyr(**paths_rgyr, properties=props_rgyr)
+#         # Modify paths according to traj
+#         addFolderToPaths(paths_img,
+#                          "traj" + str(traj_index),
+#                          "input_traj_path",
+#                          "output_traj_path")
 
-    # STEP 22: image (correct for PBC) the trajectory centering the protein and dumping only protein atoms
+#         # Execute step
+#         gmx_image(**paths_img, properties=props_img)
 
-        # Write next action to global log
-        global_log.info("step22_image: Imaging the resulting trajectory")
+# # STEP 23: remove water and ions from structure obtained after equilibration, before production run
 
-        # Properties and paths of step
-        props_img = global_prop["step22_image"].copy()
-        paths_img = global_paths["step22_image"].copy()
+#     # Write next action to global log
+#     global_log.info("step23_dry: Removing water molecules and ions from the equilibrated structure")
 
-        # Modify paths according to traj
-        addFolderToPaths(paths_img,
-                         "traj" + str(traj_index),
-                         "input_traj_path",
-                         "output_traj_path")
+#     # Execute step
+#     gmx_trjconv_str(**global_paths["step23_dry"], properties=global_prop["step23_dry"])
 
-        # Execute step
-        gmx_image(**paths_img, properties=props_img)
+# # STEP 24: concatenate trajectories
 
-# STEP 23: remove water and ions from structure obtained after equilibration, before production run
+#     # Write next action to global log
+#     global_log.info("step24_trjcat: Concatenate trajectories")
 
-    # Write next action to global log
-    global_log.info("step23_dry: Removing water molecules and ions from the equilibrated structure")
+#     # Properties and paths of step
+#     props_trjcat = global_prop["step24_trjcat"].copy()
+#     paths_trjcat = global_paths["step24_trjcat"].copy()
 
-    # Execute step
-    gmx_trjconv_str(**global_paths["step23_dry"], properties=global_prop["step23_dry"])
+#     # Properties and paths of step
+#     paths_mdrun = global_paths["step18_mdrun_md"].copy()
 
-# STEP 24: concatenate trajectories
+#     concatenateTrajs(num_trajs=num_trajs,
+#                      paths_image_traj=paths_img,
+#                      props_image_traj=props_img,
+#                      paths_trjcat=paths_trjcat,
+#                      props_trjcat=props_trjcat)
 
-    # Write next action to global log
-    global_log.info("step24_trjcat: Concatenate trajectories")
-
-    # Properties and paths of step
-    props_trjcat = global_prop["step24_trjcat"].copy()
-    paths_trjcat = global_paths["step24_trjcat"].copy()
-
-    # Properties and paths of step
-    paths_mdrun = global_paths["step18_mdrun_md"].copy()
-
-    concatenateTrajs(num_trajs=num_trajs,
-                     paths_image_traj=paths_img,
-                     props_image_traj=props_img,
-                     paths_trjcat=paths_trjcat,
-                     props_trjcat=props_trjcat)
-
-    # Validate step
-    if not validateStep(paths_trjcat["output_trj_path"]):
-        global_log.info("    ERROR: Concatenation of trajectories failed.")
-        return global_paths, global_prop
+#     # Validate step
+#     if not validateStep(paths_trjcat["output_trj_path"]):
+#         global_log.info("    ERROR: Concatenation of trajectories failed.")
+#         return global_paths, global_prop
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -1013,10 +757,6 @@ def main_wf(configuration_path, input_pdb, last_step, mutation_list, num_trajs):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Simple MD Protein Setup")
-
-    parser.add_argument('--input', dest='input',
-                        help="Input pdb file or pdb id (as pdb:id)",
-                        required=False)
 
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)",
@@ -1042,7 +782,6 @@ if __name__ == "__main__":
     HOMOLOGY_MAX_RES = 10
 
     _, _ = main_wf(configuration_path=args.config_path,
-                   input_pdb=args.input,
                    last_step=args.last_step,
                    mutation_list=args.mut_list,
                    num_trajs=args.n_trajs)
