@@ -27,7 +27,7 @@ step2B_mutations:
     input_pdb_path: dependency/step2A_fixaltlocs/output_pdb_path
     output_pdb_path: mutated.pdb
   properties:
-    mutation_list: "A:Arg220Ala"
+    #mutation_list: "A:Arg220Ala"
 
 # step2C_canonical_fasta:
 #   tool: canonical_fasta
@@ -81,14 +81,8 @@ step2I_renumberstructure:
     renumber_residues: True
     renumber_residues_per_chain: False
 
-step2J_checkPDB:
-  tool: checking_log
-  paths:
-    input_pdb_path: dependency/step2I_renumberstructure/output_structure_path
-    output_log_path: pdbStructureCheck.log
 
 # Section 3 (Steps 3-10): prepare system for minimization and MD and minimize
-
 step3_pdb2gmx:
   tool: pdb2gmx
   paths:
