@@ -81,7 +81,6 @@ step2I_renumberstructure:
     renumber_residues: True
     renumber_residues_per_chain: False
 
-
 # Section 3 (Steps 3-10): prepare system for minimization and MD and minimize
 step3_pdb2gmx:
   tool: pdb2gmx
@@ -164,7 +163,6 @@ step10_energy_min:
     terms: ["Potential"]
 
 # Section 4 (Steps 11-13): NVT
-
 step11_grompp_nvt:
   tool: grompp
   paths:
