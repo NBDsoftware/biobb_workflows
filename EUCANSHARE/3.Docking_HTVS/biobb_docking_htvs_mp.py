@@ -590,7 +590,7 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
     ------
         ligands_queue    (Queue from multiprocessing): queue shared between processes with tuples containing 
                                                         the ligand index and corresponding line from input library
-        affinities_list                        (list): empty list 
+        affinities_list                        (list): empty list where results will be added
 
     Outputs
     -------
@@ -765,7 +765,8 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     global_prop  = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
 
-    # Set number of CPU cores
+    # Set number of CPU cores - we use multiprocessing to parallelize the workflow 
+    # Only cores sharing memory can be used: same node in HPC or same computer
     
     # If we are in an HPC environment:
     if "SLURM_JOB_ID" in os.environ:
@@ -797,7 +798,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         props = global_prop["step1_fpocket_select"]
         paths = global_paths["step1_fpocket_select"]
 
-        # If pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
+        # If pockets and pocket ID are provided through arguments -> prioritize over input.yml (for ensemble docking)
         if None not in (input_pockets_path, pocket_ID):
 
             paths.update({'input_pockets_zip' : input_pockets_path})
@@ -827,7 +828,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     props_box = global_prop["step2_box"]
     paths_box = global_paths["step2_box"]
     
-    # If pocket_residues_path is provided through arguments -> prioritize over input.yml (ensemble docking with residues defining pocket)
+    # If pocket_residues_path is provided through arguments -> prioritize over input.yml (for ensemble docking with residues defining pocket)
     if pocket_residues_path is not None:
 
         paths_box.update({'input_pdb_path' : pocket_residues_path})
@@ -844,7 +845,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     props_addH = global_prop["step3_str_check_add_hydrogens"]
     paths_addH = global_paths["step3_str_check_add_hydrogens"]
 
-    # If model is provided through arguments -> prioritize over input.yml (ensemble docking)
+    # If receptor model is provided through arguments -> prioritize over input.yml (for ensemble docking)
     if input_structure_path is not None:
 
         paths_addH.update({'input_structure_path' : input_structure_path})
@@ -859,8 +860,8 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
 
 # STEPS 4-5-6-7: For each ligand in library: obtain molecule, prepare ligand, run docking, prepare poses
 
-    # Create directory for step 4. 
-    # If SMILES are given, the code will try to save a txt file in this path with the SMILES before step4 is executed
+    # Create directory for step 4. This is needed because: 
+    # If SMILES are given, the script will try to save a txt file in this path with the SMILES before step4 is executed
     if not os.path.exists(global_prop['step4_source_lig']['path']):
         os.makedirs(global_prop['step4_source_lig']['path'])
 
@@ -873,10 +874,10 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         process.start()
         pool.append(process)
     
-    # Open ligand library, ligand_lib is an iterable obj
+    # Open ligand library (ligand_lib is an iterable obj)
     with open(ligand_lib_path) as ligand_lib:
 
-        # Add as many None as processes, they will be used as an exit condition
+        # Add as many None as processes, they will be used as an exit condition when there are no more ligands to process
         extended_ligand_lib = itertools.chain(ligand_lib, (None,)*num_cores)
 
         # Fill queue with lines from ligand library

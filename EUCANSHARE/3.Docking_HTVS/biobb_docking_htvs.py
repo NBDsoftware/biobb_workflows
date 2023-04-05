@@ -692,13 +692,13 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
               pocket_ID = None, pocket_residues_path = None, input_structure_path = None):
     '''
     Main HTVS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
-    and a receptor to screen the pocket of the receptor using the ligand library (Autodock).
+    and a receptor to screen the pocket of the receptor using the ligand library (with Autodock).
 
     Inputs
     ------
 
         configuration_path   (str): path to input.yml 
-        ligand_lib_path      (str): path to ligand library with SMILES
+        ligand_lib_path      (str): path to ligand library with SMILES, drugbank codes or PDB codes
         last_step            (str): last step of the workflow to execute ('ndx', 'cluster', 'cavity', 'all')
         input_pockets_path   (str): path to zip file with pockets from cavity analysis
         pocket_ID            (int): pocket ID to choose among those in input_pockets_path
@@ -748,7 +748,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     # identified by the corresponding step name
     # Writing information about each step to the global log 
 
-    # If "pocket_residues_path" provided, skip step 1, box will be formed using pocket residues instead of pocket .pqr file
+    # If "pocket_residues_path" provided, skip step 1, box will be formed using pocket residues instead of pocket .pqr file from Fpocket
     if pocket_residues_path is None:
         
     # STEP 1: Pocket selection from filtered list 
@@ -760,7 +760,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         props = global_prop["step1_fpocket_select"]
         paths = global_paths["step1_fpocket_select"]
 
-        # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
+        # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (for ensemble docking)
         if None not in (input_pockets_path, pocket_ID):
 
             paths.update({'input_pockets_zip' : input_pockets_path})
@@ -790,7 +790,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     props_box = global_prop["step2_box"]
     paths_box = global_paths["step2_box"]
     
-    # If model and pocket_residues_path are provided through arguments -> prioritize over input.yml (ensemble docking with residues defining pocket)
+    # If pocket_residues_path is provided through arguments -> prioritize over input.yml (ensemble docking with residues defining pocket)
     if pocket_residues_path is not None:
 
         paths_box.update({'input_pdb_path' : pocket_residues_path})
@@ -807,7 +807,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
     props_addH = global_prop["step3_str_check_add_hydrogens"]
     paths_addH = global_paths["step3_str_check_add_hydrogens"]
 
-    # If model, pockets and pocket ID are provided through arguments -> prioritize over input.yml (ensemble docking)
+    # If receptor model is provided through arguments -> prioritize over input.yml (for ensemble docking)
     if input_structure_path is not None:
 
         paths_addH.update({'input_structure_path' : input_structure_path})
@@ -836,7 +836,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         # If file with drug library is given -> prioritize over list in input.yml
         ligand_IDs, ligand_Names = readLigandLibFile(ligand_lib_path)
     else:
-        # If no file is given, use list from input 
+        # If no file is given, use list from input.yml
         ligand_IDs = prop_ligandLib['ligand_list']
         ligand_Names = [None]*len(ligand_IDs)
 
