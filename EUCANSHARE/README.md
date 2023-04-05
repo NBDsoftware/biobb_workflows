@@ -8,7 +8,7 @@ Biobb workflows created for EUCANSHARE. They can be run together or as independe
 
 **2.Clustering_CavityAnalysis**: clustering of MD trajectory and cavity analysis using Fpocket for the most representative conformations. See corresponding folder for more details.
 
-**3.Docking_HTVS**: high-throughput virtual screening of selected pocket using library of ligands. See corresponding folder for more details.
+**3.Docking_HTVS**: high-throughput virtual screening of selected pocket using library of ligands and Autodock. See corresponding folder for more details.
 
 ## General installation steps
 
