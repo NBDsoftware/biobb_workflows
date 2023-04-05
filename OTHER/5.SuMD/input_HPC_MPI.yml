@@ -69,7 +69,7 @@ trajectory_imaging:
     output_traj_path: trajectory_imaged.xtc
   properties:
     center_selection: RNA
-    output_selection: System
+    output_selection: RNA_and_Ligand
     pbc: nojump
     center: True
 
@@ -82,5 +82,6 @@ trajectory_fitting:
     output_traj_path: trajectory_imaged_fitted.xtc
   properties:
     fit_selection: RNA
-    output_selection: System
+    output_selection: RNA_and_Ligand
     fit: rot+trans
+    center: False

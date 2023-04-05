@@ -8,12 +8,12 @@ remove_tmp: True
 sumd:
   colvar:                      # Collective variable definition: distance between COM of group1 and COM of group2
     group1_selection: 'resname MOL'     # Group 1 selection, see Atom Selection Language in MDTraj
-    group2_selection: 'resid 9 or resid 21 or resid 24'   # Group 2 selection
-    target: 0.3                  # Target value of colvar in nm
-    threshold: 0.2               # Go to unsupervised MD once within threshold of target
+    group2_selection: 'resid 10 to 11 or resid 23 to 24'   # Group 2 selection
+    target: 0.4                  # Target value of colvar in nm
+    threshold: 0.25               # Go to unsupervised MD once within threshold of target
   num_steps:
-    max_total: 100              # Maximum number of total steps
-    max_failed: 20              # Maximum number of tries for same initial conditions
+    max_total: 150              # Maximum number of total steps
+    max_failed: 40              # Maximum number of tries for same initial conditions
   slope_threshold: 0.1          # Slope threshold in absolute value in nm/ns
 
 # Configuration of short MD simulation
@@ -71,6 +71,29 @@ short_MD:
       refcoord-scaling: 'com'
       DispCorr: 'EnerPres'         # account for cut-off vdW scheme
 
+# Configuration of short MD to image and dry the trajectory (PBC treatment to compute the CV correctly)
+
+short_MD_image:
+  paths:
+    input_traj_path: dependency/short_MD/output_xtc_path
+    input_top_path: dependency/short_MD/output_gro_path
+    output_traj_path: step_whole_dry.xtc
+  properties:
+    output_selection: RNA_and_Ligand # Should include the group1 and group2 selections!
+    center: False
+    pbc: whole
+  
+# Configuration of short MD to extract a dry structure file 
+short_MD_str:
+  paths:
+    input_structure_path: dependency/short_MD/output_gro_path
+    input_top_path: dependency/short_MD/output_gro_path
+    output_str_path: step_whole_dry.gro
+  properties:
+    output_selection: RNA_and_Ligand # Should include the group1 and group2 selections!
+    center: False
+    pbc: whole
+
 # Configuration of trajectory concatenation
 
 trajectory_cat:
@@ -80,28 +103,3 @@ trajectory_cat:
   properties: 
     concatenate: True
     remove_tmp: True
-
-# Configuration of trajectory imaging - treatment of periodic boundary conditions
-
-trajectory_imaging:
-  paths:
-    input_traj_path: dependency/trajectory_cat/output_trj_path
-    input_top_path: dependency/short_MD/output_tpr_path
-    output_traj_path: trajectory_imaged.xtc
-  properties:
-    center_selection: RNA
-    output_selection: System
-    pbc: nojump
-    center: True
-
-# Configuration of trajectory fitting - alignment of the trajectory (cannot be done during imaging)
-
-trajectory_fitting:
-  paths:
-    input_traj_path: dependency/trajectory_imaging/output_traj_path
-    input_top_path: dependency/short_MD/output_tpr_path
-    output_traj_path: trajectory_imaged_fitted.xtc
-  properties:
-    fit_selection: RNA
-    output_selection: System
-    fit: rot+trans
