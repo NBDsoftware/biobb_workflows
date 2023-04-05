@@ -311,7 +311,8 @@ def createSummary(pockets_path, default_summary_path, models_population, global_
     ------
 
         Info dumped to log file
-        global_summary (dict): dictionary with models and pockets ordered by modelname. See example:
+
+        global_summary (dict):  dictionary with models and pockets ordered by modelname. See example:
         
             {
                 modelname1 : {        
@@ -660,7 +661,7 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
         prop_models = global_prop["step2_extract_models"]
         paths_models = global_paths["step2_extract_models"]
 
-        # The models that will be extracted are: min(models2extract, number_clusters)
+        # The models that will be extracted are: min(modelsToExtract, number_clusters)
         modelsToExtract = min(prop_models['models_to_extract'], len(models_population))
 
         # Extract the most populated models from the pdb with all centroids
