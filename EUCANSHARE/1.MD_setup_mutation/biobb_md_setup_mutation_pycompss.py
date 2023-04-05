@@ -9,29 +9,31 @@ import time
 import argparse
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
-# from biobb_io.api.pdb import pdb
-# from biobb_io.api.canonical_fasta import canonical_fasta
-# from biobb_model.model.fix_backbone import fix_backbone
-from biobb_model.model.fix_side_chain import fix_side_chain
-from biobb_model.model.fix_ssbonds import fix_ssbonds
-from biobb_model.model.fix_altlocs import fix_altlocs
-from biobb_model.model.fix_amides import fix_amides
-from biobb_model.model.fix_chirality import fix_chirality
-from biobb_model.model.mutate import mutate
-from biobb_gromacs.gromacs.trjcat import trjcat
-from biobb_gromacs.gromacs.pdb2gmx import pdb2gmx
-from biobb_gromacs.gromacs.editconf import editconf
-from biobb_gromacs.gromacs.solvate import solvate
-from biobb_gromacs.gromacs.grompp import grompp
-from biobb_gromacs.gromacs.genion import genion
-from biobb_gromacs.gromacs.mdrun import mdrun
-from biobb_analysis.gromacs.gmx_rms import gmx_rms
-from biobb_analysis.gromacs.gmx_rgyr import gmx_rgyr
-from biobb_analysis.gromacs.gmx_energy import gmx_energy
-from biobb_analysis.gromacs.gmx_image import gmx_image
-from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
-from biobb_structure_utils.utils.extract_molecule import extract_molecule
-from biobb_structure_utils.utils.renumber_structure import renumber_structure
+
+from pycompss.api.api import compss_wait_on_file
+# from biobb_adapters.pycompss.biobb_io.api.pdb import pdb
+# from biobb_adapters.pycompss.biobb_io.api.canonical_fasta import canonical_fasta
+# from biobb_adapters.pycompss.biobb_model.model.fix_backbone import fix_backbone
+from biobb_adapters.pycompss.biobb_model.model.fix_side_chain import fix_side_chain
+from biobb_adapters.pycompss.biobb_model.model.fix_ssbonds import fix_ssbonds
+from biobb_adapters.pycompss.biobb_model.model.fix_altlocs import fix_altlocs
+from biobb_adapters.pycompss.biobb_model.model.fix_amides import fix_amides
+from biobb_adapters.pycompss.biobb_model.model.fix_chirality import fix_chirality
+from biobb_adapters.pycompss.biobb_model.model.mutate import mutate
+from biobb_adapters.pycompss.biobb_gromacs.gromacs.trjcat import trjcat
+from biobb_adapters.pycompss.biobb_gromacs.gromacs.pdb2gmx import pdb2gmx
+from biobb_adapters.pycompss.biobb_gromacs.gromacs.editconf import editconf
+from biobb_adapters.pycompss.biobb_gromacs.gromacs.solvate import solvate
+from biobb_adapters.pycompss.biobb_gromacs.gromacs.grompp import grompp
+from biobb_adapters.pycompss.biobb_gromacs.gromacs.genion import genion
+from biobb_adapters.pycompss.biobb_gromacs.gromacs.mdrun import mdrun
+from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_rms import gmx_rms
+from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_rgyr import gmx_rgyr
+from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_energy import gmx_energy
+from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_image import gmx_image
+from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
+from biobb_adapters.pycompss.biobb_structure_utils.utils.extract_molecule import extract_molecule
+from biobb_adapters.pycompss.biobb_structure_utils.utils.renumber_structure import renumber_structure
 
 
 def main_wf(configuration_path, num_trajs):
@@ -203,6 +205,9 @@ def main_wf(configuration_path, num_trajs):
         global_log.info(f"{traj} >  step23_dry: Removing water molecules and ions from the equilibrated structure")
         traj_paths['step23_dry']['input_structure_path'] = global_paths["step23_dry"]['input_structure_path']
         gmx_trjconv_str(**traj_paths['step23_dry'], properties=traj_prop['step23_dry'])
+
+    for traj in trj_list:
+        compss_wait_on_file(traj)
 
     # STEP 24: concatenate trajectories
     global_log.info("step24_trjcat: Concatenate trajectories")
