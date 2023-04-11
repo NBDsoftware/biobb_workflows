@@ -1,0 +1,66 @@
+# Example of a YAML configuration file for a BioExcel building blocks workflow
+
+working_dir_path: output # Folder to write i/o files of the workflow steps
+can_write_console_log: False # Verbose writing of log information
+restart: False # Skip steps already performed
+remove_tmp: True
+
+step1_setup:
+  tool: setup
+  paths:
+    input_rec_pdb_path: input/receptor.pdb
+    input_lig_pdb_path: input/ligand.pdb
+    output_rec_path: prepared_receptor.pdb
+    output_rec_H_path: prepared_receptor.pdb.H
+    output_rec_amber_path: prepared_receptor.pdb.amber
+    output_lig_path: prepared_ligand.pdb
+    output_lig_H_path: prepared_ligand.pdb.H
+    output_lig_amber_path: prepared_ligand.pdb.amber
+    output_ref_path: prepared_reference.pdb
+  properties:
+    docking_name: docking_test
+    receptor: 
+      mol: A
+      newmol: A
+    ligand: 
+      mol: A
+      newmol: B
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+
+step2_ftdock:
+  tool: ftdock
+  paths:
+    input_rec_path: dependency/step1_setup/output_rec_path
+    input_lig_path: dependency/step1_setup/output_lig_path
+    output_ftdock_path: ftdock_output.ftdock
+    output_rot_path: rotftdock_output.rot
+  properties:
+    docking_name: docking_test
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+
+step3_dockser:
+  tool: dockser
+  paths:
+    input_rec_path: dependency/step1_setup/output_rec_path
+    input_rec_H_path: dependency/step1_setup/output_rec_H_path
+    input_rec_amber_path: dependency/step1_setup/output_rec_amber_path
+    input_lig_path: dependency/step1_setup/output_lig_path
+    input_lig_H_path: dependency/step1_setup/output_lig_H_path
+    input_lig_amber_path: dependency/step1_setup/output_lig_amber_path
+    input_rot_path: dependency/step2_ftdock/output_rot_path
+    output_ene_path: dockser_output.ene
+  properties:
+    docking_name: docking_test
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
