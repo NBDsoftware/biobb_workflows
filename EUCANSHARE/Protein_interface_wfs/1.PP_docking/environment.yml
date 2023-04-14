@@ -1,0 +1,13 @@
+name: pp_docking
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python
+  - biobb_common>=3.9.0
+  - nb_conda_kernels
+  - pytest
+  - zip
+  - pandas
+  - mdanalysis
+  - conda
