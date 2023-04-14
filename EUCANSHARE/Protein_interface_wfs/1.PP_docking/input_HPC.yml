@@ -88,6 +88,6 @@ step4_makePDB:
 step5_clustering:
   paths: 
     input_zip_path: dependency/step4_makePDB/output_zip_path
-    output_zip_path: clustered_poses.zip
+    output_zip_path: top_distinct_poses.zip
   properties:
-    rmsd_threshold: 5.0
+    rmsd_threshold: 50.0
