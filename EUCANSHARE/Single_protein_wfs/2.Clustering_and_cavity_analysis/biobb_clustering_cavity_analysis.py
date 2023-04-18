@@ -216,53 +216,6 @@ def addSuffixToPaths(all_paths, suffix, *keywords):
 
     return all_paths
 
-def checkInput(trajectory_path, topology_path, clustering_path, global_log):
-    '''
-    Checks either a trajectory and a topology path or, alternatively, a clustering path are given.
-    If it's not the case, print an error.
-
-    Inputs
-    ------
-
-        trajectory_path (str): path to trajectory
-        topology_path   (str): path to topology
-        clustering_path (str): path to clustering
-        global_log   (logger): used to print the error
-
-    Output
-    ------
-
-        check (bool): True if inputs OK, False if inputs are missing.
-    '''
-
-    check = False
-
-    # If these paths were provided
-    if None not in (trajectory_path,topology_path):
-        # And they exist
-        if os.path.exists(trajectory_path) and os.path.exists(topology_path):
-            # Check is True
-            check = True
-
-    # If this path was provided
-    if clustering_path is not None:
-        # And it exists
-        if os.path.isdir(clustering_path):
-            # And it contains files with the .pdb extension
-            if len(glob.glob(os.path.join(clustering_path,"*.pdb"))) > 0:
-                # Check is True
-                check = True
-
-    # If check is still False
-    if check is False:
-        # Provide warning to user and exit
-        global_log.info("ERROR: Input check failed. Make sure the following are suitable trajectory and topology paths or a suitable clustering path with pdb files in it.")
-        global_log.info("       trajectory_path: {}".format(trajectory_path))
-        global_log.info("       topology_path: {}".format(topology_path))
-        global_log.info("       clustering_path: {}".format(clustering_path))
-
-    return check
-
 def createSummary(pockets_path, default_summary_path, models_population, global_log):
     '''
     Print in log file all available pockets for each model found in the input folder for the pocket selection step. 
@@ -508,15 +461,6 @@ def main_wf(configuration_path, trajectory_path = None, topology_path = None, cl
     # Dividing it in global properties and global paths
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
-
-    # Launching the actions of the workflow, one by one 
-    # Using as inputs the global paths and global properties
-    # identified by the corresponding step name
-    # Writing information about each step to the global log 
-
-    # Check input files are given: either trajectory + topology or clustering has to be given
-    if not checkInput(trajectory_path, topology_path, clustering_path, global_log):
-        return global_paths, global_prop, None
 
     # If clustering is not given externally -> cluster the input trajectory and return cluster path
     if clustering_path is None:
