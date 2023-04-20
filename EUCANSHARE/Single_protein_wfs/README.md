@@ -1,12 +1,12 @@
-# EUCANSHARE workflows
+# Single protein workflows
 
-Biobb workflows created for EUCANSHARE. They can be run together or as independent workflows. They can be run entirely or just partially to analyze intermediate results before proceeding.
+Single protein biobb workflows created for EUCANSHARE. They can be run together or as independent workflows. They can be run entirely or just partially to analyze intermediate results before proceeding.
 
 ## Description
 
-**1.MD_setup_mutation**: prepares and launches a GROMACS MD simulation starting from a PDB structure file or PDB code. Optionally, mutations can be added to the original PDB during the preparation. See corresponding folder for more details.
+**1.MD_with_mutation**: prepares and launches a GROMACS MD simulation starting from a PDB structure file or PDB code. Optionally, several mutations can be added to the original PDB during the preparation. See corresponding folder for more details.
 
-**2.Clustering_CavityAnalysis**: clustering of MD trajectory and cavity analysis using Fpocket for the most representative conformations. See corresponding folder for more details.
+**2.Clustering_and_cavity_analysis**: clustering of MD trajectory and extraction of most representative structures. Followed by a cavity analysis using Fpocket on those structures. See corresponding folder for more details.
 
 **3.Docking_HTVS**: high-throughput virtual screening of selected pocket using library of ligands and Autodock. See corresponding folder for more details.
 
@@ -17,10 +17,10 @@ Requirements: git, conda
 1. Clone or download this repository:
 
 ```bash
-git clone https://github.com/PabloNA97/eucanshare_wfs.git
+git clone https://github.com/PabloNA97/biobb_workflows.git
 ```
 
-2. Go to one of the 3 workflow folders 
+2. Go to one of the workflow folders 
 
 3. Use conda to create the corresponding environment (for workflow 1 export KEY_MODELLER variable as well):
 
@@ -32,15 +32,20 @@ export KEY_MODELLER=MODELIRANJE
 conda env create -f environment.yml
 ```
 
-4. Check environment is listed and activate environment
+4. Check the environment is listed and activate it
 
 ```bash
 conda env list
-conda activate eucanshare_wf<number of workflow>
+conda activate <name_of_environment>
 ```
 
-5. Provide necessary inputs modifying the input.yml or the command line call in run.sh and launch:
+5. Provide necessary inputs and launch (look for run_local.sh or run_HPC.sl):
 
 ```bash
 ./run.sh
 ```
+
+```bash
+sbatch run_HPC.sl
+```
+
