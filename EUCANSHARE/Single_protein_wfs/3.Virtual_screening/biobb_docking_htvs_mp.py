@@ -710,8 +710,7 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
                         paths_autodock['output_pdbqt_path'])
 
 
-def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets_path = None, 
-              pocket_ID = None, pocket_residues_path = None, input_structure_path = None):
+def main_wf(configuration_path, ligand_lib_path):
     '''
     Main HTVS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
     and a receptor to screen the pocket of the receptor using the ligand library (Autodock).
@@ -721,11 +720,6 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
 
         configuration_path   (str): path to input.yml 
         ligand_lib_path      (str): path to ligand library with SMILES
-        last_step            (str): last step of the workflow to execute ('ndx', 'cluster', 'cavity', 'all')
-        input_pockets_path   (str): path to zip file with pockets from cavity analysis
-        pocket_ID            (int): pocket ID to choose among those in input_pockets_path
-        pocket_residues_path (str): path to residues that will define the box used for docking, alternative to input_pockets_path and pocket_ID
-        input_structure_path (str): path of receptor structure that will be used for docking
 
     Outputs
     -------
@@ -733,6 +727,7 @@ def main_wf(configuration_path, ligand_lib_path, last_step = None, input_pockets
         /output folder
         global_paths    (dict): dictionary with all paths of workflow
         global_prop     (dict): dictionary with all properties of workflow
+        
         global_summary  (dict): dictionary with top ligands ordered by affinity
 
             {
@@ -930,14 +925,9 @@ if __name__ == '__main__':
     parser.add_argument('--lig-lib', dest='ligand_lib',
                         help="Path to file with ligand library. The file should contain one ligand identifier (Ligand PDB code, SMILES or Drug Bank ID) per line.",
                         required=True)
-    
-    # Execute workflow until 'to_do' step -> all executes all steps (all is default)
-    parser.add_argument('--until', dest='to_do', 
-                        help="(Opt) Extent of the pipeline to execute (preparation, all)", 
-                        required=False)
 
     args = parser.parse_args()
 
-    _,_,_= main_wf(args.config_path, args.ligand_lib, args.to_do)
+    main_wf(args.config_path, args.ligand_lib)
 
 
