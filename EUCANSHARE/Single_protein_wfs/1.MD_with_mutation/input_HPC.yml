@@ -8,7 +8,7 @@ remove_tmp: True
 step1_extractMolecule:
   tool: extract_molecule
   paths:
-    input_structure_path: /path_to_biobb_workflows/biobb_workflows/EUCANSHARE/1.MD_setup_mutation/input/P38alpha4LOO.pdb
+    input_structure_path: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/1.MD_with_mutation/input/P38alpha4LOO.pdb
     output_molecule_path: protein.pdb
   properties:
     molecule_type: chains # (all), protein, na, dna, rna, chains
@@ -141,8 +141,8 @@ step8_grompp_min:
   properties:
     simulation_type: minimization
     mdp:
-      nsteps: 50000 # 10000
-      emtol: 500
+      nsteps: 10000 # 10000
+      emtol: 10
 
 step9_mdrun_min:
   tool: mdrun
@@ -252,7 +252,7 @@ step17_grompp_md:
   properties:
     simulation_type: free
     mdp:
-      nsteps: 5000000 # 50000000
+      nsteps: 1000000 # 50000000
       ref-t: 310 310
       nstxout: 10000 # 100000
       nstxout-compressed: 10000 # 100000

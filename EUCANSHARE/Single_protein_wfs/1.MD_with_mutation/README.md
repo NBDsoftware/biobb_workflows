@@ -1,4 +1,4 @@
-# MD setup and run
+# MD with mutation 
 
 ## Quick installation and run
 
@@ -7,7 +7,7 @@ Go to workflow folder and install conda environment:
 ```bash
 export KEY_MODELLER=MODELIRANJE
 conda env create -f environment.yml
-conda activate eucanshare_wf1
+conda activate single_protein_wf1
 ```
 
 To install it in an HPC environment, do the same after loading the corresponding module with Conda or Miniconda installed.
@@ -37,57 +37,21 @@ The output will be generated in the "/output" folder by default and the global l
 
 ## Description
 
-This workflow has several main sections, the workflow can be run until the end or until one of the sections (see --until command line option):
+This workflow has several parts:
 
-- **Section 1**: extraction of structure from PDB and structure check. The input is either a pdb code or a pdb file.
+- **Step 1**: extraction of structure from PDB and mutation of residue if requested.
 
-- **Section 2**: try to fix remaining PDB defects after extraction of the relevant structure and add mutations if needed. List of defects that the section attempts to fix: alternative locations, missing backbone atoms or missing residues (provide PDB code), missing side chain atoms, SS bonds, clashing amides and errors regarding side chain chirality of residues. 
+- **Steps 2 (A-I)**: try to fix remaining PDB defects after extraction of the relevant structure and add mutations if needed. List of defects that the workflow attempts to fix: alternative locations, missing side chain atoms, SS bonds, clashing amides and errors regarding side chain chirality of residues. Note that fixing missing backbone atoms or missing residues is deactivated as this requires a PDB code and internet connection. Uncomment the relevant parts to use it.
 
-- **Section 3**: preparation of the system for minimization and MD with GROMACS and minimization.
+- **Steps 3 - 7**: preparation of the system for minimization and MD with GROMACS.
 
-- **Section 4**: NVT equilibration
+- **Steps 8 - 10**: minimization
 
-- **Section 5**: NPT equilibration
+- **Steps 10 - 13**: NVT equilibration
 
-- **Section 6**: launch several trajectories from equilibrated structure (see --n_trajs command line option). Concatenate those trajectories afterwards.
+- **Steps 13 - 16**: NPT equilibration
+
+- **Steps 17 - 23**: launch several trajectories from equilibrated structure (see --n_trajs command line option). Concatenate those trajectories afterwards.
 
 Note that re-launching the workflow will skip the previously successful steps if restart is True. 
-
-## Sequential run
-
-Activate environment:
-
-```bash
-conda activate eucanshare_wf1
-```
-
-It's a good idea to run the workflow sequentially to check the output of the different steps for a given PDB file or PDB code. Choose lower simulation times to debug. To retrieve the PDB and try to fix all defects:
-
-```bash
-python biobb_md_setup_mutation.py -i pdb:4LOO --config input.yml --until fix
-```
-
-Check that all possible PDB defects have been taken into account. A good place to start is the log file printed in step2I. Visualize fixed structure saved in last fix step. Check log files and output for different steps in this section (step2 A-I). Then launch minimization:
-
-```bash
-python biobb_md_setup_mutation.py -i pdb:4LOO --config input.yml --until min
-```
-
-If restart is True, steps 2A-2I will be skipped. The rest of the steps can also be launched sequentially. The workflow will automatically skip any successful step from previous calls. After the minimization we can launch the nvt equilibration:
-
-```bash
-python biobb_md_setup_mutation.py -i pdb:4LOO --config input.yml --until nvt
-```
-
-Then npt equilibration:
-
-```bash
-python biobb_md_setup_mutation.py -i pdb:4LOO --config input.yml --until npt
-```
-
-And the production run:
-
-```bash
-python biobb_md_setup_mutation.py -i pdb:4LOO --config input.yml --until all
-```
 
