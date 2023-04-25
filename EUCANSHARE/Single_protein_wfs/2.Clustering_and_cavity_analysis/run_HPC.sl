@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=single_protein_wf2
-#SBATCH --ntasks=1                                      # total number of tasks across all nodes
+#SBATCH --ntasks=4                                      # total number of tasks across all nodes
 #SBATCH --time=24:00:00
 #SBATCH --mem-per-cpu=2000
 #SBATCH --output=report_%j.out
@@ -16,7 +16,7 @@ module purge
 module load Miniconda3/4.9.2
 
 # Load GROMACS module
-module load GROMACS/2022.3-intel-2021b
+module load GROMACS/2022.3-intel-2021b-CUDA.11.6.0
 
 # Load SLURM
 module load slurm/slurm/21.08.6 

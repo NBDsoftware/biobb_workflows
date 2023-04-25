@@ -493,11 +493,9 @@ def main_wf(configuration_path, clustering_path = None):
         # NOTE: this is needed because gmx_cluster doesn't include all the output paths in the constructor and dictionaries - thus some are left behind and not copied inside the step folder
         move_files(global_prop["step1_gmx_cluster"]['path'], "step1_gmx_cluster_cluster.log", "step1_gmx_cluster_rmsd-clust.xpm", "step1_gmx_cluster_rmsd-dist.xvg")
 
-        # Number of models to extract
-        num_models_to_extract = min(prop_models['models_to_extract'], len(models_population))
-
         # STEP 2: Extract the most representative PDB models
         prop_models = global_prop["step2_extract_models"]
+        num_models_to_extract = min(prop_models['models_to_extract'], len(models_population))
         global_log.info(f"step2_extract_models: Extracting models of the {num_models_to_extract} most populated clusters")
 
         # Extract the most populated models from the pdb with all centroids
