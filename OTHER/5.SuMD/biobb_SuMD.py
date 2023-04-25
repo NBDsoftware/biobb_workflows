@@ -24,22 +24,6 @@ from biobb_gromacs.gromacs.grompp_mdrun import grompp_mdrun
 from biobb_analysis.gromacs.gmx_image import gmx_image
 from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 
-
-def remove_files(*file_path):
-    '''
-    Removes files in '*file_path' if they exist
-
-    Inputs
-    ------
-
-        file_path  (str): variable number of paths to files including filename
-    '''
-    for path in file_path:
-        if os.path.exists(path):
-            os.remove(path)
-    
-    return
-
 def analyze_cv(traj_path, topology_path, MD_properties, accepted_steps, sumd_properties, sumd_log, output_path):
     """
     Analyze user-defined CV. The CV is defined as the distance between two atom selections from
@@ -189,7 +173,7 @@ def save_cv_data(cv_time_series, time, path):
 
 def remove_tmp_files(*paths):
     """
-    Remove temporal files created by biobb_gromacs if any
+    Remove temporal files if they exist
 
     Inputs
     ------
@@ -393,7 +377,7 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
             else:
 
                 # remove previous zip trajectory bundle if it exists
-                remove_files(concat_paths["input_trj_zip_path"])
+                remove_tmp_files(concat_paths["input_trj_zip_path"])
 
                 # Create a ZipFile object
                 zipObject = ZipFile(concat_paths["input_trj_zip_path"], 'w')
