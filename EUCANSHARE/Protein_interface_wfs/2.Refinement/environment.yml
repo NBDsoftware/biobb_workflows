@@ -1,4 +1,4 @@
-name: single_protein_wf2
+name: protein_protein_wf2
 channels:
   - conda-forge
   - bioconda
