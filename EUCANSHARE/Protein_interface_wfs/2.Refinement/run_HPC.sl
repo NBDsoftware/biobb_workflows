@@ -20,9 +20,9 @@ module load slurm/slurm/21.08.6
 module load GROMACS/2022.3-intel-2021b
 
 # Activate previously created conda environment from environment.yml
-source activate /home/pnavarro/.conda/envs/single_protein_wf2
+source activate /home/pnavarro/.conda/envs/protein_protein_wf2
 
-PYTHON_INTERPRETER_PATH='/home/pnavarro/.conda/envs/single_protein_wf2/bin'
+PYTHON_INTERPRETER_PATH='/home/pnavarro/.conda/envs/protein_protein_wf2/bin'
 
 # Launch workflow
 python biobb_pose_refinement.py --config input_HPC.yml 
