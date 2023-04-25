@@ -25,9 +25,9 @@ from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 
 # Define a function to copy files from several paths to a single destination
 # Adding a prefix to the file name
-def copy_files_with_prefix(source_paths, destination_path, prefix):
+def copy_inputs_with_prefix(source_paths, destination_path, prefix):
     """
-    Copy files from several source paths to a single destination. Add prefix to the original file names.
+    Copy input files from several source paths to a single destination. Add prefix to the original file names.
 
     Inputs
     ------
@@ -46,17 +46,20 @@ def copy_files_with_prefix(source_paths, destination_path, prefix):
     # Iterate over the source paths dictionary
     for file, path in source_paths.items():
 
-        # Get the file name
-        file_name = Path(path).name
+        # Avoid copying any output file
+        if "input" in file:
 
-        # Add the prefix to the file name
-        new_file_name = prefix + "_" + file_name
+            # Get the file name
+            file_name = Path(path).name
 
-        # Create new path
-        new_path = str(Path(destination_path).joinpath(new_file_name))
+            # Add the prefix to the file name
+            new_file_name = prefix + "_" + file_name
 
-        # Copy the file
-        shutil.copy(path, new_path)
+            # Create new path
+            new_path = str(Path(destination_path).joinpath(new_file_name))
+
+            # Copy the file
+            shutil.copy(path, new_path)
     
 def main_wf(configuration_path):
     '''
@@ -181,7 +184,7 @@ def main_wf(configuration_path):
 
         # STEP 18: copy the results of this pose to the merged results folder
         global_log.info("step18_merge_results: Copy the results of this pose to the merged results folder")
-        copy_files_with_prefix(global_paths["step18_merge_results"], global_prop["step18_merge_results"]["path"], Path(pose_path).stem)
+        copy_inputs_with_prefix(global_paths["step18_merge_results"], global_prop["step18_merge_results"]["path"], Path(pose_path).stem)
     
     # Find all .pdb paths in the merged results folder
     pdb_paths = glob.glob(os.path.join(global_paths["step18_merge_results"]["path"], "*.pdb"))
