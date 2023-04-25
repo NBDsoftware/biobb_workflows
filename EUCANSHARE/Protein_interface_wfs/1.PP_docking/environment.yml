@@ -1,4 +1,4 @@
-name: pp_docking
+name: protein_protein_wf1
 channels:
   - conda-forge
   - bioconda
