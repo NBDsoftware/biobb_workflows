@@ -162,62 +162,47 @@ def find_affinity(log_path):
     
     return affinity
 
-def create_summary(affinities_list, properties):
+def create_ranking(ranking_path, num_ligands, affinities_list):
     '''
-    Create dictionary of ligands with affinity and ID for each of them, ordered by affinity.
+    Create file with ranking of ligands according to affinity
 
     Inputs
     ------
         affinities_list  (list): list with tuples -> (affinity, ligand identifier, ligand_ID)
-        properties       (dict): properties of step 8
-        global_log     (logger): global log
-    
-    Output
-    ------
-
-        global_summary   (dict): dictionary with top ligands ordered by affinity
-
-            {
-                ligandName1 : {        
-                    affinity : -8.5, 
-                    ID : SB4
-                    }, 
-                ligandName2 : {
-                    affinity : -8.3, 
-                    ID : DB450112
-                },
-                ...
-            }
+        ranking_path      (str): path to output file
+        num_ligands       (int): number of ligands to save in ranking file
     '''
 
     # Sort list according to affinity
     affinities_list = sorted(affinities_list)
 
     # Find number of ligands to save in global_summary
-    numLigandsToPrint = min(properties['number_top_ligands'], len(affinities_list)) 
+    ranking_length = min(num_ligands, len(affinities_list)) 
 
     # Exclude the rest
-    affinities_list = affinities_list[:numLigandsToPrint]
+    affinities_list = affinities_list[:ranking_length]
 
-    # Initialize global_summary
-    global_summary = {}
+    # Find parent folder
+    step_folder = str(Path(ranking_path).parent)
 
-    # Create dictionary
-    for item in affinities_list:
+    # Create folder if it does not exist
+    if not os.path.exists(step_folder):
+        os.makedirs(step_folder)
+        
+    # Create file
+    with open(ranking_path, 'w') as file:
 
-        # Dictionary with affinity and ID
-        ligand_info = {}
+        # Write header
+        file.write("Rank Affinity Ligand_ID \n")
 
-        # Update affinity
-        ligand_info.update({'affinity' : item[0]})
+        # Write ranking
+        for i, affinity_tuple in enumerate(affinities_list):
 
-        # Update ID
-        ligand_info.update({'ID' : item[2]})
+            affinity, ligand_identifier, ligand_ID = affinity_tuple
 
-        # Update ligand entry
-        global_summary.update({item[1] : ligand_info})
+            file.write("{}\t{}\t{}\n".format(i+1, affinity, ligand_ID))
 
-    return global_summary
+    return 
 
 def validate_step(*output_paths):
     '''
@@ -476,20 +461,6 @@ def main_wf(configuration_path, ligand_lib_path):
         /output folder
         global_paths    (dict): dictionary with all workflow paths
         global_prop     (dict): dictionary with all workflow properties
-        
-        global_summary  (dict): dictionary with top ligands ordered by affinity
-
-            {
-                ligandName1 : {        
-                    affinity : -8.5, 
-                    ID : SB4
-                    }, 
-                ligandName2 : {
-                    affinity : -8.3, 
-                    ID : DB450112
-                },
-                ...
-            }
     '''
 
     start_time = time.time()
@@ -597,10 +568,10 @@ def main_wf(configuration_path, ligand_lib_path):
                      step5_stdout_path, step5_stderr_path)
 
     # STEP 8: Find top ligands (according to lowest affinity)
-    global_log.info("step7_show_top_ligands: print identifiers of top ligands ranked by lowest affinity")  
-    global_summary =  create_summary(affinities_list, global_prop['step7_show_top_ligands'])
-    pretty_summary = json.dumps(global_summary, indent=2)
-    global_log.info(pretty_summary)
+    global_log.info("step7_show_top_ligands: save identifiers of top ligands ranked by lowest affinity")  
+    create_ranking(global_paths['step7_show_top_ligands']['output_csv_path'],
+                   global_prop['step7_show_top_ligands']['number_top_ligands'],
+                   affinities_list)
     
     # Timing information
     elapsed_time = time.time() - start_time
@@ -614,7 +585,7 @@ def main_wf(configuration_path, ligand_lib_path):
     global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
     global_log.info('')
 
-    return global_paths, global_prop, global_summary
+    return global_paths, global_prop
 
 if __name__ == '__main__':
     

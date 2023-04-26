@@ -64,5 +64,7 @@ step6_babel_prepare_pose:
     output_format: pdb
 
 step7_show_top_ligands:
+  paths:
+    output_csv_path: top_ligands.csv 
   properties:
     number_top_ligands: 50
