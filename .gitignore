@@ -3,4 +3,4 @@ output/
 *.err
 *.out
 .vscode/
-
+traj_comp.xtc
