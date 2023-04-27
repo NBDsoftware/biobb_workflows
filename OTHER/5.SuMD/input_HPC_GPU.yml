@@ -90,7 +90,7 @@ short_MD_str:
     input_top_path: dependency/short_MD/output_gro_path
     output_str_path: step_whole_dry.gro
   properties:
-    output_selection: RNA_and_Ligand # Should include the group1 and group2 selections!
+    selection: RNA_and_Ligand # Should include the group1 and group2 selections!
     center: False
     pbc: whole
 
