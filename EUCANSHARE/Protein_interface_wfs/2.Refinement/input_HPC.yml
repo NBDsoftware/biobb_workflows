@@ -2,7 +2,7 @@
 
 working_dir_path: output     # Folder to write i/o files of the workflow steps
 can_write_console_log: False # Verbose writing of log information
-restart: False               # Skip steps already performed
+restart: False               # Leave at False for this workflow!!
 remove_tmp: True
 
 step0_extract_poses:
@@ -176,6 +176,8 @@ step17_trjconv:
     input_top_path: dependency/step15_mdrun_min/output_gro_path
     output_str_path: refined_pose.pdb
   properties:
+    selection: Protein # Should include both proteins
+    center: False
     pbc: whole
   
 step18_merge_results:
