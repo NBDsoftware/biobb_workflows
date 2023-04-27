@@ -25,7 +25,7 @@ git clone https://github.com/PabloNA97/biobb_workflows.git
 3. Use conda to create the corresponding environment (for workflow 1 export KEY_MODELLER variable as well):
 
 ```bash
-export KEY_MODELLER=MODELIRANJE
+export KEY_MODELLER="HERE YOUR MODELLER KEY"
 ```
 
 ```bash
