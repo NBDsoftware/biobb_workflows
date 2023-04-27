@@ -1,0 +1,13 @@
+name: protein_protein_wf1
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python
+  - biobb_common>=3.9.0
+  - nb_conda_kernels
+  - pytest
+  - zip
+  - pandas
+  - mdanalysis
+  - conda

@@ -361,8 +361,7 @@ def pocketsVirtualScreening(configuration_path, input_structures_path, ligand_li
 def main_wf(pocket_vs_config, cavity_analysis_config, htvs_config, 
          input_structures_path, ligand_lib_path, pocket_residues_list = None, last_step = None):
     '''
-    Main clustering and cavity analysis workflow. This workflow clusters a given trajectory and analyzes the cavities of the most representative
-    structures. Then filters the cavities according to a pre-defined criteria and outputs the pockets that passed the filter.
+    Main pocket virtual screening workflow. 
 
     Inputs
     ------
