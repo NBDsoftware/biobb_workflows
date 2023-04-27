@@ -187,7 +187,7 @@ def main_wf(configuration_path):
         copy_inputs_with_prefix(global_paths["step18_merge_results"], global_prop["step18_merge_results"]["path"], Path(pose_path).stem)
     
     # Find all .pdb paths in the merged results folder
-    pdb_paths = glob.glob(os.path.join(global_paths["step18_merge_results"]["path"], "*.pdb"))
+    pdb_paths = glob.glob(os.path.join(global_prop["step18_merge_results"]["path"], "*.pdb"))
 
     # Zip the pdb files
     fu.zip_list(zip_file = global_paths["step18_merge_results"]["output_zip_path"], file_list = pdb_paths)
