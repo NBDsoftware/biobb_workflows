@@ -5,7 +5,7 @@
 Go to workflow folder and install conda environment:
 
 ```bash
-export KEY_MODELLER=MODELIRANJE
+export KEY_MODELLER= "HERE YOUR MODELLER KEY"
 conda env create -f environment.yml
 conda activate eucanshare_wf1
 ```
