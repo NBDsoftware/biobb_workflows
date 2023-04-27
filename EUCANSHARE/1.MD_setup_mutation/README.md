@@ -41,7 +41,7 @@ This workflow has several main sections, the workflow can be run until the end o
 
 - **Section 1**: extraction of structure from PDB and structure check. The input is either a pdb code or a pdb file.
 
-- **Section 2**: try to fix remaining PDB defects after extraction of the relevant structure and add mutations if needed. List of defects that the section attempts to fix: alternative locations, missing backbone atoms or missing residues (provide PDB code), missing side chain atoms, SS bonds, clashing amides and errors regarding side chain chirality of residues. 
+- **Section 2**: try to fix remaining PDB defects after extraction of the relevant structure and add mutations if needed. List of defects that the section attempts to fix: alternative locations, missing backbone atoms or missing residues (provide PDB code), missing side chain atoms, SS bonds, clashing amides and errors regarding side chain chirality of residues.
 
 - **Section 3**: preparation of the system for minimization and MD with GROMACS and minimization.
 
@@ -51,7 +51,7 @@ This workflow has several main sections, the workflow can be run until the end o
 
 - **Section 6**: launch several trajectories from equilibrated structure (see --n_trajs command line option). Concatenate those trajectories afterwards.
 
-Note that re-launching the workflow will skip the previously successful steps if restart is True. 
+Note that re-launching the workflow will skip the previously successful steps if restart is True.
 
 ## Sequential run
 

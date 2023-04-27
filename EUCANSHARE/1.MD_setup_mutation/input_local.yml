@@ -2,41 +2,23 @@
 
 working_dir_path: output # Folder to write i/o files of the workflow steps
 can_write_console_log: False # Verbose writing of log information
-restart: True # Skip steps already performed
+restart: False # Skip steps already performed
 remove_tmp: True
 
-# Section 1: extraction of protein and structure Check
-
-step1A_pdb:
-  tool: pdb
-  paths:
-    output_pdb_path: structure.pdb
-  properties:
-    filter: False # [ATOM, MODEL, ENDMDL] or False (then extract protein)
-    pdb_code: 4LOO
-
-step1B_extractMolecule:
+step1_extractMolecule:
   tool: extract_molecule
   paths:
-    input_structure_path: dependency/step1A_pdb/output_pdb_path
+    input_structure_path: /Users/pau/projects/biobb_workflows/EUCANSHARE/1.MD_setup_mutation/input/P38alpha4LOO.pdb
     output_molecule_path: protein.pdb
   properties:
     molecule_type: chains # (all), protein, na, dna, rna, chains
     chains: [A] # None or [A, B]
     remove_tmp: True
 
-step1C_structure_check:
-  tool: structure_check
-  paths:
-    input_structure_path: dependency/step1B_extractMolecule/output_molecule_path
-    output_summary_path: pdbStructureCheck.json
-
-# Section 2: addition of mutations and fix PDB defects
-
 step2A_fixaltlocs:
   tool: fix_altlocs
   paths:
-    input_pdb_path: dependency/step1B_extractMolecule/output_molecule_path
+    input_pdb_path: dependency/step1_extractMolecule/output_molecule_path
     output_pdb_path: fixaltlocs.pdb
 
 step2B_mutations:
@@ -44,26 +26,31 @@ step2B_mutations:
   paths:
     input_pdb_path: dependency/step2A_fixaltlocs/output_pdb_path
     output_pdb_path: mutated.pdb
-
-step2C_canonical_fasta:
-  tool: canonical_fasta
-  paths:
-    output_fasta_path: canonicalFasta.fasta
-
-step2D_fixbackbone:
-  tool: fix_backbone
-  paths:
-    input_pdb_path: dependency/step2B_mutations/output_pdb_path
-    input_fasta_canonical_sequence_path: dependency/step2C_canonical_fasta/output_fasta_path
-    output_pdb_path: fixbackbone.pdb
   properties:
-    add_caps: False
-    modeller_key: MODELIRANJE
+    #mutation_list: "A:Arg220Ala"
+
+# step2C_canonical_fasta:
+#   tool: canonical_fasta
+#   paths:
+#     output_fasta_path: canonicalFasta.fasta
+#   properties:
+#     pdb_code: None !!!!!!!!
+
+# step2D_fixbackbone:
+#   tool: fix_backbone
+#   paths:
+#     input_pdb_path: dependency/step2B_mutations/output_pdb_path
+#     input_fasta_canonical_sequence_path: dependency/step2C_canonical_fasta/output_fasta_path
+#     output_pdb_path: fixbackbone.pdb
+#   properties:
+#     add_caps: False
+#     modeller_key: HERE YOUR MODELLER KEY
 
 step2E_fixsidechain:
   tool: fix_side_chain
   paths:
-    input_pdb_path: dependency/step2D_fixbackbone/output_pdb_path
+    # input_pdb_path: dependency/step2D_fixbackbone/output_pdb_path
+    input_pdb_path: dependency/step2B_mutations/output_pdb_path
     output_pdb_path: fixsidechain.pdb
 
 step2F_fixssbonds:
@@ -94,14 +81,7 @@ step2I_renumberstructure:
     renumber_residues: True
     renumber_residues_per_chain: False
 
-step2J_checkPDB:
-  tool: checking_log
-  paths:
-    input_pdb_path: dependency/step2I_renumberstructure/output_structure_path
-    output_log_path: pdbStructureCheck.log
-
 # Section 3 (Steps 3-10): prepare system for minimization and MD and minimize
-
 step3_pdb2gmx:
   tool: pdb2gmx
   paths:
@@ -183,7 +163,6 @@ step10_energy_min:
     terms: ["Potential"]
 
 # Section 4 (Steps 11-13): NVT
-
 step11_grompp_nvt:
   tool: grompp
   paths:
