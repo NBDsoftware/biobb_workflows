@@ -1,4 +1,4 @@
-name: pocket_vs
+name: biobb_pocketVS
 channels:
   - conda-forge
   - bioconda

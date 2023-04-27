@@ -1,0 +1,15 @@
+name: eucanshare_wf3I
+channels:
+  - conda-forge
+  - bioconda
+  - anaconda
+dependencies:
+  - biobb_io>=3.8.0
+  - biobb_vs>=3.8.1
+  - biobb_chemistry>=3.8.0
+  - biobb_structure_utils>=3.8.0
+  - ipywidgets==7.6.6
+  - nb_conda_kernels
+  - nglview
+  - jupyter
+  - conda

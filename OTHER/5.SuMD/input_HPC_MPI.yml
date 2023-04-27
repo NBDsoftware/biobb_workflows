@@ -59,3 +59,29 @@ trajectory_cat:
   properties: 
     concatenate: True
     remove_tmp: True
+
+# Configuration of trajectory imaging - treatment of periodic boundary conditions
+
+trajectory_imaging:
+  paths:
+    input_traj_path: dependency/trajectory_cat/output_trj_path
+    input_top_path: dependency/short_MD/output_tpr_path
+    output_traj_path: trajectory_imaged.xtc
+  properties:
+    center_selection: RNA
+    output_selection: RNA_and_Ligand
+    pbc: nojump
+    center: True
+
+# Configuration of trajectory fitting - alignment of the trajectory (cannot be done during imaging)
+
+trajectory_fitting:
+  paths:
+    input_traj_path: dependency/trajectory_imaging/output_traj_path
+    input_top_path: dependency/short_MD/output_tpr_path
+    output_traj_path: trajectory_imaged_fitted.xtc
+  properties:
+    fit_selection: RNA
+    output_selection: RNA_and_Ligand
+    fit: rot+trans
+    center: False

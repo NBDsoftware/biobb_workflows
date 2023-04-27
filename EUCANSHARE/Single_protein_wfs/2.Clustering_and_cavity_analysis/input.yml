@@ -1,0 +1,71 @@
+working_dir_path: output                              # Workflow output directory
+can_write_console_log: True                           # Output log to console
+restart: True                                         # Do not execute steps if output files are already created
+
+# Section 1: Create index files
+
+step0_gmx_select_fit:                                       
+  tool: gmxselect
+  paths:
+    input_structure_path: /home/nbd-pablo/repos/eucanshare_wfs/1.MD_setup_mutation/output/step23_dry/imaged_structure.gro 
+    output_ndx_path: index_Fit.ndx
+  properties:
+    selection: '"FitGroup" group "Backbone"'           
+
+step0_gmx_select_output:                                       
+  tool: gmxselect
+  paths:
+    input_structure_path: dependency/step0_gmx_select_fit/input_structure_path
+    output_ndx_path: index_Fit_Output.ndx
+  properties:
+    selection: '"OutputGroup" group "System"' 
+
+# Section 2: Cluster trajectory and extract centroids pdb
+
+step1_gmx_cluster:
+  tool: gmx_cluster
+  paths:
+    input_traj_path: /home/nbd-pablo/repos/eucanshare_wfs/1.MD_setup_mutation/output/step24_trjcat/all_trajectories.trr  
+    input_structure_path: dependency/step0_gmx_select_output/input_structure_path  
+    input_index_path: dependency/step0_gmx_select_output/output_ndx_path
+    output_pdb_path: output.cluster.pdb
+  properties:
+    fit_selection: FitGroup       
+    output_selection: OutputGroup        
+    dista: False
+    method: linkage                      
+    cutoff: 0.08                         # nm (RMSD cut-off)
+
+step2_extract_models:
+  tool: extract_model
+  paths:
+    input_structure_path: dependency/step1_gmx_cluster/output_pdb_path
+    output_structure_path: cluster.pdb     
+  properties:
+    models_to_extract: 10  # Number of most populated centroids to extract (will be < 'number of clusters')
+
+# Section 3: Cavity analysis with fpocket on centroids
+
+step3_cavity_analysis:
+  tool: fpocket_run
+  paths:
+    input_pdb_path: dependency/step2_extract_models/output_structure_path
+    output_pockets_zip: all_pockets.zip
+    output_summary: summary.json
+  properties:
+    min_radius: 3
+    max_radius: 6
+    num_spheres: 35
+    sort_by: druggability_score
+    models_to_use: 10    # Number of models to do a cavity analysis on (will be < 'models_to_extract' and 'number of clusters') 
+
+step4_filter_cavities:
+  tool: fpocket_filter
+  paths:
+    input_pockets_zip: dependency/step3_cavity_analysis/output_pockets_zip
+    input_summary: dependency/step3_cavity_analysis/output_summary
+    output_filter_pockets_zip: filtered_pockets.zip
+  properties:
+    score: [0.3, 1]
+    druggability_score: [0.3, 1]
+    volume: [200, 5000]

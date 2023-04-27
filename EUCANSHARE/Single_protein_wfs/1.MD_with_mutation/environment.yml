@@ -1,0 +1,15 @@
+name: single_protein_wf1
+channels:
+  - conda-forge
+  - bioconda
+  - salilab
+dependencies:
+  # - python=3.9
+  # - modeller
+  # - yaml
+  # - biobb_io>=4.0.0
+  - biobb_common>=4.0.0
+  - biobb_structure_utils>=4.0.0
+  - biobb_model>=4.0.0
+  - biobb_gromacs>=4.0.0
+  - biobb_analysis>=4.0.0
