@@ -153,6 +153,10 @@ def save_cv_data(cv_time_series, time, path):
     Save CV time series and time array to a file
     """
 
+    # Round time and CV values to 3 decimal places
+    time = np.round(time, 3)
+    cv_time_series = np.round(cv_time_series, 3)
+
     # combine time and values into a list of tuples
     data = list(zip(time, cv_time_series))
 
@@ -160,12 +164,13 @@ def save_cv_data(cv_time_series, time, path):
     if os.path.isfile(path):
         # append data to existing file
         with open(path, mode='a', newline='') as file:
-            writer = csv.writer(file)
+            # Append data using whitespace as separator 
+            writer = csv.writer(file, delimiter=' ')
             writer.writerows(data)
     else:
         # create new file and write header and data
         with open(path, mode='w', newline='') as file:
-            writer = csv.writer(file)
+            writer = csv.writer(file, delimiter=' ')
             writer.writerow(['time (ns)', 'CV (nm)'])
             writer.writerows(data)
 
