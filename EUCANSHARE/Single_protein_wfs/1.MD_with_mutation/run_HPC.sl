@@ -25,5 +25,5 @@ module load slurm/slurm/21.08.6
 source activate /home/pnavarro/.conda/envs/single_protein_wf1
 
 # Launch workflow
-python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1
+python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 2
 

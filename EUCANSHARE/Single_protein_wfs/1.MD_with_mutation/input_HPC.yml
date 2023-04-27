@@ -141,7 +141,7 @@ step8_grompp_min:
   properties:
     simulation_type: minimization
     mdp:
-      nsteps: 10000 # 10000
+      nsteps: 50000 # 10000
       emtol: 10
 
 step9_mdrun_min:
@@ -252,12 +252,15 @@ step17_grompp_md:
   properties:
     simulation_type: free
     mdp:
-      nsteps: 1000000 # 50000000
+      nsteps: 5000000 # 50000000
       ref-t: 310 310
       nstxout: 10000 # 100000
       nstxout-compressed: 10000 # 100000
       nstvout: 0
       nstfout: 0
+      continuation: 'no'
+      gen-vel: 'yes'          
+      gen-temp: 310            
 
 step18_mdrun_md:
   tool: mdrun
