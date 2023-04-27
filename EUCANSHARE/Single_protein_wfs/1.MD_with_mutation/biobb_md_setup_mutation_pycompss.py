@@ -6,6 +6,7 @@
 
 # Importing all the needed libraries
 import time
+import random
 import argparse
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
@@ -137,7 +138,7 @@ def main_wf(configuration_path, num_trajs):
     global_log.info("step9_mdrun_min: Execute energy minimization")
     mdrun(**global_paths["step9_mdrun_min"], properties=global_prop["step9_mdrun_min"])
 
-    # STEP 10: dump potential energy evolution NOTE: create plots automatically
+    # STEP 10: dump potential energy evolution
     global_log.info("step10_energy_min: Compute potential energy during minimization")
     gmx_energy(**global_paths["step10_energy_min"], properties=global_prop["step10_energy_min"])
 
@@ -167,13 +168,19 @@ def main_wf(configuration_path, num_trajs):
 
     # Loop over trajectories
     global_log.info(f"Number of trajectories: {num_trajs}")
-    trj_list = []
+    traj_list = []
     for traj in (f"traj_{i}" for i in range(num_trajs)):
+
         traj_prop = conf.get_prop_dic(prefix=traj)
         traj_paths = conf.get_paths_dic(prefix=traj)
 
+        # Change seed of temperature coupling algorithm (V-rescale)
+        new_seed = {'ld-seed' : random.randint(1, 1000000)}
+        traj_prop['step17_grompp_md']['mdp'].update(new_seed)
+
         # STEP 17: free NPT production run pre-processing
         global_log.info(f"{traj} >  step17_grompp_md: Preprocess free dynamics")
+        # Update common paths to all trajectories
         traj_paths['step17_grompp_md']['input_gro_path'] = global_paths["step17_grompp_md"]['input_gro_path']
         traj_paths['step17_grompp_md']['input_top_zip_path'] = global_paths["step17_grompp_md"]['input_top_zip_path']
         traj_paths['step17_grompp_md']['input_cpt_path'] = global_paths["step17_grompp_md"]['input_cpt_path']
@@ -183,35 +190,35 @@ def main_wf(configuration_path, num_trajs):
         global_log.info(f"{traj} >  step18_mdrun_md: Execute free molecular dynamics simulation")
         mdrun(**traj_paths['step18_mdrun_md'], properties=traj_prop['step18_mdrun_md'])
 
-        # STEP 19: dump RMSD with respect to equilibrated structure (first frame) NOTE: add computation of RMSF, PCA and projection onto PC for visualization
+        # STEP 19: dump RMSD with respect to equilibrated structure (first frame)
         global_log.info(f"{traj} >  step19_rmsfirst: Compute Root Mean Square deviation against equilibrated structure (first)")
         gmx_rms(**traj_paths['step19_rmsfirst'], properties=traj_prop['step19_rmsfirst'])
 
         # STEP 20: dump RMSD with respect to minimized structure
         global_log.info(f"{traj} >  step20_rmsexp: Compute Root Mean Square deviation against minimized structure (exp)")
+        # Update common paths to all trajectories
         traj_paths['step20_rmsexp']['input_structure_path'] = global_paths["step20_rmsexp"]['input_structure_path']
         gmx_rms(**traj_paths['step20_rmsexp'], properties=traj_prop['step20_rmsexp'])
 
-        # STEP 21: dump Radius of gyration NOTE: add computation of RMSF, PCA and projection onto PC for visualization
+        # STEP 21: dump Radius of gyration
         global_log.info(f"{traj} >  step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
         gmx_rgyr(**traj_paths['step21_rgyr'], properties=traj_prop['step21_rgyr'])
 
         # STEP 22: image (correct for PBC) the trajectory centering the protein and dumping only protein atoms
         global_log.info(f"{traj} >  step22_image: Imaging the resulting trajectory")
         gmx_image(**traj_paths['step22_image'], properties=traj_prop['step22_image'])
-        trj_list.append(traj_paths['step22_image']['output_traj_path'])
+        traj_list.append(traj_paths['step22_image']['output_traj_path'])
 
-        # STEP 23: remove water and ions from structure obtained after equilibration, before production run
-        global_log.info(f"{traj} >  step23_dry: Removing water molecules and ions from the equilibrated structure")
-        traj_paths['step23_dry']['input_structure_path'] = global_paths["step23_dry"]['input_structure_path']
-        gmx_trjconv_str(**traj_paths['step23_dry'], properties=traj_prop['step23_dry'])
-
-    for traj in trj_list:
+    for traj in traj_list:
         compss_wait_on_file(traj)
+    
+    # STEP 23: remove water and ions from structure obtained after equilibration, before production run
+    global_log.info(f"step23_dry: Removing water molecules and ions from the equilibrated structure")
+    gmx_trjconv_str(**global_paths['step23_dry'], properties=global_prop['step23_dry'])
 
     # STEP 24: concatenate trajectories
     global_log.info("step24_trjcat: Concatenate trajectories")
-    fu.zip_list(zip_file=global_paths["step24_trjcat"]['input_trj_zip_path'], file_list=trj_list)
+    fu.zip_list(zip_file=global_paths["step24_trjcat"]['input_trj_zip_path'], file_list=traj_list)
     trjcat(**global_paths["step24_trjcat"], properties=global_prop["step24_trjcat"])
 
     # Print timing information to log file

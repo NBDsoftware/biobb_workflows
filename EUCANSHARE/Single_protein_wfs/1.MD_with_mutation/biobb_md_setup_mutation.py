@@ -188,7 +188,7 @@ def main_wf(configuration_path, num_trajs):
         global_log.info(f"{traj} >  step18_mdrun_md: Execute free molecular dynamics simulation")
         mdrun(**traj_paths['step18_mdrun_md'], properties=traj_prop['step18_mdrun_md'])
 
-        # STEP 19: dump RMSD with respect to equilibrated structure (first frame) 
+        # STEP 19: dump RMSD with respect to equilibrated structure (first frame)
         global_log.info(f"{traj} >  step19_rmsfirst: Compute Root Mean Square deviation against equilibrated structure (first)")
         gmx_rms(**traj_paths['step19_rmsfirst'], properties=traj_prop['step19_rmsfirst'])
 
@@ -198,7 +198,7 @@ def main_wf(configuration_path, num_trajs):
         traj_paths['step20_rmsexp']['input_structure_path'] = global_paths["step20_rmsexp"]['input_structure_path']
         gmx_rms(**traj_paths['step20_rmsexp'], properties=traj_prop['step20_rmsexp'])
 
-        # STEP 21: dump Radius of gyration 
+        # STEP 21: dump Radius of gyration
         global_log.info(f"{traj} >  step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
         gmx_rgyr(**traj_paths['step21_rgyr'], properties=traj_prop['step21_rgyr'])
 
