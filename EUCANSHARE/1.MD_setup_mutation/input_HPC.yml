@@ -44,7 +44,7 @@ step2B_mutations:
 #     output_pdb_path: fixbackbone.pdb
 #   properties:
 #     add_caps: False
-#     modeller_key: MODELIRANJE
+#     modeller_key: HERE YOUR MODELLER KEY
 
 step2E_fixsidechain:
   tool: fix_side_chain
@@ -192,7 +192,7 @@ step12_mdrun_nvt:
     output_cpt_path: nvt.cpt
   properties:
     binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin: /cm/shared/apps/slurm/current/bin/srun 
+    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
     mpi_np: 8
 
 step13_energy_nvt:
@@ -229,7 +229,7 @@ step15_mdrun_npt:
     output_cpt_path: npt.cpt
   properties:
     binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin: /cm/shared/apps/slurm/current/bin/srun 
+    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
     mpi_np: 8
 
 step16_energy_npt:

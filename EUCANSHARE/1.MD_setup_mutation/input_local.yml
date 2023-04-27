@@ -44,7 +44,7 @@ step2B_mutations:
 #     output_pdb_path: fixbackbone.pdb
 #   properties:
 #     add_caps: False
-#     modeller_key: MODELIRANJE
+#     modeller_key: HERE YOUR MODELLER KEY
 
 step2E_fixsidechain:
   tool: fix_side_chain
