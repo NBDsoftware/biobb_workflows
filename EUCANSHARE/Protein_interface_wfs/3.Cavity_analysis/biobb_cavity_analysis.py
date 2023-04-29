@@ -88,6 +88,192 @@ def add_suffix_to_paths(all_paths, suffix, *keywords):
 
     return
 
+def create_summary(pockets_path, default_summary_path, global_log):
+    '''
+    Print in log file all available pockets for each model found in the input folder for the pocket selection step. 
+    Include also information for each pocket.
+    
+    Inputs
+    ------
+
+        pockets_path         (str): Path to pockets folder 
+        default_summary_path (str): Default path to cavity summary with information for each pocket
+        global_log        (Logger): Object of class Logger (dumps info to global log file of this workflow)
+    
+    Output
+    ------
+
+        Info dumped to log file:
+
+        global_summary (dict):  dictionary with models and pockets ordered by modelname. See example:
+        
+            {
+                modelname1 : {         
+                    pockets : [1 , 2], 
+                    pocket1 : {info pocket 1}, 
+                    pocket2 : {info pocket 2}
+                    }, 
+                modelname2 : {
+                    ...
+                } 
+            }
+    '''
+    
+    global_log.info("    Available models and pockets after filtering:")
+
+    # Pattern that can be used to extract ID from string with pocket name: (str) pocket3 -> (int) 3
+    pocketID_pattern = r'pocket(\d+)'
+
+    # Pattern that can be used to extract model ID from string with model name
+    # This ID reflects the ordering of the population, not the original ID of the clustering step
+    modelID_pattern = r'cluster_(\d+)'
+
+    # Dictionary where all available model_summary dictionaries will be saved
+    global_summary = {}
+
+    # Convert string to Path class
+    pockets_path = Path(pockets_path)
+
+    # Pattern for pocket filtering log file names
+    logNamePattern = pockets_path.name + "_log*.out"
+
+    # Find all log files matching pattern
+    logList = sorted(pockets_path.rglob(logNamePattern))
+
+    # Iterate through all log files -> find model name and available pockets if any
+    for log in logList:
+
+        # Find model name NOTE: hardcoded name of step and file, should be changed
+        modelName = find_matching_line(pattern=r'step1_cavity_analysis/all_pockets_(\S+).zip', filepath=str(log))
+
+        # Find pockets  NOTE: is there a more robust way of finding models and pockets after filtering? 
+        pocket_lines = find_matching_lines(pattern=r'pocket\d+$', filepath=str(log))
+
+        # If some model and pocket/s are found in log
+        if None not in (modelName, pocket_lines):
+
+            # Dictionary where pockets and information of each pocket will be saved
+            model_summary = {}
+
+            # Path to this model's summary with information for all pocket found
+            summary_path = add_suffix(original_path=Path(default_summary_path), suffix=modelName)
+
+            # Load all pockets summary as dictionary
+            with open(summary_path) as json_file:
+                all_pockets_summary = json.load(json_file)
+
+            # list with pocket IDs for this model
+            pocket_IDs = []
+
+            # For each filtered pocket: pocket1, pocket4 ...
+            for pocket_line in pocket_lines:
+
+                # Strip whitespace if any
+                pocket_line = pocket_line.strip()
+
+                # Save entry with pocket information
+                model_summary.update({pocket_line : all_pockets_summary[pocket_line]})
+
+                # Search for the pocket ID in pocket name
+                match = re.search(pocketID_pattern, pocket_line)
+
+                # Append pocket ID to list
+                pocket_IDs.append(int(match[1]))
+
+            # Save pocket IDs
+            model_summary.update({'pockets' : pocket_IDs})
+
+            # Update global_summary
+            global_summary.update({modelName : model_summary})
+
+    # Print in log file with readable format
+    pretty_summary = json.dumps(global_summary, indent=2)
+
+    global_log.info(pretty_summary)
+
+    return 
+
+def find_matching_line(pattern, filepath):
+    '''
+    Finds first line in file containing a given pattern
+
+    Inputs
+    ------
+
+        pattern  (regex pattern): regular expression pattern to search in file lines
+        filepath           (str): file path to search in
+    
+    Output
+    ------
+    
+        line (str): line matching the pattern or None if no line matches the pattern
+    '''
+
+    # Open log file
+    file = open(filepath, 'r')
+    
+    # Read all lines
+    lines = file.readlines()
+
+    # Search matching string in each line
+    for line in lines:
+
+        match = re.search(pattern, line)
+
+        if match is not None:
+
+            # Close file
+            file.close()
+
+            return match[1]
+    
+    file.close()
+
+    return None
+
+def find_matching_lines(pattern, filepath):
+    '''
+    Finds all lines in file containing a given pattern
+
+    Inputs
+    ------
+
+        pattern  (regex pattern): regular expression pattern to search in file lines
+        filepath           (str): file path to search in
+    
+    Output
+    ------
+
+        lines (list(str)): lines matching the pattern or None if no line matches the pattern
+    '''
+
+    # Open log file
+    file = open(filepath, 'r')
+    
+    # Read all lines
+    lines = file.readlines()
+
+    # List to save matching lines
+    matchingLines = []
+
+    # Search matching string in each line
+    for line in lines:
+
+        match = re.search(pattern, line)
+
+        if match is not None:
+
+            matchingLines.append(match[0])
+
+    # Close file
+    file.close()
+
+    # If no lines contained the pattern, return None
+    if len(matchingLines) == 0:
+        matchingLines = None
+    
+    return matchingLines
+
 def main_wf(configuration_path):
     '''
     Main cavity analysis workflow. This workflow analyzes the cavities of the input structures structures, filters the cavities 
@@ -156,6 +342,11 @@ def main_wf(configuration_path):
         # Filter cavities
         fpocket_filter(**paths_filter, properties=global_prop["step2_filter_cavities"])
 
+    # Create and print available models with their pockets and populations after filtering
+    create_summary(pockets_path = global_prop["step2_filter_cavities"]["path"], 
+                   default_summary_path = global_paths['step1_cavity_analysis']['output_summary'],
+                   global_log = global_log)
+    
     # Print timing information to log file
     elapsed_time = time.time() - start_time
     global_log.info('')
