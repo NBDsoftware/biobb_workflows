@@ -1,0 +1,70 @@
+working_dir_path: output
+can_write_console_log: False 
+restart: False 
+remove_tmp: True 
+
+# Section 1: Pocket selection and receptor preparation
+
+step1_fpocket_select:
+  tool: fpocket_select
+  paths:
+    input_pockets_zip: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Protein_interface_wfs/3.Cavity_analysis/output/step2_filter_cavities/filtered_pockets_12_refined_pose.zip
+    output_pocket_pdb: fpocket_cavity.pdb
+    output_pocket_pqr: fpocket_pocket.pqr
+  properties:
+    pocket: 1
+
+step2_box:
+  tool: box
+  paths:
+    input_pdb_path: dependency/step1_fpocket_select/output_pocket_pqr
+    output_pdb_path: box.pdb 
+  properties:
+    offset: 12             
+    box_coordinates: True
+
+step3_str_check_add_hydrogens:
+  tool: str_check_add_hydrogens
+  paths:
+    input_structure_path: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Protein_interface_wfs/3.Cavity_analysis/output/step0_extract_poses/12_refined_pose.pdb
+    output_structure_path: prep_receptor.pdbqt
+  properties:
+    charges: True
+    mode: auto
+
+# Section 2: Source each ligand and dock it to receptor
+
+step4_babel_prepare_lig:
+  tool: babel_convert
+  paths:
+    input_path: ligand.smi
+    output_path: ligand.pdbqt
+  properties:
+    input_format: smi
+    output_format: pdbqt
+    coordinates: 3
+    flex: False
+
+step5_autodock_vina_run:
+  tool: autodock_vina_run
+  paths:
+    input_ligand_pdbqt_path: dependency/step4_babel_prepare_lig/output_path
+    input_receptor_pdbqt_path: dependency/step3_str_check_add_hydrogens/output_structure_path
+    input_box_path: dependency/step2_box/output_pdb_path
+    output_pdbqt_path: output_vina.pdbqt
+    output_log_path: output_vina.log
+
+step6_babel_prepare_pose:
+  tool: babel_convert
+  paths:
+    input_path: dependency/step5_autodock_vina_run/output_pdbqt_path
+    output_path: output_vina.pdb
+  properties:
+    input_format: pdbqt
+    output_format: pdb
+
+step7_show_top_ligands:
+  paths:
+    output_csv_path: top_ligands.csv 
+  properties:
+    number_top_ligands: 50

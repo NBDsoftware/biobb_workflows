@@ -1,0 +1,9 @@
+name: protein_protein_wf4
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - biobb_vs>=4.0.0
+  - biobb_chemistry>=4.0.0
+  - biobb_structure_utils>=4.0.0
+  - conda
