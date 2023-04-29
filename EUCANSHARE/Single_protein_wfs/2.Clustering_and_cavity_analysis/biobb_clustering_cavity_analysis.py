@@ -501,10 +501,8 @@ def main_wf(configuration_path, clustering_path = None):
         # Extract the most populated models from the pdb with all centroids
         for i in range(num_models_to_extract):
 
-            # Copy original paths - to avoid accumulation of suffixes
+            # Copy and modify the path names according to model index
             paths_models = global_paths["step2_extract_models"].copy()
-
-            # Modify the path names according to model index
             add_suffix_to_paths(paths_models, str(i), "output_structure_path")
 
             # Update 'models' property (ID)
@@ -534,10 +532,8 @@ def main_wf(configuration_path, clustering_path = None):
     # Analyze cavities of each pdb 
     for pdb_path in pdb_paths[:models_to_use]:
 
-        # Copy original paths
+        # Copy and modify the path names according to pdb name
         paths_fpocket = global_paths["step3_cavity_analysis"].copy()
-
-        # Modify the path names according to pdb name
         add_suffix_to_paths(paths_fpocket, Path(pdb_path).stem, "output_pockets_zip", "output_summary")
 
         # Update input pdb path
@@ -552,10 +548,8 @@ def main_wf(configuration_path, clustering_path = None):
     # Filter the cavities found for each pdb
     for pdb_path in pdb_paths[:models_to_use]:
 
-        # Copy original paths
+        # Copy and modify the path names according to pdb name
         paths_filter = global_paths["step4_filter_cavities"].copy()
-
-        # Modify the path names according to pdb name
         add_suffix_to_paths(paths_filter, Path(pdb_path).stem, "input_pockets_zip", "input_summary", "output_filter_pockets_zip")
 
         # Filter cavities
