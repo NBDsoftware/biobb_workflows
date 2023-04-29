@@ -20,7 +20,8 @@ from MDAnalysis.lib.distances import distance_array
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 from biobb_gromacs.gromacs.trjcat import trjcat
-from biobb_gromacs.gromacs.grompp_mdrun import grompp_mdrun
+from biobb_gromacs.gromacs.grompp import grompp
+from biobb_gromacs.gromacs.mdrun import mdrun
 from biobb_analysis.gromacs.gmx_image import gmx_image
 from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 
@@ -265,13 +266,13 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
     global_paths = conf.get_paths_dic()
 
     # Paths and Properties of short MD (generating new velocities)
-    new_vel_MD_paths = global_paths['short_MD'].copy()
-    new_vel_MD_prop = global_prop['short_MD'].copy()
-    _ = new_vel_MD_paths.pop('input_cpt_path', None)
+    new_MD_paths = global_paths['short_MD_grompp'].copy()
+    new_MD_prop = global_prop['short_MD_grompp'].copy()
+    _ = new_MD_paths.pop('input_cpt_path', None)
 
     # Paths and Properties of short MD (continuation from last accepted state)
-    continuation_MD_paths = global_paths['short_MD'].copy()
-    continuation_MD_prop = global_prop['short_MD'].copy()
+    continuation_MD_paths = global_paths['short_MD_grompp'].copy()
+    continuation_MD_prop = global_prop['short_MD_grompp'].copy()
     continuation_MD_prop['mdp']['continuation'] = 'yes'
     continuation_MD_prop['mdp']['gen-vel'] = 'no'
     _ = continuation_MD_prop['mdp'].pop('gen-temp', None)
@@ -286,7 +287,7 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
 
     # Add index path to steps if provided
     if index_path is not None:
-        new_vel_MD_paths['input_ndx_path'] = index_path
+        new_MD_paths['input_ndx_path'] = index_path
         continuation_MD_paths['input_ndx_path'] = index_path
         imaging_MD_paths['input_index_path'] = index_path
         str_MD_paths['input_index_path'] = index_path
@@ -301,11 +302,11 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
     # Get SuMD properties
     sumd_prop = conf.properties['sumd']
 
-    # Create short MD folder -> to copy input structure and topology inside before step execution
-    if not os.path.exists(new_vel_MD_prop["path"]):
-        os.makedirs(new_vel_MD_prop["path"])
+    # Create short MD grompp folder -> to copy input structure and topology inside before first step
+    if not os.path.exists(new_MD_prop["path"]):
+        os.makedirs(new_MD_prop["path"])
 
-    # Copy input structure and topology to short MD folder
+    # Copy input structure and topology to short MD grompp folder
     shutil.copy(input_structure, continuation_MD_paths["input_gro_path"])
     shutil.copy(topology_path, continuation_MD_paths["input_top_zip_path"])
 
@@ -313,25 +314,22 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
     if not os.path.exists(concat_prop["path"]):
         os.makedirs(concat_prop["path"])
 
-    # Create imaging folder -> temporal fix 
+    # Create imaging folder -> temporal fix TODO: check if still needed
     if not os.path.exists(imaging_MD_prop["path"]):
         os.makedirs(imaging_MD_prop["path"])
     
-    # Create structure extraction folder -> temporal fix 
+    # Create structure extraction folder -> temporal fix  TODO: check if still needed
     if not os.path.exists(str_MD_prop["path"]):
         os.makedirs(str_MD_prop["path"])
 
     # Initialize 'last step accepted' condition
     last_step_accepted = False
 
-    # Initialize counters
+    # Initialize step counters
     total_steps, failed_steps, accepted_steps = 0,0,0
 
     # Find max number of steps (short MDs) to do
     max_num_steps = sumd_prop['num_steps']['max_total']
-
-    # Initialize list for temporal folders with tpr files -> will be fixed in next grompp_mdrun release
-    tmp_folders = []
 
     while (total_steps < max_num_steps):
 
@@ -341,30 +339,28 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
                 
             # Continue MD with same velocities 
             sumd_log.info('  Continuation of previous step...')
-            # Execute a short MD simulation, restarting from last checkpoint
-            grompp_mdrun(**continuation_MD_paths, properties=continuation_MD_prop)
+            grompp(**continuation_MD_paths, properties=continuation_MD_prop)
+            mdrun(**global_paths['short_MD_mdrun'], properties=global_prop['short_MD_mdrun'])
         
         elif (failed_steps > sumd_prop['num_steps']['max_failed']):
             
             # Continue MD with same velocities 
             sumd_log.info('  Maximum number of failed steps reached, continuation of previous step...')
-            # Execute a short MD simulation, restarting from last checkpoint
-            grompp_mdrun(**continuation_MD_paths, properties=continuation_MD_prop)
+            grompp(**continuation_MD_paths, properties=continuation_MD_prop)
+            mdrun(**global_paths['short_MD_mdrun'], properties=global_prop['short_MD_mdrun'])
 
         else:
             
             # Restart from last accepted structure with new velocities 
             sumd_log.info('  Generating new velocities...')
-            # Execute a short MD simulation, generating new velocities
-            grompp_mdrun(**new_vel_MD_paths, properties=new_vel_MD_prop)
+            grompp(**new_MD_paths, properties=new_MD_prop)
+            mdrun(**global_paths['short_MD_mdrun'], properties=global_prop['short_MD_mdrun'])
 
         # Image short MD trajectory (to avoid PBC issues when analyzing the CV)
         gmx_image(**imaging_MD_paths, properties=imaging_MD_prop)
 
         # Extract structure from short MD trajectory
         gmx_trjconv_str(**str_MD_paths, properties=str_MD_prop)
-
-        # NOTE: which topology should we use? the step.gro? or a .gro from the imaged trajectory?
 
         # Use MDAnalysis to analyze the CV (distance between 2 user-defined groups)
         last_step_accepted = analyze_cv(imaging_MD_paths["output_traj_path"], str_MD_paths["output_str_path"], 
@@ -422,6 +418,8 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
         # Find generic paths to temporal log files from steps
         short_MD_stdout_path = os.path.join(continuation_MD_prop["path"], continuation_MD_prop["step"] + "_log*.out")
         short_MD_stderr_path = os.path.join(continuation_MD_prop["path"], continuation_MD_prop["step"] + "_log*.err")
+        mdrun_stdout_path = os.path.join(global_prop["short_MD_mdrun"]["path"], global_prop["short_MD_mdrun"]["step"] + "_log*.out")
+        mdrun_stderr_path = os.path.join(global_prop["short_MD_mdrun"]["path"], global_prop["short_MD_mdrun"]["step"] + "_log*.err")
         image_MD_stdout_path = os.path.join(imaging_MD_prop["path"], imaging_MD_prop["step"] + "_log*.out")
         image_MD_stderr_path = os.path.join(imaging_MD_prop["path"], imaging_MD_prop["step"] + "_log*.err")
         concat_stdout_path = os.path.join(concat_prop["path"], concat_prop["step"] + "_log*.out")
@@ -429,15 +427,9 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
 
         # Remove temporal log files from steps
         remove_tmp_files(short_MD_stdout_path, short_MD_stderr_path,
+                         mdrun_stdout_path, mdrun_stderr_path,
                          image_MD_stdout_path, image_MD_stderr_path, 
                          concat_stdout_path, concat_stderr_path)
-    
-    # Get all temporal unique folders with internal.tpr from grompp_mdrun -> will be fixed in next grompp_mdrun release
-    tmp_folders=get_tmp_folders(os.getcwd())
-
-    # Move all temporal unique folders with internal.tpr from grompp_mdrun to common folder -> will be fixed in next grompp_mdrun release
-    for tmp_folder in tmp_folders:
-        shutil.move(tmp_folder, os.path.join(os.getcwd(), "tmp"))
 
     # Print timing information to the log file
     elapsed_time = time.time() - start_time
