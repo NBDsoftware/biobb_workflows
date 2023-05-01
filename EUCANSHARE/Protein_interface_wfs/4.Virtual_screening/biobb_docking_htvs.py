@@ -193,14 +193,14 @@ def create_ranking(ranking_path, num_ligands, affinities_list):
     with open(ranking_path, 'w') as file:
 
         # Write header
-        file.write("Rank Affinity Ligand_ID \n")
+        file.write("Rank Affinity Ligand_name Ligand_ID \n")
 
         # Write ranking
         for i, affinity_tuple in enumerate(affinities_list):
 
             affinity, ligand_identifier, ligand_ID = affinity_tuple
 
-            file.write("{}\t{}\t{}\n".format(i+1, affinity, ligand_ID))
+            file.write(f"{i+1}\t{affinity}\t{ligand_identifier}\t{ligand_ID}\n")
 
     return 
 
