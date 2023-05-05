@@ -153,9 +153,8 @@ step9_mdrun_min:
     output_edr_path: min.edr
     output_log_path: min.log
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
-    mpi_np: 8
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
+    use_gpu: True
 
 step10_energy_min:
   tool: gmx_energy
@@ -191,9 +190,8 @@ step12_mdrun_nvt:
     output_log_path: nvt.log
     output_cpt_path: nvt.cpt
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
-    mpi_np: 8
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
+    use_gpu: True
 
 step13_energy_nvt:
   tool: gmx_energy
@@ -228,9 +226,8 @@ step15_mdrun_npt:
     output_log_path: npt.log
     output_cpt_path: npt.cpt
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
-    mpi_np: 8
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
+    use_gpu: True
 
 step16_energy_npt:
   tool: gmx_energy
@@ -272,9 +269,8 @@ step18_mdrun_md:
     output_log_path: md.log
     output_cpt_path: md.cpt
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
-    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
-    mpi_np: 8
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
+    use_gpu: True
 
 step19_rmsfirst:
   tool: gmx_rms
