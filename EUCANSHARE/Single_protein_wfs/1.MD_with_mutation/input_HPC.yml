@@ -141,7 +141,7 @@ step8_grompp_min:
   properties:
     simulation_type: minimization
     mdp:
-      nsteps: 50000 # 10000
+      nsteps: 10000 # 10000
       emtol: 10
 
 step9_mdrun_min:
@@ -153,8 +153,9 @@ step9_mdrun_min:
     output_edr_path: min.edr
     output_log_path: min.log
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
-    use_gpu: True
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
+    mpi_np: 8
 
 step10_energy_min:
   tool: gmx_energy
@@ -175,7 +176,7 @@ step11_grompp_nvt:
   properties:
     simulation_type: nvt
     mdp:
-      nsteps: 500000 # 50000
+      nsteps: 10000 # 50000
       dt: 0.002
       Define: -DPOSRES
       ref-t: 310 310
@@ -213,7 +214,7 @@ step14_grompp_npt:
   properties:
     simulation_type: npt
     mdp:
-      nsteps: 500000 # 50000
+      nsteps: 100000 # 50000
       ref-t: 310 310
 
 step15_mdrun_npt:
@@ -249,10 +250,10 @@ step17_grompp_md:
   properties:
     simulation_type: free
     mdp:
-      nsteps: 5000000 # 50000000
+      nsteps: 100000 # 50000000
       ref-t: 310 310
-      nstxout: 10000 # 100000
-      nstxout-compressed: 10000 # 100000
+      nstxout: 1000 # 100000
+      nstxout-compressed: 1000 # 100000
       nstvout: 0
       nstfout: 0
       continuation: 'no'
