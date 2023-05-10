@@ -16,12 +16,12 @@ from pathlib import Path
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
-from biobb_analysis.gromacs.gmx_cluster import gmx_cluster
+from biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_gromacs.gromacs.gmxselect import gmxselect
+from biobb_analysis.gromacs.gmx_cluster import gmx_cluster
 from biobb_structure_utils.utils.extract_model import extract_model
 from biobb_vs.fpocket.fpocket_run import fpocket_run
 from biobb_vs.fpocket.fpocket_filter import fpocket_filter
-
 
 def add_suffix(original_path, suffix):
     '''
@@ -38,10 +38,10 @@ def add_suffix(original_path, suffix):
 
         new_path   (str): new path
 
-    original_path = Path('/home/user/ClusteringWF/output/step2_extract_models/output.pdb')
+    original_path = Path('/home/user/workflow/output/step2_extract_models/output.pdb')
     suffix = '0'
 
-    new_path = '/home/user/ClusteringWF/output/step2_extract_models/output_0.pdb'
+    new_path = '/home/user/workflow/output/step2_extract_models/output_0.pdb'
     '''
     # Identify original file name, extension and path
     filename = original_path.stem
@@ -196,139 +196,105 @@ def get_clusters_population(log_name: str, clustering_folder: str, global_log) -
     # Return list with cluster population and id sorted by population
     return clusters_population
 
-def merge_files(source_file_path: str, destination_file_path: str) -> None:
+def create_summary(output_path, cluster_names, filter_cavities_folder, cavity_analysis_folder, pockets_summary_filename,
+                   cluster_populations, global_log):
     '''
-    Append the contents of "source_file_path" to "destination_file_path"
-
-    Inputs
-    ------
-
-        source_file_path       : path to source file
-        destination_file_path  : path to destination path
-    '''
-
-    # Open the source file in read mode 
-    source_file = open(source_file_path, 'r')
-
-    # Open destination file in append mode
-    destination_file = open(destination_file_path, 'a+')
-
-    # Append contents of source to destination
-    destination_file.write(source_file.read())
-
-    # Close both
-    source_file.close()
-    destination_file.close()
-
-def create_summary(pockets_path, default_summary_path, models_population, global_log):
-    '''
-    Print in log file all available pockets for each model found in the input folder for the pocket selection step. 
-    Include also information for each pocket and population for each model.
+    Print in log file all available pockets after filtering for each centroid. 
+    Include also information for each pocket and population for each centroid if available.
     
     Inputs
     ------
 
-        pockets_path         (str): Path to pockets folder 
-        default_summary_path (str): Default path to cavity summary with information for each pocket
-        models_population   (list): List with tuples containing (population, cluster_ID) ordered by population
-        global_log        (Logger): Object of class Logger (dumps info to global log file of this workflow)
+        output_path            (str): Path to output folder
+        cluster_names         (list): List with names of centroids
+        filter_cavities_folder (str): Name of filter cavities folder
+        cavity_analysis_folder (str): Name of cavity analysis folder
+        pockets_summary_filename (str): Name of pockets summary file
+        cluster_populations     (list): List with tuples containing (population, cluster_ID) ordered by population
+        global_log          (Logger): Object of class Logger (dumps info to global log file of this workflow)
     
     Output
     ------
 
         Info dumped to log file
 
-        global_summary (dict):  dictionary with models and pockets ordered by modelname. See example:
+        global_summary (dict):  dictionary with clusters and pockets ordered by cluster name. See example:
         
             {
-                modelname1 : {        
+                clustername1 : {        
                     population : 143, 
                     pockets : [1 , 2], 
                     pocket1 : {info pocket 1}, 
                     pocket2 : {info pocket 2}
                     }, 
-                modelname2 : {
+                clustername2 : {
                     ...
                 } 
             }
     '''
     
-    global_log.info("    Available models and pockets after filtering:")
+    global_log.info("    Available clusters and pockets after filtering:")
 
-    # Pattern that can be used to extract ID from string with pocket name: (str) pocket3 -> (int) 3
+    # Pattern that can be used to extract pocket ID from string with pocket name: (str) pocket3 -> (int) 3
     pocketID_pattern = r'pocket(\d+)'
 
-    # Pattern that can be used to extract model ID from string with model name
-    # This ID reflects the ordering of the population, not the original ID of the clustering step
-    modelID_pattern = r'cluster_(\d+)'
-
-    # Dictionary where all available model_summary dictionaries will be saved
+    # Dictionary where all available cluster_summary dictionaries will be saved
     global_summary = {}
 
-    # Convert string to Path class
-    pockets_path = Path(pockets_path)
+    # For each centroid
+    for cluster_index, cluster_name in enumerate(cluster_names):
 
-    # Pattern for pocket filtering log file names
-    logNamePattern = pockets_path.name + "_log*.out"
+        # Name of filtered pockets log file
+        filtering_log_name =  f"{cluster_name}_{filter_cavities_folder}_log.out"
 
-    # Find all log files matching pattern
-    logList = sorted(pockets_path.rglob(logNamePattern))
+        # Path to filtered pockets log file
+        filtering_log_path = os.path.join(output_path, filter_cavities_folder, filtering_log_name)
 
-    # Iterate through all log files -> find model name and available pockets if any
-    for log in logList:
+        # Find pockets in log file
+        pocket_names = find_matching_lines(pattern=r'pocket\d+$', filepath=filtering_log_path)
 
-        # Find model name NOTE: hardcoded name of step and file, should be changed
-        modelName = find_matching_line(pattern=r'step3_cavity_analysis/all_pockets_(\S+).zip', filepath=str(log))
+        # If any pockets are found 
+        if pocket_names is not None:
 
-        # Find pockets  NOTE: is there a more robust way of finding models and pockets after filtering? 
-        pocket_lines = find_matching_lines(pattern=r'pocket\d+$', filepath=str(log))
-
-        # If some model and pocket/s are found in log
-        if None not in (modelName, pocket_lines):
-
-            # Dictionary where pockets, model population and information of each pocket will be saved
-            model_summary = {}
+            # Dictionary with information for this cluster
+            cluster_summary = {}
 
             # If clustering was done externally we might not have this information 
-            if models_population is not None:
+            if cluster_populations is not None:
 
-                # Search for the model ID in model name
-                match = re.search(modelID_pattern, modelName)
-                model_ID = int(match[1])
+                # Save population of centroid
+                cluster_summary.update({'population' : cluster_populations[cluster_index][0]})
 
-                # Save population of model (model = centroid of cluster)
-                model_summary.update({'population' : models_population[model_ID][0]})
-
-            # Path to this model's summary with information for all pocket found
-            summary_path = add_suffix(original_path=Path(default_summary_path), suffix=modelName)
+            # Path to this cluster's summary with information for all pocket found
+            summary_path = os.path.join(output_path, cluster_name, cavity_analysis_folder, pockets_summary_filename)
 
             # Load all pockets summary as dictionary
             with open(summary_path) as json_file:
                 all_pockets_summary = json.load(json_file)
 
-            # list with pocket IDs for this model
+            # list with pocket IDs for this cluster
             pocket_IDs = []
 
             # For each filtered pocket: pocket1, pocket4 ...
-            for pocket_line in pocket_lines:
+            for pocket_name in pocket_names:
 
-                # Strip whitespace if any
-                pocket_line = pocket_line.strip()
+                # Strip whitespaces
+                pocket_name = pocket_name.strip()
 
                 # Save entry with pocket information
-                model_summary.update({pocket_line : all_pockets_summary[pocket_line]})
+                cluster_summary.update({pocket_name : all_pockets_summary[pocket_name]})
 
                 # Search for the pocket ID in pocket name
-                match = re.search(pocketID_pattern, pocket_line)
+                match = re.search(pocketID_pattern, pocket_name)
 
                 # Append pocket ID to list
                 pocket_IDs.append(int(match[1]))
 
             # Save pocket IDs
-            model_summary.update({'pockets' : pocket_IDs})
+            cluster_summary.update({'pockets' : pocket_IDs})
 
             # Update global_summary
-            global_summary.update({modelName : model_summary})
+            global_summary.update({cluster_name : cluster_summary})
 
     # Print in log file with readable format
     pretty_summary = json.dumps(global_summary, indent=2)
@@ -419,7 +385,7 @@ def find_matching_lines(pattern, filepath):
     return matchingLines
 
 
-def main_wf(configuration_path, clustering_path = None):
+def main_wf(configuration_path, traj_path, top_path, clustering_path, output_path):
     '''
     Main clustering and cavity analysis workflow. This workflow clusters a given trajectory and analyzes the cavities of the most representative
     structures. Then filters the cavities according to a pre-defined criteria and outputs the pockets that passed the filter.
@@ -427,8 +393,11 @@ def main_wf(configuration_path, clustering_path = None):
     Inputs
     ------
 
-        configuration_path (str): path to input.yml 
-        clustering_path    (str): (Optional) path to the folder with the most representative structures in pdb format from an external clustering (*.pdb)
+        configuration_path (str): path to YAML configuration file
+        traj_path          (str): (Optional) path to trajectory file
+        top_path           (str): (Optional) path to topology file
+        clustering_path    (str): (Optional) path to the folder with the most representative structures in pdb format from an external clustering 
+        output_path        (str): (Optional) path to output folder
 
     Outputs
     -------
@@ -437,16 +406,16 @@ def main_wf(configuration_path, clustering_path = None):
         global_paths    (dict): dictionary with all workflow paths
         global_prop     (dict): dictionary will all workflow properties
 
-        global_summary  (dict): dictionary with models and pockets. See example:
+        global_summary  (dict): dictionary with clusters and pockets. See example:
         
             {
-                modelname1 : {
+                clustername1 : {
                     population : 143,  
                     pockets: [1, 2],
                     pocket1 : {info pocket 1}, 
                     pocket2 : {info pocket 2}
                     }, 
-                modelname2 : {
+                clustername2 : {
                     ...
                 } 
             }
@@ -456,6 +425,10 @@ def main_wf(configuration_path, clustering_path = None):
 
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
+
+    # Enforce output_path if provided
+    if output_path is not None:
+        conf.properties['working_dir'] = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))
 
     # Initializing a global log file
     global_log, _ = fu.get_logs(path=conf.get_working_dir_path(), light_format=True)
@@ -467,98 +440,98 @@ def main_wf(configuration_path, clustering_path = None):
 
     # If clustering is not given externally -> cluster the input trajectory and return cluster path
     if clustering_path is None:
-    
-        # STEP 0: Create index file with FitGroup for gmx_cluster
-        global_log.info("step0_gmx_select_fit: Creation of index file for clustering 'fit_selection'")
-        gmxselect(**global_paths['step0_gmx_select_fit'], properties=global_prop['step0_gmx_select_fit'])
+        
+        # Enforce traj_path if provided
+        if traj_path is not None:
+            global_paths['step1_gmx_cluster']['input_traj_path'] = traj_path
 
-        # STEP 0: Create index file with OutputGroup for gmx_cluster
-        global_log.info("step0_gmx_select_output: Creation of index file for clustering 'output_selection'")
-        gmxselect(**global_paths['step0_gmx_select_output'], properties=global_prop['step0_gmx_select_output'])
+        # Enforce top_path if provided
+        if top_path is not None:
+            global_paths['step0A_make_ndx']['input_structure_path'] = top_path
+            global_paths['step0B_add_rmsd_group']['input_structure_path'] = top_path
+            global_paths['step0C_add_output_group']['input_structure_path'] = top_path
+            global_paths['step1_gmx_cluster']['input_structure_path'] = top_path
 
-        # Merge both index files 
-        merge_files(source_file_path = global_paths['step0_gmx_select_fit']["output_ndx_path"], 
-                    destination_file_path = global_paths['step0_gmx_select_output']["output_ndx_path"])
+        # STEP 0: Create index file
+        global_log.info("step0A_make_ndx: Creation of index file")
+        make_ndx(**global_paths['step0A_make_ndx'], properties=global_prop['step0A_make_ndx'])
 
-        # STEP 1: Clustering trajectory with gmx_cluster
+        # STEP 0: Add RmsdGroup to index file
+        global_log.info("step0B_add_rmsd_group: Adding RmsdGroup to index file")
+        gmxselect(**global_paths['step0B_add_rmsd_group'], properties=global_prop['step0B_add_rmsd_group'])
+
+        # STEP 0: Add OutputGroup to index file
+        global_log.info("step0C_add_output_group: Adding OutputGroup to index file")
+        gmxselect(**global_paths['step0C_add_output_group'], properties=global_prop['step0C_add_output_group'])
+
+        # STEP 1: Cluster trajectory with gmx_cluster
         global_log.info("step1_gmx_cluster: Clustering structures from the trajectory")
         gmx_cluster(**global_paths["step1_gmx_cluster"], properties=global_prop["step1_gmx_cluster"])
 
-        # Save Model's (centroids of clusters) ID and population in JSON file
+        # Save centroid IDs and populations in JSON file
         global_log.info( "step1_gmx_cluster: Reading clustering outcome, generating clusters JSON file")
-        models_population = get_clusters_population(log_name = "step1_gmx_cluster_cluster.log",
+        cluster_populations = get_clusters_population(log_name = "step1_gmx_cluster_cluster.log",
                                                     clustering_folder = global_prop["step1_gmx_cluster"]['path'],
                                                     global_log = global_log)
 
         # NOTE: this is needed because gmx_cluster doesn't include all the output paths in the constructor and dictionaries - thus some are left behind and not copied inside the step folder
         move_files(global_prop["step1_gmx_cluster"]['path'], "step1_gmx_cluster_cluster.log", "step1_gmx_cluster_rmsd-clust.xpm", "step1_gmx_cluster_rmsd-dist.xvg")
 
-        # STEP 2: Extract the most representative PDB models
-        prop_models = global_prop["step2_extract_models"]
-        num_models_to_extract = min(prop_models['models_to_extract'], len(models_population))
-        global_log.info(f"step2_extract_models: Extracting models of the {num_models_to_extract} most populated clusters")
+        # Number of clusters: minimum between number of clusters requested and number of clusters obtained
+        num_clusters = min(conf.properties['num_clusters'], len(cluster_populations))
 
-        # Extract the most populated models from the pdb with all centroids
-        for i in range(num_models_to_extract):
-
-            # Copy and modify the path names according to model index
-            paths_models = global_paths["step2_extract_models"].copy()
-            add_suffix_to_paths(paths_models, str(i), "output_structure_path")
-
-            # Update 'models' property (ID)
-            prop_models.update({'models':[models_population[i][1]]})
-
-            # Extract the model 
-            extract_model(**paths_models, properties=prop_models)
-        
-        # Obtain the full sorted list of pdb files from previous step path
-        pdb_paths = sorted(glob.glob(os.path.join(prop_models["path"],"*.pdb")))
-
-    # If clustering is given externally 
+        # Cluster names are the cluster IDs
+        cluster_names = [str(cluster_populations[i][1]) for i in range(num_clusters)]
     else:
 
         # Obtain the full sorted list of pdb files from clustering path
         pdb_paths = sorted(glob.glob(os.path.join(clustering_path,"*.pdb")))
 
         # Population information will not be available in this case
-        models_population = None
+        cluster_populations = None
 
-    # STEP 3: Cavity analysis
-    global_log.info("step3_cavity_analysis: Compute protein cavities using fpocket")
+        # Number of clusters: number of pdb files
+        num_clusters = len(pdb_paths)
 
-    # Number of models to use
-    models_to_use = min(global_prop["step3_cavity_analysis"]['models_to_use'], len(pdb_paths))
+        # Cluster names are the pdb file names
+        cluster_names = [Path(pdb_path).stem for pdb_path in pdb_paths]
+    
+    global_log.info(f"Number of clusters to analyze: {num_clusters}")
 
-    # Analyze cavities of each pdb 
-    for pdb_path in pdb_paths[:models_to_use]:
+    for cluster_index, cluster_name in enumerate(cluster_names):
 
-        # Copy and modify the path names according to pdb name
-        paths_fpocket = global_paths["step3_cavity_analysis"].copy()
-        add_suffix_to_paths(paths_fpocket, Path(pdb_path).stem, "output_pockets_zip", "output_summary")
+        cluster_prop = conf.get_prop_dic(prefix=cluster_name)
+        cluster_paths = conf.get_paths_dic(prefix=cluster_name)
 
-        # Update input pdb path
-        paths_fpocket.update({'input_pdb_path': pdb_path})
+        if clustering_path is None:
 
-        # Run cavity analysis
-        fpocket_run(**paths_fpocket, properties=global_prop["step3_cavity_analysis"])
+            # Update input structure path and model index of step 2
+            cluster_paths['step2_extract_models']['input_structure_path'] = global_paths['step1_gmx_cluster']['output_pdb_path']
+            cluster_prop['step2_extract_models']['models'] = [cluster_populations[cluster_index][1]]
 
-    # STEP 4: Filtering cavities
-    global_log.info("step4_filter_cavities: Filter found cavities")
+            # STEP 2: Extract one model from previous clustering
+            extract_model(**cluster_paths['step2_extract_models'], properties=cluster_prop['step2_extract_models'])
 
-    # Filter the cavities found for each pdb
-    for pdb_path in pdb_paths[:models_to_use]:
+        else:
 
-        # Copy and modify the path names according to pdb name
-        paths_filter = global_paths["step4_filter_cavities"].copy()
-        add_suffix_to_paths(paths_filter, Path(pdb_path).stem, "input_pockets_zip", "input_summary", "output_filter_pockets_zip")
+            # Update input structure path of step3
+            cluster_paths['step3_cavity_analysis']['input_pdb_path'] = pdb_paths[cluster_index]
+        
+        # STEP 3: Cavity analysis
+        global_log.info("step3_cavity_analysis: Compute protein cavities using fpocket")
+        fpocket_run(**cluster_paths['step3_cavity_analysis'], properties=cluster_prop["step3_cavity_analysis"])
 
-        # Filter cavities
-        fpocket_filter(**paths_filter, properties=global_prop["step4_filter_cavities"])
+        # STEP 4: Filtering cavities
+        global_log.info("step4_filter_cavities: Filter found cavities")
+        fpocket_filter(**cluster_paths['step4_filter_cavities'], properties=cluster_prop["step4_filter_cavities"])
 
-    # Create and print available models with their pockets and populations after filtering
-    global_summary = create_summary(pockets_path = global_prop["step4_filter_cavities"]["path"], 
-                                    default_summary_path = global_paths['step3_cavity_analysis']['output_summary'],
-                                    models_population = models_population, 
+    # Create and print available clusters with their pockets and populations after filtering
+    global_summary = create_summary(output_path = conf.get_working_dir_path(),
+                                    cluster_names = cluster_names,
+                                    filter_cavities_folder = "step4_filter_cavities",
+                                    cavity_analysis_folder = "step3_cavity_analysis",
+                                    pockets_summary_filename = Path(global_paths['step3_cavity_analysis']['output_summary']).name ,
+                                    cluster_populations = cluster_populations, 
                                     global_log = global_log)
 
     # Print timing information to log file
@@ -581,13 +554,27 @@ if __name__ == '__main__':
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)", 
                         required=True)
-
-    parser.add_argument('--input-clust', dest='clust_path',
-                        help="Input path to representative structures (pdb files, all will be used)", 
+    
+    parser.add_argument('--traj_path', dest='traj_path',
+                        help="Path to input trajectory (xtc, trr, cpt, gro, g96, pdb, tng)", 
                         required=False)
 
+    parser.add_argument('--top_path', dest='top_path',
+                        help="Path to input structure (gro, pdb)",
+                        required=False) 
+
+    parser.add_argument('--clustering_path', dest='clustering_path',
+                        help="Input path to representative structures (folder with pdb files)", 
+                        required=False)
+
+    parser.add_argument('--output', dest='output_path',
+                        help="Output path (default: /output in current directory)",
+                        required=False)
+    
     args = parser.parse_args()
 
     main_wf(configuration_path = args.config_path, 
-            clustering_path = args.clust_path)
-
+            traj_path = args.traj_path,
+            top_path = args.top_path,
+            clustering_path = args.clustering_path,
+            output_path = args.output_path)

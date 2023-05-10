@@ -1,42 +1,58 @@
-working_dir_path: output                              # Workflow output directory
+# Example of a YAML configuration file for the Clustering and cavity analysis workflow
+
+working_dir_path: output                              # Workflow default output directory
 can_write_console_log: True                           # Output log to console
 restart: True                                         # Do not execute steps if output files are already created
+num_clusters: 10                                      # Number of clusters to extract from the trajectory and analyze with fpocket
 
-# Section 1: Create index files
+# Step 0: Create index file
 
-step0_gmx_select_fit:                                       
-  tool: gmxselect
+step0A_make_ndx:
+  tool: make_ndx 
   paths:
-    input_structure_path: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/1.MD_with_mutation/output/step9_mdrun_min/min.gro
-    output_ndx_path: index_Fit.ndx
+    input_structure_path: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/1.MD_with_mutation/output/step24_dry_str/dry_structure.gro
+    output_ndx_path: index.ndx
   properties:
-    selection: '"FitGroup" group "Backbone"' 
+    selection: "System"
     binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx          
 
-step0_gmx_select_output:                                       
+step0B_add_rmsd_group:                                       
   tool: gmxselect
   paths:
-    input_structure_path: dependency/step0_gmx_select_fit/input_structure_path
-    output_ndx_path: index_Fit_Output.ndx
+    input_structure_path: dependency/step0A_make_ndx/input_structure_path
+    input_ndx_path: dependency/step0A_make_ndx/output_ndx_path
+    output_ndx_path: index_rmsd.ndx
+  properties:
+    selection: '"RmsdGroup" group "Backbone" and group "Protein"' 
+    append: True
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx          
+
+step0C_add_output_group:                                       
+  tool: gmxselect
+  paths:
+    input_structure_path: dependency/step0B_add_rmsd_group/input_structure_path
+    input_ndx_path: dependency/step0B_add_rmsd_group/output_ndx_path
+    output_ndx_path: index_rmsd_output.ndx
   properties:
     selection: '"OutputGroup" group "Protein"'
+    append: True
     binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx 
 
-# Section 2: Cluster trajectory and extract centroids pdb
+# Steps 1-2: Cluster trajectory and extract centroids pdb
 
 step1_gmx_cluster:
   tool: gmx_cluster
   paths:
-    input_traj_path: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/1.MD_with_mutation/output/step24_trjcat/all_trajectories.trr  
-    input_structure_path: dependency/step0_gmx_select_output/input_structure_path  
-    input_index_path: dependency/step0_gmx_select_output/output_ndx_path
+    input_traj_path: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/1.MD_with_mutation/output/step25_trjcat/all_trajectories.xtc  
+    input_structure_path: dependency/step0C_add_output_group/input_structure_path  
+    input_index_path: dependency/step0C_add_output_group/output_ndx_path
     output_pdb_path: output.cluster.pdb
   properties:
-    fit_selection: FitGroup       
+    fit_selection: RmsdGroup       
     output_selection: OutputGroup        
     dista: False
     method: linkage                      
-    cutoff: 0.08                         # nm (RMSD cut-off)
+    cutoff: 0.04                         # nm (RMSD cut-off)
     binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
 
 step2_extract_models:
@@ -45,9 +61,8 @@ step2_extract_models:
     input_structure_path: dependency/step1_gmx_cluster/output_pdb_path
     output_structure_path: cluster.pdb     
   properties:
-    models_to_extract: 10  # Number of most populated centroids to extract (will be < 'number of clusters')
 
-# Section 3: Cavity analysis with fpocket on centroids
+# Step 3-4: Cavity analysis with fpocket on centroids + filter
 
 step3_cavity_analysis:
   tool: fpocket_run
@@ -60,7 +75,6 @@ step3_cavity_analysis:
     max_radius: 6
     num_spheres: 35
     sort_by: druggability_score
-    models_to_use: 10    # Number of models to do a cavity analysis on (will be < 'models_to_extract' and 'number of clusters') 
 
 step4_filter_cavities:
   tool: fpocket_filter
