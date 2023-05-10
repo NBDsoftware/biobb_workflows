@@ -42,9 +42,14 @@ This workflow has several steps. The input for the workflow can be either (1) a 
 
 - **Step 0A**: Create initial index file with standard groups from structure file (e.g. System, Protein, Protein-H, C-alpha, Backbone, MainChain...).
 
-- **Step 0B**: Addition of 'RmsdGroup'. Corresponds to the group of atoms that will be used to fit the trajectory (unless -nofit option is used - see biobb docs for gmx_cluster) and to do the calculation of the RMSD. 
+- **Step 0B**: Addition of 'RmsdGroup'. Corresponds to the group of atoms that will be used to fit the trajectory (unless -nofit option is used - see biobb docs for gmx_cluster) and to do the calculation of the RMSD. Check the documentation of gmx select to see all the possible atom selections. Some examples: 
 
-- **Step 0C**: Addition of 'OutputGroup' corresponds to atoms that will be included in the output representative structures.
+    - Centers of mass of residues 1 to 5 and 10: "res_com of resnr 1 to 5 10"
+    - All atoms of a residue LIG within 0.5 nm of a protein (with a custom name): '"Close to protein" resname LIG and within 0.5 of group "Protein"'
+    - All protein residues that have at least one atom within 0.5 nm of a residue
+  LIG: "group "Protein" and same residue as within 0.5 of resname LIG"
+
+- **Step 0C**: Addition of 'OutputGroup' corresponds to atoms that will be included in the output representative structures. Check the documentation of gmx select to see all the possible atom selections.
 
 - **Step 1**: Clustering of the trajectory. A trajectory (accepted formats: xtc, trr, cpt, gro, g96, pdb or tng) and a topology (accepted formats: tpr, gro, g96, pdb or brk) are read.
 
