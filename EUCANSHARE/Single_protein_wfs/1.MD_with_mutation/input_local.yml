@@ -1,25 +1,27 @@
-# Example of a YAML configuration file for a BioExcel building blocks workflow
+# Example of a YAML configuration file for the MD with mutation workflow
 
-working_dir_path: output # Folder to write i/o files of the workflow steps
-can_write_console_log: False # Verbose writing of log information
-restart: False # Skip steps already performed
-remove_tmp: True
+working_dir_path: output            # Workflow default output directory
+can_write_console_log: False        # Verbose writing of log information
+restart: False                      # Skip steps already performed
+remove_tmp: True                    # Remove temporal files
 
 step1_extractMolecule:
   tool: extract_molecule
   paths:
-    input_structure_path: /Users/pau/projects/biobb_workflows/EUCANSHARE/1.MD_setup_mutation/input/P38alpha4LOO.pdb
+    input_structure_path: /path/to/input/structure.pdb
     output_molecule_path: protein.pdb
   properties:
-    molecule_type: chains # (all), protein, na, dna, rna, chains
-    chains: [A] # None or [A, B]
-    remove_tmp: True
+    molecule_type: chains          # (all), protein, na, dna, rna, chains
+    chains: [A]                    # None or [A, B]
 
 step2A_fixaltlocs:
   tool: fix_altlocs
   paths:
     input_pdb_path: dependency/step1_extractMolecule/output_molecule_path
     output_pdb_path: fixaltlocs.pdb
+  properties:
+    # altlocs: ["A339:A", "A171:B", "A768:A"]  # ["Chain Residue_number:Altloc"]
+    # modeller_key: HERE YOUR MODELLER KEY
 
 step2B_mutations:
   tool: mutate
@@ -27,31 +29,37 @@ step2B_mutations:
     input_pdb_path: dependency/step2A_fixaltlocs/output_pdb_path
     output_pdb_path: mutated.pdb
   properties:
-    #mutation_list: "A:Arg220Ala"
+    # mutation_list: "A:Arg220Ala"          # "Chain:Wild_type_residue_name Residue_number Mutated_type_residue_name"
+    # use_modeller: True                    # Use MODELLER to optimize side chains
+    # modeller_key: HERE YOUR MODELLER KEY  # MODELLER license key
 
-# step2C_canonical_fasta:
-#   tool: canonical_fasta
-#   paths:
-#     output_fasta_path: canonicalFasta.fasta
-#   properties:
-#     pdb_code: None !!!!!!!!
+# It requires internet connection and a PDB code
+step2C_canonical_fasta:
+  tool: canonical_fasta
+  paths:
+    output_fasta_path: canonicalFasta.fasta
+  properties:
+    pdb_code: HERE YOUR PDB CODE
 
-# step2D_fixbackbone:
-#   tool: fix_backbone
-#   paths:
-#     input_pdb_path: dependency/step2B_mutations/output_pdb_path
-#     input_fasta_canonical_sequence_path: dependency/step2C_canonical_fasta/output_fasta_path
-#     output_pdb_path: fixbackbone.pdb
-#   properties:
-#     add_caps: False
-#     modeller_key: HERE YOUR MODELLER KEY
+# It requires a MODELLER license 
+step2D_fixbackbone:
+  tool: fix_backbone
+  paths:
+    input_pdb_path: dependency/step2B_mutations/output_pdb_path
+    input_fasta_canonical_sequence_path: dependency/step2C_canonical_fasta/output_fasta_path
+    output_pdb_path: fixbackbone.pdb
+  properties:
+    add_caps: False
+    modeller_key: HERE YOUR MODELLER KEY
 
 step2E_fixsidechain:
   tool: fix_side_chain
   paths:
-    # input_pdb_path: dependency/step2D_fixbackbone/output_pdb_path
-    input_pdb_path: dependency/step2B_mutations/output_pdb_path
+    input_pdb_path: dependency/step2D_fixbackbone/output_pdb_path
     output_pdb_path: fixsidechain.pdb
+  properties:
+    # use_modeller: True                   # Use MODELLER to optimize side chains 
+    # modeller_key: HERE YOUR MODELLER KEY  # MODELLER license key
 
 step2F_fixssbonds:
   tool: fix_ssbonds
@@ -64,6 +72,8 @@ step2G_fixamides:
   paths:
     input_pdb_path: dependency/step2F_fixssbonds/output_pdb_path
     output_pdb_path: fixamides.pdb
+  properties:
+    # modeller_key: HERE YOUR MODELLER KEY  # MODELLER license key
 
 step2H_fixchirality:
   tool: fix_chirality
@@ -89,11 +99,11 @@ step3_pdb2gmx:
     output_gro_path: pdb2gmx.gro
     output_top_zip_path: pdb2gmx_top.zip
   properties:
-    water_type: spce # spc, spce, tip3p, tip4p, tip5p, tips3p
-    force_field: amber99sb-ildn # gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut
-    ignh: False # Ignore hydrogens in the input structure
-    merge: False # Merge all chains into one molecule
-    remove_tmp: True
+    force_field: amber99sb-ildn   # gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut
+    water_type: spce              # spc, spce, tip3p, tip4p, tip5p, tips3p
+    ignh: False                   # Ignore hydrogens in the input structure
+    merge: False                  # Merge all chains into one molecule
+    # his:                        # HIS protonation state array
 
 step4_editconf:
   tool: editconf
@@ -101,8 +111,8 @@ step4_editconf:
     input_gro_path: dependency/step3_pdb2gmx/output_gro_path
     output_gro_path: editconf.gro
   properties:
-    box_type: dodecahedron # cubic, triclinic, octahedron, dodecahedron
-    distance_to_molecule: 1.0 # Distance of the box from the outermost atom in nm
+    box_type: dodecahedron       # cubic, triclinic, octahedron, dodecahedron
+    distance_to_molecule: 1.0    # Distance of the box from the outermost atom in nm
 
 step5_solvate:
   tool: solvate
@@ -153,6 +163,18 @@ step9_mdrun_min:
     output_gro_path: min.gro
     output_edr_path: min.edr
     output_log_path: min.log
+  properties:
+    # binary_path: /path/to/local/gromacs/bin/gmx
+    # mpi_bin: mpirun
+    # mpi_np: 4
+
+step9B_make_ndx:
+  tool: make_ndx 
+  paths:
+    input_structure_path: dependency/step9_mdrun_min/output_gro_path
+    output_ndx_path: index.ndx
+  properties:
+    selection: "System"
 
 step10_energy_min:
   tool: gmx_energy
@@ -162,20 +184,22 @@ step10_energy_min:
   properties:
     terms: ["Potential"]
 
-# Section 4 (Steps 11-13): NVT
+# Section 4 (Steps 11-13): NVT equilibration
 step11_grompp_nvt:
   tool: grompp
   paths:
     input_gro_path: dependency/step9_mdrun_min/output_gro_path
+    input_ndx_path: dependency/step9B_make_ndx/output_ndx_path
     input_top_zip_path: dependency/step7_genion/output_top_zip_path
     output_tpr_path: gppnvt.tpr
   properties:
     simulation_type: nvt
     mdp:
-      nsteps: 10000 # 50000
-      dt: 0.002
       Define: -DPOSRES
       ref-t: 310 310
+      tc-grps: "Protein Water_and_ions"
+      nsteps: 10000
+      dt: 0.002
 
 step12_mdrun_nvt:
   tool: mdrun
@@ -186,6 +210,10 @@ step12_mdrun_nvt:
     output_edr_path: nvt.edr
     output_log_path: nvt.log
     output_cpt_path: nvt.cpt
+  properties:
+    # binary_path: /path/to/local/gromacs/bin/gmx
+    # mpi_bin: mpirun
+    # mpi_np: 4
 
 step13_energy_nvt:
   tool: gmx_energy
@@ -195,20 +223,22 @@ step13_energy_nvt:
   properties:
     terms: ["Temperature"]
 
-# Section 5 (Steps 14-16): NPT
+# Section 5 (Steps 14-16): NPT equilibration
 
 step14_grompp_npt:
   tool: grompp
   paths:
     input_gro_path: dependency/step12_mdrun_nvt/output_gro_path
+    input_ndx_path: dependency/step9B_make_ndx/output_ndx_path    
     input_top_zip_path: dependency/step7_genion/output_top_zip_path
-    output_tpr_path: gppnpt.tpr
     input_cpt_path: dependency/step12_mdrun_nvt/output_cpt_path
+    output_tpr_path: gppnpt.tpr
   properties:
     simulation_type: npt
     mdp:
-      nsteps: 10000 # 50000
+      nsteps: 10000 
       ref-t: 310 310
+      tc-grps: "Protein Water_and_ions"
 
 step15_mdrun_npt:
   tool: mdrun
@@ -219,6 +249,10 @@ step15_mdrun_npt:
     output_edr_path: npt.edr
     output_log_path: npt.log
     output_cpt_path: npt.cpt
+  properties:
+    # binary_path: /path/to/local/gromacs/bin/gmx
+    # mpi_bin: mpirun
+    # mpi_np: 4
 
 step16_energy_npt:
   tool: gmx_energy
@@ -228,7 +262,7 @@ step16_energy_npt:
   properties:
     terms: ["Pressure", "Density"]
 
-# Section 6 (Steps 17-24): production run of several trajs
+# Section 6 (Steps 17-24): production trajectories
 
 step17_grompp_md:
   tool: grompp
@@ -240,12 +274,14 @@ step17_grompp_md:
   properties:
     simulation_type: free
     mdp:
-      nsteps: 10000 # 50000000
+      nsteps: 10000 
       ref-t: 310 310
-      nstxout: 100 # 100000
-      nstxout-compressed: 100 # 100000
-      nstvout: 0
-      nstfout: 0
+      tc-grps: "Protein Water_and_ions"
+      nstxout: 100
+      nstvout: 0 
+      continuation: 'no'
+      gen-vel: 'yes'          
+      gen-temp: 310   
 
 step18_mdrun_md:
   tool: mdrun
@@ -256,6 +292,10 @@ step18_mdrun_md:
     output_edr_path: md.edr
     output_log_path: md.log
     output_cpt_path: md.cpt
+  properties:
+    # binary_path: /path/to/local/gromacs/bin/gmx
+    # mpi_bin: mpirun
+    # mpi_np: 4
 
 step19_rmsfirst:
   tool: gmx_rms
@@ -284,29 +324,47 @@ step21_rgyr:
   properties:
     selection: Backbone
 
-step22_image:
+step22_image_traj:
   tool: gmx_image
   paths:
     input_traj_path: dependency/step18_mdrun_md/output_trr_path
     input_top_path: dependency/step17_grompp_md/output_tpr_path
-    output_traj_path: imaged_traj.trr
+    input_index_path: dependency/step9B_make_ndx/output_ndx_path
+    output_traj_path: imaged_traj.xtc
   properties:
     center_selection: Protein
-    output_selection: Protein
-    pbc: mol
+    output_selection: System
     center: True
+    ur: compact
+    pbc: mol
 
-step23_dry:
-  tool: gmx_trjconv_str
+step23_fit_traj:
+  tool: gmx_image
   paths:
-    input_structure_path: dependency/step15_mdrun_npt/output_gro_path
+    input_traj_path: dependency/step22_image_traj/output_traj_path
     input_top_path: dependency/step17_grompp_md/output_tpr_path
-    output_str_path: imaged_structure.gro
+    input_index_path: dependency/step9B_make_ndx/output_ndx_path
+    output_traj_path: fitted_traj.xtc
+  properties:
+    fit_selection: Protein
+    output_selection: Protein  
+    fit: rot+trans
+
+step24_dry_str:
+  tool: gmx_trjconv_str
+  paths: 
+    input_structure_path: dependency/step15_mdrun_npt/output_gro_path
+    input_top_path: dependency/step14_grompp_npt/output_tpr_path
+    output_str_path: dry_structure.gro
+    input_index_path: dependency/step9B_make_ndx/output_ndx_path
   properties:
     selection: Protein
+    center: True
+    pbc: mol
+    ur: compact
 
-step24_trjcat:
+step25_trjcat:
   tool: trjcat
   paths:
     input_trj_zip_path: all_trajectories.zip
-    output_trj_path: all_trajectories.trr
+    output_trj_path: all_trajectories.xtc
