@@ -6,8 +6,10 @@ Go to workflow folder and install conda environment:
 
 ```bash
 conda env create -f environment.yml
-conda activate eucanshare_wf2
+conda activate single_protein_wf2
 ```
+
+To install it in an HPC environment, do the same after loading the corresponding Conda or Miniconda module.
 
 See options for worklow:
 
@@ -16,60 +18,43 @@ vi input.yml
 python biobb_clustering_cavity_analysis.py --help
 ```
 
-See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in input.yml.
+See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
 
-Modify run_local.sh if needed and launch:
+To run in an HPC environment adapt the run_HPC.sl and input_HPC.yml scripts and send the job to the slurm queue:
+
+```bash
+sbatch run_HPC.sl
+```
+
+To run locally, modify run_local.sh and input_local.yml if needed:
 
 ```bash
 ./run_local.sh
 ```
 
-The output will be generated in the "/output" folder by default and the global log files will be in "/output/log.out" and "/output/log.err". Each successful step will have its log files and output in a separate folder inside "/output".
+The output will be generatedin the "working_dir_path" folder selected in the corresponding YAML input. The global log files will be in "/working_dir_path/log.out" and "/working_dir_path/log.err". Each successful step will have its log files and output in a separate folder inside "/working_dir_path".
 
 ## Description
 
-This workflow has several main sections, the workflow can be run until the end or until one of the sections (see --until command line option). The input can be either a trajectory and topology or a path to a folder containing representative structures in pdb format. In the former case the workflow will cluster the trajectory to find representative structures, in the later case the workflow will directly use the representative structures cavity analysis.
+This workflow has several steps. The input for the workflow can be either (1) a trajectory and topology or (2) a path to a folder containing representative structures in pdb format from an external clustering. In the former case the workflow will cluster the trajectory to find representative structures (steps 0-2), in the later case the workflow will directly use the representative structures for the cavity analysis and filtering (steps 3-4). The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
 
-- **Section 1**: Creation of index files. 'FitGroup' corresponds to the group of atoms that will be used in the least squares fit and RMSD calculation. 'OutputGroup' corresponds to atoms that will be included in the output representative structures.
+**Step 0 (A-C)**: Creation of index files that define groups of atoms used during the clustering step.
 
-- **Section 2**: Clustering of trajectory. A trajectory (accepted formats: xtc, trr, cpt, gro, g96, pdb or tng) and a topology (accepted formats: tpr, gro, g96, pdb or brk) are read. From the pdb file with all the centroids the most populated ones are extracted. The number of extracted models is defined in the extract_models step.
+- **Step 0A**: Create initial index file with standard groups from structure file (e.g. System, Protein, Protein-H, C-alpha, Backbone, MainChain...).
 
-- **Section 3**: Cavity analysis of a subset of the most populated models and a subsequent filtering of cavities.
+- **Step 0B**: Addition of 'RmsdGroup'. Corresponds to the group of atoms that will be used to fit the trajectory (unless -nofit option is used - see biobb docs for gmx_cluster) and to do the calculation of the RMSD. 
 
-Note that re-launching the workflow will skip the previously successful steps if restart is True. 
+- **Step 0C**: Addition of 'OutputGroup' corresponds to atoms that will be included in the output representative structures.
 
-## Sequential run
+- **Step 1**: Clustering of the trajectory. A trajectory (accepted formats: xtc, trr, cpt, gro, g96, pdb or tng) and a topology (accepted formats: tpr, gro, g96, pdb or brk) are read.
 
-```bash
-conda activate eucanshare_wf2
-```
+- **Step 2**: From the pdb file with all the centroids the most populated ones are extracted. The number of extracted centroids is defined in the num_clusters keyword of the YAML configuration file.
 
-It's a good idea to run the workflow sequentially to check the output of the different steps for a given trajectory and structure file. Modify 'input_structure_path' and 'input_traj_path' from the input.yml or give them through the corresponding command line arguments. The atom selection to align and compute the RMSD is the same and is defined by the 'FitGroup'. To align and compute the RMSD using different atom selections do the clustering externally (using ttclust/mdtraj or cpptraj). The atom selection that will be used when writing the output representative structures is defined by 'OutputGroup'. 
+- **Step 3**: Cavity analysis of the centroid structures.
 
-In this example, we set the structure and trajectory paths to the output of the previous workflow.
+- **Step 4**: Filtering of the cavities found in Step 3.
 
-- input_structure_path : /path/to/eucanshare_wfs/1.MD_setup_mutation/output/step23_dry/imaged_structure.gro
-- input_traj_path : /path/to/eucanshare_wfs/1.MD_setup_mutation/output/step24_trjcat/all_trajectories.trr
-
-Launch index file creation:
-
-```bash
-python biobb_clustering_cavity_analysis.py --config input.yml --until ndx
-```
-
-Then, cluster the trajectory:
-
-```bash
-python biobb_clustering_cavity_analysis.py --config input.yml --until cluster
-```
-
-After seeing the results, adjust the 'cutoff' and 'method' of the clustering if needed. Adjust the number of models to extract if needed. To re-launch this section simply erase the corresponding step folders and launch again (make sure 'restart' is True in the input.yml). Finally the cavity analysis and filtering:
-
-```bash
-python biobb_clustering_cavity_analysis.py --config input.yml --until all
-```
-
-Repeat the filtering with different values removing the filtering step folder and launching again.
+Note that re-launching the workflow will skip the previously successful steps if restart is True and the output folder is the same. 
 
 
 
