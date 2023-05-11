@@ -1,4 +1,7 @@
+output*/
 output/
+input*/
+input/
 *.log
 *.err
 *.out
