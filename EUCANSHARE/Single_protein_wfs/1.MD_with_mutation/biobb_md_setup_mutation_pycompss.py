@@ -11,6 +11,7 @@ import argparse
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
+
 from pycompss.api.api import compss_wait_on_file
 from biobb_adapters.pycompss.biobb_io.api.canonical_fasta import canonical_fasta
 from biobb_adapters.pycompss.biobb_model.model.fix_backbone import fix_backbone
