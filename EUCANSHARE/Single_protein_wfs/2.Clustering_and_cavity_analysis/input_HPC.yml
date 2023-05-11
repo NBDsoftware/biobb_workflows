@@ -1,8 +1,9 @@
 # Example of a YAML configuration file for the Clustering and cavity analysis workflow
 
-working_dir_path: output                              # Workflow default output directory
+working_dir_path: output                         # Workflow default output directory
 can_write_console_log: True                           # Output log to console
-restart: True                                         # Do not execute steps if output files are already created
+restart: False                                        # Do not execute steps if output files are already created
+remove_tmp: True                                      # Remove temporal files
 num_clusters: 10                                      # Number of clusters to extract from the trajectory and analyze with fpocket
 
 # Step 0: Create index file
@@ -10,7 +11,7 @@ num_clusters: 10                                      # Number of clusters to ex
 step0A_make_ndx:
   tool: make_ndx 
   paths:
-    input_structure_path: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/1.MD_with_mutation/output/step24_dry_str/dry_structure.gro
+    input_structure_path: /path/to/structure.pdb
     output_ndx_path: index.ndx
   properties:
     selection: "System"
@@ -43,7 +44,7 @@ step0C_add_output_group:
 step1_gmx_cluster:
   tool: gmx_cluster
   paths:
-    input_traj_path: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/1.MD_with_mutation/output/step25_trjcat/all_trajectories.xtc  
+    input_traj_path: /path/to/trajectory.xtc
     input_structure_path: dependency/step0C_add_output_group/input_structure_path  
     input_index_path: dependency/step0C_add_output_group/output_ndx_path
     output_pdb_path: output.cluster.pdb
@@ -52,7 +53,7 @@ step1_gmx_cluster:
     output_selection: OutputGroup        
     dista: False
     method: linkage                      
-    cutoff: 0.04                         # nm (RMSD cut-off)
+    cutoff: 0.06                         # nm (RMSD cut-off)
     binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
 
 step2_extract_models:
