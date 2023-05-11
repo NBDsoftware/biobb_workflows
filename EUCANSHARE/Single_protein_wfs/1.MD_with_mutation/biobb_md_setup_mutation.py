@@ -8,9 +8,9 @@
 import time
 import random
 import argparse
+
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
-from biobb_io.api.pdb import pdb
 from biobb_io.api.canonical_fasta import canonical_fasta
 from biobb_model.model.fix_backbone import fix_backbone
 from biobb_model.model.fix_side_chain import fix_side_chain
@@ -36,8 +36,8 @@ from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 
 
-def main_wf(configuration_path, num_trajs, output_path = None, input_pdb_path = None, pdb_chains = None, 
-            mutation_list = None, input_gro_path = None, input_top_path = None, fix_backbone = None, fix_ss = None):
+def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input_pdb_path = None, pdb_chains = None, 
+            mutation_list = None, input_gro_path = None, input_top_path = None, fix_backbn = None, fix_ss = None):
     '''
     Main MD Setup, mutation and run workflow. Can be used to retrieve a PDB, fix some defects of the structure,
     add specific mutations, prepare the system, minimize it, equilibrate it and finally do N production runs.
@@ -46,6 +46,7 @@ def main_wf(configuration_path, num_trajs, output_path = None, input_pdb_path = 
     ------
 
         configuration_path (str): path to YAML configuration file
+        setup_only        (bool): whether to only setup the system or also run the simulations
         num_trajs          (int): number of trajectories to launch in serial
         output_path        (str): (Optional) path to output folder
         input_pdb_path     (str): (Optional) path to input PDB file
@@ -53,7 +54,7 @@ def main_wf(configuration_path, num_trajs, output_path = None, input_pdb_path = 
         mutation_list      (str): (Optional) list of mutations to be introduced in the structure
         input_gro_path     (str): (Optional) path to input structure file (.gro) 
         input_top_path     (str): (Optional) path to input topology file (.zip)
-        fix_backbone      (bool): (Optional) wether to add missing backbone atoms
+        fix_backbn        (bool): (Optional) wether to add missing backbone atoms
         fix_ss            (bool): (Optional) wether to add disulfide bonds 
 
     Outputs
@@ -72,10 +73,13 @@ def main_wf(configuration_path, num_trajs, output_path = None, input_pdb_path = 
 
     # Enforce output_path if provided
     if output_path is not None:
-        conf.properties['working_dir'] = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))
+        output_path = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))
+        conf.properties['working_dir_path'] = output_path
+    else:
+        output_path = conf.get_working_dir_path()
 
     # Initializing a global log file
-    global_log, _ = fu.get_logs(path=conf.get_working_dir_path(), light_format=True)
+    global_log, _ = fu.get_logs(path=output_path, light_format=True)
 
     # Parsing the input configuration file (YAML);
     # Dividing it in global paths and global properties
@@ -108,7 +112,7 @@ def main_wf(configuration_path, num_trajs, output_path = None, input_pdb_path = 
         global_log.info("step2B_mutations: Preparing mutated structure")
         mutate(**global_paths["step2B_mutations"], properties=global_prop["step2B_mutations"])
 
-        if fix_backbone:
+        if fix_backbn:
             # STEP 2 (C): Get canonical FASTA
             global_log.info("step2C_canonical_fasta: Get canonical FASTA")
             canonical_fasta(**global_paths["step2C_canonical_fasta"], properties=global_prop["step2C_canonical_fasta"])
@@ -145,28 +149,32 @@ def main_wf(configuration_path, num_trajs, output_path = None, input_pdb_path = 
         # STEP 3: add H atoms, generate coordinate (.gro) and topology (.top) file
         global_log.info("step3_pdb2gmx: Generate the topology")
         pdb2gmx(**global_paths["step3_pdb2gmx"], properties=global_prop["step3_pdb2gmx"])
+
+        # STEP 4: Create simulation box
+        global_log.info("step4_editconf: Create the solvent box")
+        editconf(**global_paths["step4_editconf"], properties=global_prop["step4_editconf"])
+
+        # STEP 5: Add solvent molecules
+        global_log.info("step5_solvate: Fill the solvent box with water molecules")
+        solvate(**global_paths["step5_solvate"], properties=global_prop["step5_solvate"])
+
+        # STEP 6: ion generation pre-processing
+        global_log.info("step6_grompp_genion: Preprocess ion generation")
+        grompp(**global_paths["step6_grompp_genion"], properties=global_prop["step6_grompp_genion"])
+
+        # STEP 7: ion generation
+        global_log.info("step7_genion: Ion generation")
+        genion(**global_paths["step7_genion"], properties=global_prop["step7_genion"])
+
+        if setup_only:
+            global_log.info("setup_only: setup_only flag is set to True, exiting...")
+            return
     
     else:
 
-        global_paths['step4_editconf']['input_gro_path'] = input_gro_path
-        global_paths['step5_solvate']['input_top_zip_path'] = input_top_path
-
-    # STEP 4: Create simulation box
-    global_log.info("step4_editconf: Create the solvent box")
-    editconf(**global_paths["step4_editconf"], properties=global_prop["step4_editconf"])
-
-    # STEP 5: Add solvent molecules
-    global_log.info("step5_solvate: Fill the solvent box with water molecules")
-    solvate(**global_paths["step5_solvate"], properties=global_prop["step5_solvate"])
-
-    # STEP 6: ion generation pre-processing
-    global_log.info("step6_grompp_genion: Preprocess ion generation")
-    grompp(**global_paths["step6_grompp_genion"], properties=global_prop["step6_grompp_genion"])
-
-    # STEP 7: ion generation
-    global_log.info("step7_genion: Ion generation")
-    genion(**global_paths["step7_genion"], properties=global_prop["step7_genion"])
-
+        global_paths['step8_grompp_min']['input_gro_path'] = input_gro_path
+        global_paths['step8_grompp_min']['input_top_zip_path'] = input_top_path
+    
     # STEP 8: minimization pre-processing
     global_log.info("step8_grompp_min: Preprocess energy minimization")
     grompp(**global_paths["step8_grompp_min"], properties=global_prop["step8_grompp_min"])
@@ -272,7 +280,7 @@ def main_wf(configuration_path, num_trajs, output_path = None, input_pdb_path = 
     global_log.info('')
     global_log.info('')
     global_log.info('Execution successful: ')
-    global_log.info('  Workflow_path: %s' % conf.get_working_dir_path())
+    global_log.info('  Workflow_path: %s' % output_path)
     global_log.info('  Config File: %s' % configuration_path)
     global_log.info('')
     global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
@@ -288,13 +296,17 @@ if __name__ == "__main__":
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)",
                         required=True)
+    
+    parser.add_argument('--setup_only', action='store_true',
+                        help="Only setup the system (default: False)",
+                        required=False)
 
     parser.add_argument('--num_trajs', dest='num_trajs',
                         help="Number of trajectories (default: 1)",
                         required=False)
     
     parser.add_argument('--output', dest='output_path',
-                        help="Output path (default: /output in current directory)",
+                        help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
     
     parser.add_argument('--input_pdb', dest='input_pdb_path',
@@ -310,11 +322,11 @@ if __name__ == "__main__":
                         required=False)
 
     parser.add_argument('--input_gro', dest='input_gro_path',
-                        help="Input structure file (.gro). To provide an externally prepared system, use together with --input_top (default: None)",
+                        help="Input structure file ready to minimize (.gro). To provide an externally prepared system, use together with --input_top (default: None)",
                         required=False)
 
     parser.add_argument('--input_top', dest='input_top_path',
-                        help="Input compressed topology file (.zip). To provide an externally prepared system, use together with --input_gro (default: None)",
+                        help="Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, use together with --input_gro (default: None)",
                         required=False)
     
     parser.add_argument('--fix_ss', action='store_true',
@@ -341,7 +353,7 @@ if __name__ == "__main__":
     if (args.input_pdb_path is not None and args.input_gro_path is not None):
         raise Exception("Both --input_pdb and --input_gro/--input_top are provided. Please provide only one of them")
     
-    main_wf(configuration_path=args.config_path, num_trajs=num_trajs, output_path=args.output_path, 
+    main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_trajs=num_trajs, output_path=args.output_path, 
             input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list,
             input_gro_path=args.input_gro_path, input_top_path=args.input_top_path, 
-            fix_backbone=args.fix_backbone, fix_ss=args.fix_ss)
+            fix_backbn=args.fix_backbone, fix_ss=args.fix_ss)
