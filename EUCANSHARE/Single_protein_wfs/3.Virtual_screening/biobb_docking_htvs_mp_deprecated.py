@@ -5,10 +5,12 @@ import os
 import re
 import json
 import time
+import shutil
 import argparse
 import itertools 
 from pathlib import Path
-import multiprocessing as mp # NOTE: could we use RAY for this? better for large jobs in principle or pycompss
+
+import multiprocessing as mp 
 from biobb_io.api.drugbank import drugbank
 from biobb_io.api.ideal_sdf import ideal_sdf
 from biobb_common.configuration import settings
@@ -248,7 +250,7 @@ def createSummary(affinities_list, properties):
 
     return global_summary
 
-def validateStep(*output_paths):
+def validate_step(*output_paths):
     '''
     Check all output files exist and are not empty
     
@@ -274,10 +276,6 @@ def validateStep(*output_paths):
         for path in output_paths:
             file_not_empty = os.stat(path).st_size > 0
             validation_result = validation_result and file_not_empty
-    
-    # Erase files if they are empty
-    if (validation_result == False):
-        removeFiles(*output_paths)
 
     return validation_result
 
@@ -604,9 +602,6 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
     prop_autodock  = global_prop["step6_autodock_vina_run"]
     prop_poseConv  = global_prop["step7_babel_prepare_pose"]
 
-    # NOTE: if library is very big avoid prints per ligand, only warnings and errors 
-    # decide what to print and use lock to access same global_log
-
     while True:
 
         # Get item from shared queue among processes
@@ -710,37 +705,25 @@ def parallel_docking(ligands_queue, affinities_list, global_prop, global_paths):
                         paths_autodock['output_pdbqt_path'])
 
 
-def main_wf(configuration_path, ligand_lib_path):
+def main_wf(configuration_path, ligand_lib_path, output_path, num_top_ligands):
     '''
     Main HTVS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
-    and a receptor to screen the pocket of the receptor using the ligand library (Autodock).
+    and a receptor to screen the pocket of the receptor using the ligand library (with Autodock).
 
     Inputs
     ------
 
         configuration_path   (str): path to input.yml 
         ligand_lib_path      (str): path to ligand library with SMILES
+        output_path          (str): path to output directory
+        num_top_ligands      (int): number of top ligands to be saved
 
     Outputs
     -------
 
         /output folder
-        global_paths    (dict): dictionary with all paths of workflow
-        global_prop     (dict): dictionary with all properties of workflow
-        
-        global_summary  (dict): dictionary with top ligands ordered by affinity
-
-            {
-                ligandName1 : {        
-                    affinity : -8.5, 
-                    ID : SB4
-                    }, 
-                ligandName2 : {
-                    affinity : -8.3, 
-                    ID : DB450112
-                },
-                ...
-            }
+        global_paths    (dict): dictionary with all workflow paths
+        global_prop     (dict): dictionary with all workflow properties
     '''
 
     start_time = time.time()
@@ -776,89 +759,19 @@ def main_wf(configuration_path, ligand_lib_path):
     affinities_list = manager.list()
     ligands_queue = manager.Queue(num_cores)
 
-    # Launching the actions of the workflow, one by one 
-    # Using as inputs the global paths and global properties
-    # identified by the corresponding step name
-    # Writing information about each step to the global log 
-
-    # If "pocket_residues_path" provided, skip step 1, box will be formed using pocket residues instead of pocket .pqr file
-    if pocket_residues_path is None:
-    
     # STEP 1: Pocket selection from filtered list 
+    global_log.info("step1_fpocket_select: Extract pocket cavity")
+    fpocket_select(**global_paths["step1_fpocket_select"], properties=global_prop["step1_fpocket_select"])
 
-        # Write next action to global log
-        global_log.info("step1_fpocket_select: Extract pocket cavity")
-
-        # Properties and paths of step
-        props = global_prop["step1_fpocket_select"]
-        paths = global_paths["step1_fpocket_select"]
-
-        # If pockets and pocket ID are provided through arguments -> prioritize over input.yml (for ensemble docking)
-        if None not in (input_pockets_path, pocket_ID):
-
-            paths.update({'input_pockets_zip' : input_pockets_path})
-            props.update({'pocket' : pocket_ID})
-
-        # Action: pocket selection
-        fpocket_select(**paths, properties=props)
-
-        # Validate pocket selection (make sure chosen pocket exists)
-        if not validateStep(paths["output_pocket_pdb"],paths["output_pocket_pqr"]):
-
-            # If output is not valid, print error message and available options in log file
-            global_log.info("    ERROR: fpocket_select failed to select a pocket from input file.")
-            global_log.info("           Check the selected pocket exists:")
-
-            # Print available pockets in input folder
-            printAvailablePockets(paths["input_pockets_zip"], global_log)
-
-            return global_paths, global_prop, None
-
-# STEP 2: Generate box around selected cavity
-
-    # Write next action to global log
+    # STEP 2: Generate box around selected cavity or residues
     global_log.info("step2_box: Generating cavity box")
+    box(**global_paths["step2_box"], properties=global_prop["step2_box"])
 
-    # Properties and paths of step
-    props_box = global_prop["step2_box"]
-    paths_box = global_paths["step2_box"]
-    
-    # If pocket_residues_path is provided through arguments -> prioritize over input.yml (for ensemble docking with residues defining pocket)
-    if pocket_residues_path is not None:
-
-        paths_box.update({'input_pdb_path' : pocket_residues_path})
-
-    # Action: box creation
-    box(**paths_box, properties=props_box)
-
-# STEP 3: Prepare target protein for docking 
-    
-    # Write next action to global log     
+    # STEP 3: Prepare target protein for docking 
     global_log.info("step3_str_check_add_hydrogens: Preparing target protein for docking")
-    
-    # Properties and paths of step
-    props_addH = global_prop["step3_str_check_add_hydrogens"]
-    paths_addH = global_paths["step3_str_check_add_hydrogens"]
+    str_check_add_hydrogens(**global_paths["step3_str_check_add_hydrogens"], properties=global_prop["step3_str_check_add_hydrogens"]) 
 
-    # If receptor model is provided through arguments -> prioritize over input.yml (for ensemble docking)
-    if input_structure_path is not None:
-
-        paths_addH.update({'input_structure_path' : input_structure_path})
-
-    # Action: Preparation of target protein
-    str_check_add_hydrogens(**paths_addH, properties=props_addH) 
-
-    # Check if this should be the final step
-    if last_step == 'prepare':
-        global_log.info("Receptor preparation completed.")
-        return global_paths, global_prop, None
-
-# STEPS 4-5-6-7: For each ligand in library: obtain molecule, prepare ligand, run docking, prepare poses
-
-    # Create directory for step 4. This is needed because: 
-    # If SMILES are given, the script will try to save a txt file in this path with the SMILES before step4 is executed
-    if not os.path.exists(global_prop['step4_source_lig']['path']):
-        os.makedirs(global_prop['step4_source_lig']['path'])
+    # STEP 4-5-6-7. For each ligand: prepare ligand, run docking, prepare poses
 
     # Empty pool of workers
     pool = []
@@ -885,34 +798,30 @@ def main_wf(configuration_path, ligand_lib_path):
 
         process.join()
 
-# STEP 8: Find top ligands (according to lowest affinity)
+    # Enforce num_top_ligands if specified
+    if num_top_ligands is not None:
+        global_prop['step7_show_top_ligands']['num_top_ligands'] = num_top_ligands
+
+    # STEP 7: Find top ligands 
+    global_log.info("step7_show_top_ligands: create ranking and save poses for top ligands")  
+    create_ranking(affinities_list, global_paths, global_prop)
     
-    # Write action to global log
-    global_log.info("step8_show_top_ligands: print identifiers of top ligands ranked by lowest affinity")  
+    # Clean up the output folder
+    clean_output(ligand_names, global_prop)
 
-    global_summary =  createSummary(affinities_list, global_prop['step8_show_top_ligands'])
+    # Timing information
+    elapsed_time = time.time() - start_time
+    global_log.info('')
+    global_log.info('')
+    global_log.info('Execution successful: ')
+    global_log.info('  Workflow_path: %s' % conf.get_working_dir_path())
+    global_log.info('  Config File: %s' % configuration_path)
+    global_log.info('  Ligand library: %s' % ligand_lib_path)
+    global_log.info('')
+    global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
+    global_log.info('')
 
-    # Print more info only if we are not calling docking_htvs from another script
-    if (input_pockets_path  == None) and (pocket_ID == None) and (input_structure_path == None):
-        
-        # Print in log file with readable format
-        pretty_summary = json.dumps(global_summary, indent=2)
-
-        global_log.info(pretty_summary)
-        
-        # Timing information
-        elapsed_time = time.time() - start_time
-        global_log.info('')
-        global_log.info('')
-        global_log.info('Execution successful: ')
-        global_log.info('  Workflow_path: %s' % conf.get_working_dir_path())
-        global_log.info('  Config File: %s' % configuration_path)
-        global_log.info('  Ligand library: %s' % ligand_lib_path)
-        global_log.info('')
-        global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
-        global_log.info('')
-
-    return global_paths, global_prop, global_summary
+    return global_paths, global_prop
 
 if __name__ == '__main__':
     

@@ -12,7 +12,7 @@ step1_fpocket_select:
     output_pocket_pdb: fpocket_cavity.pdb
     output_pocket_pqr: fpocket_pocket.pqr
   properties:
-    pocket: 2
+    pocket: 1
 
 step2_box:
   tool: box
@@ -65,6 +65,8 @@ step6_babel_prepare_pose:
 
 step7_show_top_ligands:
   paths:
+    input_pose_path: dependency/step6_babel_prepare_pose/output_path
     output_csv_path: top_ligands.csv 
   properties:
-    number_top_ligands: 50
+    num_top_ligands: 50
+    keep_poses: True

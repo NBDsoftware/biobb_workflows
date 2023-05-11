@@ -19,4 +19,10 @@ module load Miniconda3/4.9.2
 # Activate previously created conda environment from environment.yml
 source activate /home/pnavarro/.conda/envs/single_protein_wf3
 
-srun python biobb_docking_htvs.py --config input_HPC.yml --ligand_lib input/ligand_lib.smi 
+INPUT=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/3.Virtual_screening/input
+STRUCTURE_PATH=$INPUT/9/step2_extract_models/cluster.pdb
+INPUT_POCKETS_ZIP=$INPUT/9/step4_filter_cavities/filtered_pockets.zip
+
+# python biobb_docking_htvs.py --config input_HPC.yml --ligand_lib input/ligand_lib.smi --structure_path $STRUCTURE_PATH --input_pockets_zip $INPUT_POCKETS_ZIP
+
+python biobb_docking_htvs.py --config input_HPC.yml --ligand_lib input/ligand_lib.smi --structure_path $STRUCTURE_PATH --input_pockets_zip $INPUT_POCKETS_ZIP --num_top_ligands 5

@@ -10,11 +10,11 @@ from pathlib import Path
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
-from biobb_vs.utils.box import box
-from biobb_vs.fpocket.fpocket_select import fpocket_select
-from biobb_vs.vina.autodock_vina_run import autodock_vina_run
-from biobb_chemistry.babelm.babel_convert import babel_convert
-from biobb_structure_utils.utils.str_check_add_hydrogens import str_check_add_hydrogens
+from biobb_adapters.pycompss.biobb_vs.utils.box import box
+from biobb_adapters.pycompss.biobb_vs.fpocket.fpocket_select import fpocket_select
+from biobb_adapters.pycompss.biobb_vs.vina.autodock_vina_run import autodock_vina_run
+from biobb_adapters.pycompss.biobb_chemistry.babelm.babel_convert import babel_convert
+from biobb_adapters.pycompss.biobb_structure_utils.utils.str_check_add_hydrogens import str_check_add_hydrogens
 
 def find_matching_str(pattern, filepath):
     '''
@@ -138,35 +138,6 @@ def create_ranking(affinities, global_paths, global_prop, output_path):
                 shutil.copyfile(pose_path, new_pose_path)
 
     return 
-
-def validate_step(*output_paths):
-    '''
-    Check all output files exist and are not empty
-    
-    Inputs
-    ------
-        *output_paths (str): variable number of paths to output file/s
-
-    Output
-    ------
-        validation_result (bool): result of validation
-    '''
-
-    # Initialize value 
-    validation_result = True
-
-    # Check existence of files
-    for path in output_paths:
-        validation_result = validation_result and os.path.exists(path)
-
-    # Check files are not empty if they exist
-    if (validation_result):
-
-        for path in output_paths:
-            file_not_empty = os.stat(path).st_size > 0
-            validation_result = validation_result and file_not_empty
-
-    return validation_result
 
 def read_ligand_lib(ligand_lib_path):
     '''
@@ -383,37 +354,19 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
 
         # STEP 4: Convert from smiles to pdbqt
         global_log.info("step4_babel_prepare_lig: Prepare ligand for docking")
-        try:
-            babel_convert(**ligand_paths['step4_babel_prepare_lig'], properties = ligand_prop["step4_babel_prepare_lig"])
-            lastStep_successful = validate_step(ligand_paths['step4_babel_prepare_lig']['output_path'])
-        except:
-            global_log.info(f"step4_babel_prepare_lig: Open Babel failed to convert ligand {name} to pdbqt format")
-            lastStep_successful = False
+        babel_convert(**ligand_paths['step4_babel_prepare_lig'], properties = ligand_prop["step4_babel_prepare_lig"])
 
-        # STEP 5: AutoDock vina
-        if lastStep_successful:
+        # Update common paths - NOTE: different processes will try to access the same files here ...
+        ligand_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path'] = global_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path']
+        ligand_paths['step5_autodock_vina_run']['input_box_path'] = global_paths['step5_autodock_vina_run']['input_box_path']
 
-            # Update common paths - NOTE: different processes will try to access the same files here ...
-            ligand_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path'] = global_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path']
-            ligand_paths['step5_autodock_vina_run']['input_box_path'] = global_paths['step5_autodock_vina_run']['input_box_path']
-
-            try:
-                global_log.info("step5_autodock_vina_run: Docking the ligand")            
-                autodock_vina_run(**ligand_paths['step5_autodock_vina_run'], properties=ligand_prop["step5_autodock_vina_run"])
-                lastStep_successful = validate_step(ligand_paths['step5_autodock_vina_run']['output_log_path'], 
-                                                    ligand_paths['step5_autodock_vina_run']['output_pdbqt_path'])
-            except:
-                global_log.info(f"step5_autodock_vina_run: Autodock Vina failed to dock ligand {name}")
-                lastStep_successful = False
+        # STEP 5: Docking with Autodock Vina
+        global_log.info("step5_autodock_vina_run: Docking the ligand")            
+        autodock_vina_run(**ligand_paths['step5_autodock_vina_run'], properties=ligand_prop["step5_autodock_vina_run"])
                 
         # STEP 6: Convert poses to PDB
-        if lastStep_successful:
-            try:
-                global_log.info("step6_babel_prepare_pose: Converting ligand pose to PDB format")    
-                babel_convert(**ligand_paths['step6_babel_prepare_pose'], properties=ligand_prop["step6_babel_prepare_pose"])
-            except:
-                global_log.info(f"step6_babel_prepare_pose: Open Babel failed to convert pose for ligand {name} to PDB format")
-                lastStep_successful = False
+        global_log.info("step6_babel_prepare_pose: Converting ligand pose to PDB format")    
+        babel_convert(**ligand_paths['step6_babel_prepare_pose'], properties=ligand_prop["step6_babel_prepare_pose"])
 
     # Find the best affinity for each ligand
     affinities = get_affinities(ligand_smiles, ligand_names, global_paths, output_path)
