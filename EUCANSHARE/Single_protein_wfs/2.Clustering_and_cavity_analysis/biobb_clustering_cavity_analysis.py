@@ -10,6 +10,7 @@ import time
 import glob
 import argparse
 import csv
+import yaml
 import json
 import shutil
 from pathlib import Path
@@ -128,8 +129,7 @@ def get_clusters_population(log_name: str, clustering_folder: str, global_log) -
     # Return list with cluster population and id sorted by population
     return clusters_population
 
-def create_summary(output_path, cluster_names, filter_cavities_folder, cavity_analysis_folder, pockets_summary_filename,
-                   cluster_populations, global_log):
+def create_summary(cluster_names, cluster_populations, global_paths, output_summary_path, output_path):
     '''
     Print in log file all available pockets after filtering for each centroid. 
     Include also information for each pocket and population for each centroid if available.
@@ -137,38 +137,27 @@ def create_summary(output_path, cluster_names, filter_cavities_folder, cavity_an
     Inputs
     ------
 
-        output_path            (str): Path to output folder
         cluster_names         (list): List with names of centroids
-        filter_cavities_folder (str): Name of filter cavities folder
-        cavity_analysis_folder (str): Name of cavity analysis folder
-        pockets_summary_filename (str): Name of pockets summary file
-        cluster_populations     (list): List with tuples containing (population, cluster_ID) ordered by population
-        global_log          (Logger): Object of class Logger (dumps info to global log file of this workflow)
+        cluster_populations   (list): List with tuples containing (population, cluster_ID) ordered by population
+        global_paths          (dict): global paths dictionary
+        output_summary_path    (str): path to output summary file
     
     Output
     ------
 
-        Info dumped to log file
-
-        global_summary (dict):  dictionary with clusters and pockets ordered by cluster name. See example:
-        
-            {
-                clustername1 : {        
-                    population : 143, 
-                    pockets : [1 , 2], 
-                    pocket1 : {info pocket 1}, 
-                    pocket2 : {info pocket 2}
-                    }, 
-                clustername2 : {
-                    ...
-                } 
-            }
+        Info dumped to yaml summary file
     '''
-    
-    global_log.info("    Available clusters and pockets after filtering:")
 
     # Pattern that can be used to extract pocket ID from string with pocket name: (str) pocket3 -> (int) 3
     pocketID_pattern = r'pocket(\d+)'
+
+    # Find step names
+    cluster_folder = 'step1_gmx_cluster'
+    filter_cavities_folder = 'step4_filter_cavities'
+    cavity_analysis_folder = 'step3_cavity_analysis'
+
+    # Find summary file name
+    pockets_summary_filename = Path(global_paths[cavity_analysis_folder]['output_summary']).name
 
     # Dictionary where all available cluster_summary dictionaries will be saved
     global_summary = {}
@@ -180,7 +169,7 @@ def create_summary(output_path, cluster_names, filter_cavities_folder, cavity_an
         filtering_log_name =  f"{cluster_name}_{filter_cavities_folder}_log.out"
 
         # Path to filtered pockets log file
-        filtering_log_path = os.path.join(output_path, filter_cavities_folder, filtering_log_name)
+        filtering_log_path = os.path.join(output_path, cluster_name, filter_cavities_folder, filtering_log_name)
 
         # Find pockets in log file
         pocket_names = find_matching_lines(pattern=r'pocket\d+$', filepath=filtering_log_path)
@@ -228,12 +217,14 @@ def create_summary(output_path, cluster_names, filter_cavities_folder, cavity_an
             # Update global_summary
             global_summary.update({cluster_name : cluster_summary})
 
-    # Print in log file with readable format
-    pretty_summary = json.dumps(global_summary, indent=2)
+    # Save global summary in YAML file
+    if output_summary_path is None:
+        output_summary_path = os.path.join(output_path, 'summary.yml')
+    with open(output_summary_path, 'w') as outfile:
+        yaml.dump(global_summary, outfile)
+    outfile.close()
 
-    global_log.info(pretty_summary)
-
-    return global_summary
+    return 
 
 def find_matching_line(pattern, filepath):
     '''
@@ -317,7 +308,7 @@ def find_matching_lines(pattern, filepath):
     return matchingLines
 
 
-def main_wf(configuration_path, traj_path, top_path, clustering_path, output_path):
+def main_wf(configuration_path, traj_path, top_path, clustering_path, output_path, output_summary_path):
     '''
     Main clustering and cavity analysis workflow. This workflow clusters a given trajectory and analyzes the cavities of the most representative
     structures. Then filters the cavities according to a pre-defined criteria and outputs the pockets that passed the filter.
@@ -325,32 +316,20 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
     Inputs
     ------
 
-        configuration_path (str): path to YAML configuration file
-        traj_path          (str): (Optional) path to trajectory file
-        top_path           (str): (Optional) path to topology file
-        clustering_path    (str): (Optional) path to the folder with the most representative structures in pdb format from an external clustering 
-        output_path        (str): (Optional) path to output folder
+        configuration_path  (str): path to YAML configuration file
+        traj_path           (str): (Optional) path to trajectory file
+        top_path            (str): (Optional) path to topology file
+        clustering_path     (str): (Optional) path to the folder with the most representative structures in pdb format from an external clustering 
+        output_path         (str): (Optional) path to output folder
+        output_summary_path (str): (Optional) path to output summary file
 
     Outputs
     -------
 
         /output folder
+
         global_paths    (dict): dictionary with all workflow paths
         global_prop     (dict): dictionary will all workflow properties
-
-        global_summary  (dict): dictionary with clusters and pockets. See example:
-        
-            {
-                clustername1 : {
-                    population : 143,  
-                    pockets: [1, 2],
-                    pocket1 : {info pocket 1}, 
-                    pocket2 : {info pocket 2}
-                    }, 
-                clustername2 : {
-                    ...
-                } 
-            }
     '''
 
     start_time = time.time()
@@ -360,10 +339,13 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
 
     # Enforce output_path if provided
     if output_path is not None:
-        conf.properties['working_dir'] = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))
+        output_path = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))
+        conf.properties['working_dir_path'] = output_path
+    else:
+        output_path = conf.get_working_dir_path()
 
     # Initializing a global log file
-    global_log, _ = fu.get_logs(path=conf.get_working_dir_path(), light_format=True)
+    global_log, _ = fu.get_logs(path=output_path, light_format=True)
 
     # Parsing the input configuration file (YAML);
     # Dividing it in global properties and global paths
@@ -458,13 +440,8 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
         fpocket_filter(**cluster_paths['step4_filter_cavities'], properties=cluster_prop["step4_filter_cavities"])
 
     # Create and print available clusters with their pockets and populations after filtering
-    global_summary = create_summary(output_path = conf.get_working_dir_path(),
-                                    cluster_names = cluster_names,
-                                    filter_cavities_folder = "step4_filter_cavities",
-                                    cavity_analysis_folder = "step3_cavity_analysis",
-                                    pockets_summary_filename = Path(global_paths['step3_cavity_analysis']['output_summary']).name ,
-                                    cluster_populations = cluster_populations, 
-                                    global_log = global_log)
+    global_log.info("    Creating YAML summary file...")
+    create_summary(cluster_names, cluster_populations, global_paths, output_summary_path, output_path)
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -477,7 +454,7 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
     global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
     global_log.info('')
 
-    return global_paths, global_prop, global_summary
+    return global_paths, global_prop
 
 if __name__ == '__main__':
 
@@ -500,7 +477,11 @@ if __name__ == '__main__':
                         required=False)
 
     parser.add_argument('--output', dest='output_path',
-                        help="Output path (default: /output in current directory)",
+                        help="Output path (default: working_dir_path in YAML config file)",
+                        required=False)
+    
+    parser.add_argument('--output_summary', dest='output_summary_path',
+                        help="Output summary path (default: /output_path/summary.yml)",
                         required=False)
     
     args = parser.parse_args()
@@ -509,4 +490,5 @@ if __name__ == '__main__':
             traj_path = args.traj_path,
             top_path = args.top_path,
             clustering_path = args.clustering_path,
-            output_path = args.output_path)
+            output_path = args.output_path,
+            output_summary_path = args.output_summary_path)
