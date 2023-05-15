@@ -1,0 +1,32 @@
+working_dir_path: output                              # Workflow output directory
+can_write_console_log: True                           # Output log to console                                         # Do not execute steps if output files are already created
+remove_tmp: True
+restart: False   
+
+step0_extract_poses:
+  paths:
+    input_zip_path: /path/to/refined/poses.zip
+    output_pdb_path: pose.pdb
+
+step1_cavity_analysis:
+  tool: fpocket_run
+  paths:
+    input_pdb_path: dependency/step0_extract_poses/output_pdb_path
+    output_pockets_zip: all_pockets.zip
+    output_summary: summary.json
+  properties:
+    min_radius: 3
+    max_radius: 6
+    num_spheres: 35
+    sort_by: druggability_score
+
+step2_filter_cavities:
+  tool: fpocket_filter
+  paths:
+    input_pockets_zip: dependency/step1_cavity_analysis/output_pockets_zip
+    input_summary: dependency/step1_cavity_analysis/output_summary
+    output_filter_pockets_zip: filtered_pockets.zip
+  properties:
+    score: [0.3, 1]
+    druggability_score: [0.3, 1]
+    volume: [200, 5000]

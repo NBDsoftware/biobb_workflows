@@ -1,0 +1,192 @@
+# Example of a YAML configuration file for a BioExcel building blocks workflow
+
+working_dir_path: output     # Folder to write i/o files of the workflow steps
+can_write_console_log: False # Verbose writing of log information
+restart: False               # Leave at False for this workflow!!
+remove_tmp: True
+
+step0_extract_poses:
+  paths:
+    input_zip_path: /path/to/input/poses.zip
+    output_pdb_path: pose.pdb
+
+# Fixing the structure
+
+step1_fixsidechain:
+  tool: fix_side_chain
+  paths:
+    input_pdb_path: dependency/step0_extract_poses/output_pdb_path
+    output_pdb_path: fixsidechain.pdb
+
+step2_fixssbonds:
+  tool: fix_ssbonds
+  paths:
+    input_pdb_path: dependency/step1_fixsidechain/output_pdb_path
+    output_pdb_path: fixssbonds.pdb
+
+step3_fixamides:
+  tool: fix_amides
+  paths:
+    input_pdb_path: dependency/step2_fixssbonds/output_pdb_path
+    output_pdb_path: fixamides.pdb
+
+step4_fixchirality:
+  tool: fix_chirality
+  paths:
+    input_pdb_path: dependency/step3_fixamides/output_pdb_path
+    output_pdb_path: fixchirality.pdb
+
+step5_renumberstructure:
+  tool: renumber_structure
+  paths:
+    input_structure_path: dependency/step4_fixchirality/output_pdb_path
+    output_structure_path: renumbered.pdb
+    output_mapping_json_path: mapping.json
+  properties:
+    renumber_residues: True
+    renumber_residues_per_chain: False
+
+# Setup: prepare system for minimization
+
+step6_pdb2gmx:
+  tool: pdb2gmx
+  paths:
+    input_pdb_path: dependency/step5_renumberstructure/output_structure_path
+    output_gro_path: pdb2gmx.gro
+    output_top_zip_path: pdb2gmx_top.zip
+  properties:
+    water_type: spce # spc, spce, tip3p, tip4p, tip5p, tips3p
+    force_field: amber99sb-ildn # gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut
+    ignh: False # Ignore hydrogens in the input structure
+    merge: False # Merge all chains into one molecule
+    remove_tmp: True
+
+step7_editconf:
+  tool: editconf
+  paths:
+    input_gro_path: dependency/step6_pdb2gmx/output_gro_path
+    output_gro_path: editconf.gro
+  properties:
+    box_type: dodecahedron # cubic, triclinic, octahedron, dodecahedron
+    distance_to_molecule: 1.0 # Distance of the box from the outermost atom in nm
+
+step8_solvate:
+  tool: solvate
+  paths:
+    input_solute_gro_path: dependency/step7_editconf/output_gro_path
+    output_gro_path: solvate.gro
+    input_top_zip_path: dependency/step6_pdb2gmx/output_top_zip_path
+    output_top_zip_path: solvate_top.zip
+
+step9_grompp_genion:
+  tool: grompp
+  paths:
+    input_gro_path: dependency/step8_solvate/output_gro_path
+    input_top_zip_path: dependency/step8_solvate/output_top_zip_path
+    output_tpr_path: gppion.tpr
+  properties:
+    simulation_type: minimization
+    maxwarn: 2
+
+step10_genion:
+  tool: genion
+  paths:
+    input_tpr_path: dependency/step9_grompp_genion/output_tpr_path
+    output_gro_path: genion.gro
+    input_top_zip_path: dependency/step8_solvate/output_top_zip_path
+    output_top_zip_path: genion_top.zip
+  properties:
+    neutral: True # Neutralize charge of the system
+    concentration: 0.05 # Concentration of ions in mols/L
+
+# Minimization 
+
+step11_grompp_min:
+  tool: grompp
+  paths:
+    input_gro_path: dependency/step10_genion/output_gro_path
+    input_top_zip_path: dependency/step10_genion/output_top_zip_path
+    output_tpr_path: gppmin.tpr
+  properties:
+    simulation_type: minimization
+    mdp:
+      integrator: steep
+      nsteps: 500
+      emtol: 10
+
+step12_mdrun_min:
+  tool: mdrun
+  paths:
+    input_tpr_path: dependency/step11_grompp_min/output_tpr_path
+    output_trr_path: min.trr
+    output_gro_path: min.gro
+    output_edr_path: min.edr
+    output_log_path: min.log
+  properties:
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
+    mpi_np: 4
+
+step13_energy_min:
+  tool: gmx_energy
+  paths:
+    input_energy_path: dependency/step12_mdrun_min/output_edr_path
+    output_xvg_path: min_1_ene.xvg
+  properties:
+    terms: ["Potential"]
+  
+step14_grompp_min:
+  tool: grompp
+  paths:
+    input_gro_path: dependency/step12_mdrun_min/output_gro_path
+    input_top_zip_path: dependency/step10_genion/output_top_zip_path
+    output_tpr_path: gppmin.tpr
+  properties:
+    simulation_type: free
+    mdp:
+      integrator: steep
+      nsteps: 500 
+      emtol: 10
+
+step15_mdrun_min:
+  tool: mdrun
+  paths:
+    input_tpr_path: dependency/step14_grompp_min/output_tpr_path
+    output_trr_path: min.trr
+    output_gro_path: min.gro
+    output_edr_path: min.edr
+    output_log_path: min.log
+  properties:
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
+    mpi_np: 4
+
+step16_energy_min:
+  tool: gmx_energy
+  paths:
+    input_energy_path: dependency/step15_mdrun_min/output_edr_path
+    output_xvg_path: min_2_ene.xvg
+  properties:
+    terms: ["Potential"]
+
+step17_trjconv:
+  tool: gmx_trjconv_str
+  paths: 
+    input_structure_path: dependency/step15_mdrun_min/output_gro_path
+    input_top_path: dependency/step15_mdrun_min/output_gro_path
+    output_str_path: pose.pdb
+  properties:
+    selection: Protein
+    center: True
+    pbc: mol
+    ur: compact
+  
+step18_merge_results:
+  paths:
+    input_refined_pose_path: dependency/step17_trjconv/output_str_path
+    input_min1_ene_path: dependency/step13_energy_min/output_xvg_path
+    input_min2_ene_path: dependency/step16_energy_min/output_xvg_path
+    output_zip_path: top_refined_poses.zip
+    
+
+

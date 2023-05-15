@@ -1,3 +1,3 @@
 # Bioexcel building blocks workflows
 
-These workflows can be run together or as independent workflows. They can be run entirely or just partially to analyze intermediate results before proceeding. 
+These workflows can be run together or as independent workflows. They use BioExcel Building Blocks (biobb) to integrate different popular biomolecular simulation tools.
