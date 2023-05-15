@@ -6,7 +6,7 @@ Go to workflow folder and install conda environment:
 
 ```bash
 conda env create -f environment.yml
-conda activate single_protein_wf3
+conda activate protein_protein_wf4
 ```
 
 See options for worklow:

@@ -20,7 +20,7 @@ python biobb_clustering_cavity_analysis.py --help
 
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
 
-To run in an HPC environment adapt the run_HPC.sl and input_HPC.yml scripts and send the job to the slurm queue:
+To run in an HPC environment adapt the run_HPC.sl and input_HPC.yml scripts and send a job to the slurm queue:
 
 ```bash
 sbatch run_HPC.sl
@@ -55,9 +55,9 @@ This workflow has several steps. The input for the workflow can be either (1) a 
 
 - **Step 2**: From the pdb file with all the centroids the most populated ones are extracted. The number of extracted centroids is defined in the num_clusters keyword of the YAML configuration file.
 
-- **Step 3**: Cavity analysis of the centroid structures.
+- **Step 3**: Cavity analysis of the centroid structures using Fpocket.
 
-- **Step 4**: Filtering of the cavities found in Step 3.
+- **Step 4**: Filtering of the cavities found according to the criteria defined in the properties of this step.
 
 Note that re-launching the workflow will skip the previously successful steps if restart is True and the output folder is the same. 
 
