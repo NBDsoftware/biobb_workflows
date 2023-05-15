@@ -61,7 +61,7 @@ def copy_inputs_with_prefix(source_paths, destination_path, prefix):
             # Copy the file
             shutil.copy(path, new_path)
     
-def main_wf(configuration_path, output_path, input_zip_path):
+def main_wf(configuration_path, input_zip_path, fix_ss, output_path):
     '''
     Main protein-protein docking pose refinement workflow. It takes as input a zip file containing PDB files with the protein-protein docking poses and a 
     YAML configuration file with all the parameters needed to run the workflow.
@@ -70,8 +70,10 @@ def main_wf(configuration_path, output_path, input_zip_path):
     ------
 
         configuration_path (str): path to input.yml
-        output_path (str): path to the output folder
         input_zip_path (str): path to the input zip file
+        fix_ss (bool): fix SS bonds
+        output_path (str): path to the output folder
+        
 
     Outputs
     -------
@@ -130,10 +132,13 @@ def main_wf(configuration_path, output_path, input_zip_path):
         # STEP 1: model missing heavy atoms of side chains
         global_log.info(f"{pose_name} >> step1_fixsidechain: Modeling the missing heavy atoms in the structure side chains")
         fix_side_chain(**pose_paths["step1_fixsidechain"], properties=pose_prop["step1_fixsidechain"])
-
-        # STEP 2: model SS bonds (CYS -> CYX) if necessary
-        global_log.info(f"{pose_name} >> step2_fixssbonds: Fix SS bonds")
-        fix_ssbonds(**pose_paths["step2_fixssbonds"], properties=pose_prop["step2_fixssbonds"])
+        
+        if fix_ss:
+            # STEP 2: model SS bonds (CYS -> CYX)
+            global_log.info(f"{pose_name} >> step2_fixssbonds: Fix SS bonds")
+            fix_ssbonds(**global_paths["step2_fixssbonds"], properties=global_prop["step2_fixssbonds"])
+        else:
+            global_paths['step3_fixamides']['input_pdb_path'] = global_paths['step1_fixsidechain']['output_pdb_path']
 
         # STEP 3: Fix amides
         global_log.info(f"{pose_name} >> step3_fixamides: fix clashing amides")
@@ -230,17 +235,22 @@ if __name__ == "__main__":
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)",
                         required=True)
+
+    parser.add_argument('--input_zip', dest='input_zip_path',
+                        help="Input zip file with all the poses (default: input_zip_path in step 0 of configuration file)",
+                        required=False)
+    
+    parser.add_argument('--fix_ss', action='store_true',
+                        help="Add disulfide bonds to the protein. Use carefully! (default: False)",
+                        required=False)
     
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
-                        required=False)
-    
-    parser.add_argument('--input_zip', dest='input_zip_path',
-                        help="Input zip file with all the poses (default: input_zip_path in step 0 of configuration file)",
                         required=False)
 
     args = parser.parse_args()
 
     main_wf(configuration_path=args.config_path,
-            output_path=args.output_path,  
-            input_zip_path=args.input_zip_path)
+            input_zip_path=args.input_zip_path,
+            fix_ss=args.fix_ss,
+            output_path=args.output_path)
