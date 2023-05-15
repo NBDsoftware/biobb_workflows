@@ -25,21 +25,21 @@ module load slurm/slurm/21.08.6
 source activate /home/pnavarro/.conda/envs/single_protein_wf2
 
 # Test 1
-# INPUT=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/2.Clustering_and_cavity_analysis/input
-# OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/2.Clustering_and_cavity_analysis/output1
+# INPUT=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/input
+# OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/output1
 # TRAJ_PATH=$INPUT/all_trajectories.xtc
 # TOP_PATH=$INPUT/dry_structure.gro
 # python biobb_clustering_cavity_analysis.py --config input_HPC.yml --traj_path $TRAJ_PATH --top_path $TOP_PATH --output $OUTPUT_PATH
 
 # Test 2
-# INPUT=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/2.Clustering_and_cavity_analysis/input2
+# INPUT=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/input2
 # CLUSTERS=$INPUT/clusters
-# OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/2.Clustering_and_cavity_analysis/output2
+# OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/output2
 # python biobb_clustering_cavity_analysis.py --config input_HPC.yml --clustering_path $CLUSTERS --output $OUTPUT_PATH
 
 # Test 3
-INPUT=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/2.Clustering_and_cavity_analysis/input2
+INPUT=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/input2
 CLUSTERS=$INPUT/clusters
-OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/2.Clustering_and_cavity_analysis/output3
-OUTPUT_SUMMARY_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/2.Clustering_and_cavity_analysis/summary3.yml
+OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/output3
+OUTPUT_SUMMARY_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/summary3.yml
 python biobb_clustering_cavity_analysis.py --config input_HPC.yml --clustering_path $CLUSTERS --output $OUTPUT_PATH --output_summary $OUTPUT_SUMMARY_PATH
