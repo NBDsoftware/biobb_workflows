@@ -6,8 +6,8 @@ remove_tmp: True
 step1_setup:
   tool: setup
   paths:
-    input_rec_pdb_path: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Protein_interface_wfs/1.PP_docking/input/receptor.pdb
-    input_lig_pdb_path: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Protein_interface_wfs/1.PP_docking/input/ligand.pdb
+    input_rec_pdb_path: /path/to/receptor.pdb
+    input_lig_pdb_path: /path/to/ligand.pdb
     output_rec_path: prepared_receptor.pdb
     output_rec_H_path: prepared_receptor.pdb.H
     output_rec_amber_path: prepared_receptor.pdb.amber
