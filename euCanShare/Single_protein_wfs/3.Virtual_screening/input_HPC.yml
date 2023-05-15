@@ -53,6 +53,8 @@ step5_autodock_vina_run:
     input_box_path: dependency/step2_box/output_pdb_path
     output_pdbqt_path: output_vina.pdbqt
     output_log_path: output_vina.log
+  properties:
+    cpu: 1
 
 step6_babel_prepare_pose:
   tool: babel_convert

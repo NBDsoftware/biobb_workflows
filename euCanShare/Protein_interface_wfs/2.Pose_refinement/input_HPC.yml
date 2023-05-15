@@ -55,11 +55,11 @@ step6_pdb2gmx:
     output_gro_path: pdb2gmx.gro
     output_top_zip_path: pdb2gmx_top.zip
   properties:
-    water_type: spce # spc, spce, tip3p, tip4p, tip5p, tips3p
-    force_field: amber99sb-ildn # gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut
-    ignh: False # Ignore hydrogens in the input structure
-    merge: False # Merge all chains into one molecule
-    remove_tmp: True
+    force_field: amber99sb-ildn   # gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut
+    water_type: spce              # spc, spce, tip3p, tip4p, tip5p, tips3p
+    ignh: False                   # Ignore hydrogens in the input structure
+    merge: False                  # Merge all chains into one molecule
+    # his:                        # HIS protonation state array
 
 step7_editconf:
   tool: editconf

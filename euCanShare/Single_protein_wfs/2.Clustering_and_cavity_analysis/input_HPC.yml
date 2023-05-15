@@ -1,9 +1,9 @@
 # Example of a YAML configuration file for the Clustering and cavity analysis workflow
 
-working_dir_path: output                         # Workflow default output directory
-can_write_console_log: True                           # Output log to console                                        # Do not execute steps if output files are already created
+working_dir_path: output                              # Workflow default output directory
+can_write_console_log: True                           # Output log to console
 remove_tmp: True                                      # Remove temporal files
-restart: False
+restart: False                                        # Do not execute steps if output files are already created
 num_clusters: 10                                      # Number of clusters to extract from the trajectory and analyze with fpocket
 
 # Step 0: Create index file
