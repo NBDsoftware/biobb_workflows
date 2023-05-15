@@ -275,7 +275,7 @@ def clean_output(ligand_names, output_path):
         ligand_path = os.path.join(output_path, name)
         shutil.rmtree(ligand_path)
     
-def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_zip, output_path, num_top_ligands):
+def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_zip, pocket, output_path, num_top_ligands):
     '''
     Main HTVS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
     and a receptor to screen the pocket of the receptor using the ligand library (with AutoDock).
@@ -287,6 +287,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
         ligand_lib_path      (str): path to ligand library with SMILES
         structure_path       (str): path to receptor structure
         input_pockets_zip    (str): path to input pockets zip file
+        pocket               (str): pocket name
         output_path          (str): path to output directory
         num_top_ligands      (int): number of top ligands to be saved
 
@@ -322,6 +323,10 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     if input_pockets_zip is not None:
         global_paths['step1_fpocket_select']['input_pockets_zip'] = input_pockets_zip
     
+    # Enforce pocket if provided
+    if pocket is not None:
+        global_prop['step1_fpocket_select']['pocket'] = pocket
+
     # STEP 1: Pocket selection from filtered list 
     global_log.info("step1_fpocket_select: Extract pocket cavity")
     fpocket_select(**global_paths["step1_fpocket_select"], properties=global_prop["step1_fpocket_select"])
@@ -416,6 +421,10 @@ if __name__ == '__main__':
                         help="Path to file with pockets in a zip file",
                         required=False)
 
+    parser.add_argument('--pocket', dest='pocket',
+                        help="Pocket number to be used (default: 1)",
+                        required=False)
+    
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
@@ -430,5 +439,6 @@ if __name__ == '__main__':
             ligand_lib_path = args.ligand_lib,
             structure_path = args.structure_path,
             input_pockets_zip = args.input_pockets_zip,
+            pocket = args.pocket,
             output_path = args.output_path,
             num_top_ligands = args.num_top_ligands)
