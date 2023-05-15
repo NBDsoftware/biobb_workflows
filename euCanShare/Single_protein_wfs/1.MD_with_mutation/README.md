@@ -73,6 +73,8 @@ This workflow has several steps. The input for the workflow can be (1) a pdb fil
 
 - **Step 7**: randomly replace solvent molecules with monoatomic ions. To prepare the system externally, use the "--input_gro" and "--input_top" command line arguments.
 
+To make sure the system has been correctly prepared before minimizing or running MD, launch the workflow adding the '--setup_only' command line option. This will stop the workflow before the energy minimization. 
+
 **Steps 8 - 10**: energy minimization
 
 **Steps 10 - 13**: NVT equilibration
