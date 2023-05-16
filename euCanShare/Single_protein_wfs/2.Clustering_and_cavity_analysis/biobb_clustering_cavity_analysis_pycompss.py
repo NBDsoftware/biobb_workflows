@@ -18,6 +18,7 @@ from pathlib import Path
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 
+from pycompss.api.api import compss_barrier
 from biobb_adapters.pycompss.biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_adapters.pycompss.biobb_gromacs.gromacs.gmxselect import gmxselect
 from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_cluster import gmx_cluster
@@ -439,6 +440,9 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
         # STEP 4: Filtering cavities
         global_log.info("step4_filter_cavities: Filter found cavities")
         fpocket_filter(**cluster_paths['step4_filter_cavities'], properties=cluster_prop["step4_filter_cavities"])
+
+    # NOTE: here all processes should wait for the others to finish, but we cannot use files as not all of them will find pockets after filtering - no output file
+    compss_barrier()
 
     # Create and print available clusters with their pockets and populations after filtering
     global_log.info("    Creating YAML summary file...")

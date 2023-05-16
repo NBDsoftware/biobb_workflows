@@ -79,7 +79,7 @@ To make sure the system has been correctly prepared before minimizing or running
 
 **Steps 10 - 13**: NVT equilibration
 
-**Steps 13 - 16**: NPT equilibration
+**Steps 14 - 16**: NPT equilibration
 
 **Steps 17 - 26**: launch several production trajectories from equilibrated structure (see --n_trajs command line argument). Concatenate the imaged trajectories afterwards.
 
