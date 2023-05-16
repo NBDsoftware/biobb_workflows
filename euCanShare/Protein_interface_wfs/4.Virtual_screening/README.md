@@ -40,8 +40,8 @@ This workflow has several steps. The input for the workflow is a zip file contai
 
 - **Step 5**: docking of the ligand onto the target structure using [AutoDock Vina](https://vina.scripps.edu/manual/#summary). The target is kept rigid but different ligand conformers are explored.
 
-- **Step 6**: convert binding pose from .pdbqt to .pdb format
+- **Step 6**: find top scoring ligands, save their rank, names, smiles and affinity in a csv file.
 
-- **Step 7**: find top scoring ligands, save their poses and their scores in a csv file.
+- **Step 7**: save poses of top scoring ligands (only if --keep_poses is used)
 
 

@@ -56,7 +56,13 @@ step5_autodock_vina_run:
   properties:
     cpu: 1
 
-step6_babel_prepare_pose:
+step6_show_top_ligands:
+  paths:
+    output_csv_path: top_ligands.csv 
+  properties:
+    num_top_ligands: 50
+
+step7_babel_prepare_pose:
   tool: babel_convert
   paths:
     input_path: dependency/step5_autodock_vina_run/output_pdbqt_path
@@ -64,11 +70,3 @@ step6_babel_prepare_pose:
   properties:
     input_format: pdbqt
     output_format: pdb
-
-step7_show_top_ligands:
-  paths:
-    input_pose_path: dependency/step6_babel_prepare_pose/output_path
-    output_csv_path: top_ligands.csv 
-  properties:
-    num_top_ligands: 50
-    keep_poses: True

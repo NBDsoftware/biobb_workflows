@@ -10,6 +10,8 @@ from pathlib import Path
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
+
+from pycompss.api.api import compss_barrier
 from biobb_adapters.pycompss.biobb_vs.utils.box import box
 from biobb_adapters.pycompss.biobb_vs.fpocket.fpocket_select import fpocket_select
 from biobb_adapters.pycompss.biobb_vs.vina.autodock_vina_run import autodock_vina_run
@@ -79,30 +81,29 @@ def create_ranking(affinities, global_paths, global_prop, output_path):
 
     Inputs
     ------
-        affinities      (list): list with tuples -> (affinity, ligand identifier, ligand_ID)
+        affinities      (list): list with tuples -> (affinity, ligand name, smiles) ordered by affinity
         paths           (dict): dictionary with paths of the step
         properties      (dict): dictionary with properties of the step
+    
+    Output  
+    ------
+
+        top_affinities  (list): list with tuples -> (affinity, ligand name, smiles) ordered by affinity for the top ligands
     '''
     # Step names    
-    pose_step_name = 'step6_babel_prepare_pose'
-    ranking_step_name = 'step7_show_top_ligands'
+    ranking_step_name = 'step6_show_top_ligands'
 
     # Read paths
-    pose_file_name = Path(global_paths[ranking_step_name]['input_pose_path']).name
     ranking_path = global_paths[ranking_step_name]['output_csv_path']
 
     # Read properties
     num_top_ligands = global_prop[ranking_step_name]['num_top_ligands']
-    keep_poses = global_prop[ranking_step_name]['keep_poses']
-
-    # Sort list according to affinity
-    affinities = sorted(affinities)
 
     # Find number of ligands to save in ranking
     ranking_length = min(num_top_ligands, len(affinities)) 
 
     # Exclude the rest
-    affinities = affinities[:ranking_length]
+    top_affinities = affinities[:ranking_length]
 
     # Find step path
     step_path = global_prop[ranking_step_name]['path']
@@ -115,29 +116,17 @@ def create_ranking(affinities, global_paths, global_prop, output_path):
     with open(ranking_path, 'w') as file:
 
         # Write header
-        file.write("Rank Affinity Ligand_name Ligand_ID \n")
+        file.write("Rank Affinity Ligand_name SMILES \n")
 
         # For each ligand
-        for rank, affinity_tuple in enumerate(affinities):
+        for rank, affinity_tuple in enumerate(top_affinities):
 
             affinity, ligand_name, ligand_ID = affinity_tuple
 
             # Write ranking line
             file.write(f"{rank+1}\t{affinity}\t{ligand_name}\t{ligand_ID}\n")
 
-            # If keep_poses is True, copy pose to step folder
-            if keep_poses:
-
-                # Find pose path
-                pose_path = os.path.join(output_path, ligand_name, pose_step_name, pose_file_name)
-
-                # New pose path
-                new_pose_path = os.path.join(step_path, f"{ligand_name}_poses.pdb")
-
-                # Copy pose 
-                shutil.copyfile(pose_path, new_pose_path)
-
-    return 
+    return top_affinities
 
 def read_ligand_lib(ligand_lib_path):
     '''
@@ -189,7 +178,7 @@ def read_ligand_lib(ligand_lib_path):
             # Append ligand ID to list
             ligand_smiles.append(line[0])
 
-            # If there is a name, append it to ligand_names
+            # If there is no name, use index as name
             if len(line)>1:
                 ligand_names.append(line[1])
             else:
@@ -240,7 +229,7 @@ def get_affinities(ligand_smiles, ligand_names, global_paths, output_path):
     Output
     ------
 
-        affinities      (list): list of tuples (affinity, ligand_name, ligand_smiles)
+        affinities      (list): list of tuples (affinity, ligand_name, ligand_smiles) ordered by affinity
     """
 
     # AutoDock step name
@@ -262,7 +251,10 @@ def get_affinities(ligand_smiles, ligand_names, global_paths, output_path):
 
         if affinity:
             affinities.append((affinity, name, smiles))
-    
+
+    # Sort list according to affinity
+    affinities = sorted(affinities)
+
     return affinities
 
 def clean_output(ligand_names, output_path):
@@ -275,7 +267,7 @@ def clean_output(ligand_names, output_path):
         ligand_path = os.path.join(output_path, name)
         shutil.rmtree(ligand_path)
     
-def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_zip, pocket, output_path, num_top_ligands):
+def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_zip, pocket, output_path, num_top_ligands, keep_poses):
     '''
     Main HTVS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
     and a receptor to screen the pocket of the receptor using the ligand library (with AutoDock).
@@ -290,6 +282,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
         pocket               (str): pocket name
         output_path          (str): path to output directory
         num_top_ligands      (int): number of top ligands to be saved
+        keep_poses          (bool): keep poses of top ligands
 
     Outputs
     -------
@@ -343,7 +336,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     global_log.info("step3_str_check_add_hydrogens: Preparing target protein for docking")
     str_check_add_hydrogens(**global_paths["step3_str_check_add_hydrogens"], properties=global_prop["step3_str_check_add_hydrogens"]) 
 
-    # STEP 4-5-6-7. For each ligand: prepare ligand, run docking, prepare poses
+    # STEP 4-5: Prepare ligand, run docking
 
     # Load drug list - NOTE: the whole library is loaded into memory
     ligand_smiles, ligand_names = read_ligand_lib(ligand_lib_path)
@@ -368,23 +361,46 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
         # STEP 5: Docking with Autodock Vina
         global_log.info("step5_autodock_vina_run: Docking the ligand")            
         autodock_vina_run(**ligand_paths['step5_autodock_vina_run'], properties=ligand_prop["step5_autodock_vina_run"])
-                
-        # STEP 6: Convert poses to PDB
-        global_log.info("step6_babel_prepare_pose: Converting ligand pose to PDB format")    
-        babel_convert(**ligand_paths['step6_babel_prepare_pose'], properties=ligand_prop["step6_babel_prepare_pose"])
+
+    # NOTE: here all processes should wait for the others to finish, but we cannot use files as not all of them will find pockets after filtering - no output file
+    compss_barrier()
 
     # Find the best affinity for each ligand
     affinities = get_affinities(ligand_smiles, ligand_names, global_paths, output_path)
 
     # Enforce num_top_ligands if specified
     if num_top_ligands is not None:
-        global_prop['step7_show_top_ligands']['num_top_ligands'] = int(num_top_ligands)
+        global_prop['step6_show_top_ligands']['num_top_ligands'] = int(num_top_ligands)
 
-    # STEP 7: Find top ligands 
-    global_log.info("step7_show_top_ligands: create ranking and save poses for top ligands")  
-    create_ranking(affinities, global_paths, global_prop, output_path)
-    
-    # Clean up the output folder
+    # STEP 6: Find top ligands 
+    global_log.info("step6_show_top_ligands: create ranking and save poses for top ligands")  
+    top_affinities = create_ranking(affinities, global_paths, global_prop, output_path)
+
+    if keep_poses:
+
+        # Iterate over top ligands
+        for affinity, name, smiles in top_affinities:
+
+            # Add ligand name to properties and paths
+            top_ligand_prop = conf.get_prop_dic(prefix=name)
+            top_ligand_paths = conf.get_paths_dic(prefix=name)
+
+            global_log.info("step7_babel_prepare_pose: Converting ligand pose to PDB format")    
+            babel_convert(**top_ligand_paths['step7_babel_prepare_pose'], properties=top_ligand_prop["step7_babel_prepare_pose"])
+
+            # Find pose path
+            pose_path = top_ligand_paths['step7_babel_prepare_pose']['output_path']
+
+            # New pose path
+            new_pose_path = os.path.join(global_prop['step6_show_top_ligands']['path'], f"{name}_poses.pdb")
+
+            # Move pose to new location 
+            shutil.move(pose_path, new_pose_path)
+
+        # NOTE: here all processes should wait for the others to finish, but we cannot use files as not all of them will find pockets after filtering - no output file
+        compss_barrier()
+
+    # Clean up the output folder - NOTE: is removing folders from python safe?
     clean_output(ligand_names, output_path)
 
     # Timing information
@@ -424,13 +440,17 @@ if __name__ == '__main__':
     parser.add_argument('--pocket', dest='pocket',
                         help="Pocket number to be used (default: 1)",
                         required=False)
-    
+
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
     
     parser.add_argument('--num_top_ligands', dest='num_top_ligands',
                         help="Number of top ligands to be saved (default: corresponding value in YAML config file)",
+                        required=False)
+
+    parser.add_argument('--keep_poses', dest='keep_poses', action='store_true',
+                        help="Save docking poses for top ligands (default: False)",
                         required=False)
     
     args = parser.parse_args()
@@ -441,4 +461,5 @@ if __name__ == '__main__':
             input_pockets_zip = args.input_pockets_zip,
             pocket = args.pocket,
             output_path = args.output_path,
-            num_top_ligands = args.num_top_ligands)
+            num_top_ligands = args.num_top_ligands,
+            keep_poses = args.keep_poses)
