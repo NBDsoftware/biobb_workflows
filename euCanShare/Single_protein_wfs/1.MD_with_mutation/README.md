@@ -1,5 +1,7 @@
 # MD with mutation 
 
+![alt text](../../img/MD_setup.png?raw=true)
+
 ## Quick installation and run
 
 Go to workflow folder and install conda environment:

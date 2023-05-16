@@ -1,5 +1,7 @@
 # Virtual Screening
 
+![alt text](../../img/virtual_screening.png?raw=true)
+
 ## Quick installation and run
 
 Go to workflow folder and install conda environment:

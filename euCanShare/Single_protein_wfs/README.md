@@ -2,13 +2,15 @@
 
 Single protein biobb workflows created for euCanShare. They can be run together or as independent workflows. 
 
+![alt text](../img/Single_protein_scheme.png?raw=true)
+
 ## Description
 
-**1.MD_with_mutation**: prepares and launches a GROMACS MD simulation starting from a PDB structure file or PDB code. Optionally, several mutations can be added to the original PDB during the preparation. See corresponding folder for more details.
+**1.MD_with_mutation**: prepares and launches a GROMACS MD simulation starting from a PDB structure file. Optionally, several mutations can be added to the original PDB during the preparation. See corresponding folder for more details.
 
 **2.Clustering_and_cavity_analysis**: clustering of MD trajectory and extraction of most representative structures. Followed by a cavity analysis using Fpocket on those structures. See corresponding folder for more details.
 
-**3.Docking_HTVS**: high-throughput virtual screening of selected pocket using library of ligands (SMILES) and Autodock. See corresponding folder for more details.
+**3.Docking_HTVS**: high-throughput virtual screening of selected pocket using library of ligands (SMILES) and AutoDock Vina. See corresponding folder for more details.
 
 ## General installation steps
 

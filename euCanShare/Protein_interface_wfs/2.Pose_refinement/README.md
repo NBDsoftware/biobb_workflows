@@ -1,5 +1,7 @@
 # Pose refinement
 
+![alt text](../../img/pose_refinement.png?raw=true)
+
 ## Quick installation and run
 
 Go to workflow folder and install conda environment:

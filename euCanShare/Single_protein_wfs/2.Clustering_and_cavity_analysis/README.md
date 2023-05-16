@@ -1,5 +1,7 @@
 # Clustering and cavity analysis
 
+![alt text](../../img/clust_cavity_analysis.png?raw=true)
+
 ## Quick installation and run
 
 Go to workflow folder and install conda environment:

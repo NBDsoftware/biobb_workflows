@@ -2,6 +2,8 @@
 
 Protein interface biobb workflows created for euCanShare. They can be run together or as independent workflows. 
 
+![alt text](../img/protein_protein_scheme.png?raw=true)
+
 ## Description
 
 **1.PP_docking**: First uses pyDock to sample and score protein-protein poses starting from 2 pdb structures. Then performs a clustering based on the RMSD between poses and gives back the best ranking pose from each cluster (to obtain a set of good distinct poses). See corresponding folder for more details.
