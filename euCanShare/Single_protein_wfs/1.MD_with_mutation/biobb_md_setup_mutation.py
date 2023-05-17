@@ -36,7 +36,7 @@ from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 
 
-def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input_pdb_path = None, pdb_chains = None, 
+def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input_pdb_path = None, pdb_chains = None,
             mutation_list = None, input_gro_path = None, input_top_path = None, fix_backbn = None, fix_ss = None):
     '''
     Main MD Setup, mutation and run workflow. Can be used to retrieve a PDB, fix some defects of the structure,
@@ -52,10 +52,10 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         input_pdb_path     (str): (Optional) path to input PDB file
         pdb_chains         (str): (Optional) chains to be extracted from the input PDB file
         mutation_list      (str): (Optional) list of mutations to be introduced in the structure
-        input_gro_path     (str): (Optional) path to input structure file (.gro) 
+        input_gro_path     (str): (Optional) path to input structure file (.gro)
         input_top_path     (str): (Optional) path to input topology file (.zip)
         fix_backbn        (bool): (Optional) wether to add missing backbone atoms
-        fix_ss            (bool): (Optional) wether to add disulfide bonds 
+        fix_ss            (bool): (Optional) wether to add disulfide bonds
 
     Outputs
     -------
@@ -67,7 +67,7 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     '''
 
     start_time = time.time()
-    
+
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
 
@@ -86,13 +86,13 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
 
-    # If prepared structure is not provided 
+    # If prepared structure is not provided
     if input_gro_path is None:
-        
+
         # If input PDB is given as argument
         if input_pdb_path is not None:
             global_paths["step1_extractMolecule"]["input_structure_path"] = input_pdb_path
-        
+
         # If chains are given as argument
         if pdb_chains is not None:
             global_prop["step1_extractMolecule"]["chains"] = pdb_chains
@@ -128,7 +128,7 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         fix_side_chain(**global_paths["step2E_fixsidechain"], properties=global_prop["step2E_fixsidechain"])
 
         if fix_ss:
-            # STEP 2 (F): model SS bonds (CYS -> CYX) 
+            # STEP 2 (F): model SS bonds (CYS -> CYX)
             global_log.info("step2F_fixssbonds: Fix SS bonds")
             fix_ssbonds(**global_paths["step2F_fixssbonds"], properties=global_prop["step2F_fixssbonds"])
         else:
@@ -169,12 +169,12 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         if setup_only:
             global_log.info("setup_only: setup_only flag is set to True, exiting...")
             return
-    
+
     else:
 
         global_paths['step8_grompp_min']['input_gro_path'] = input_gro_path
         global_paths['step8_grompp_min']['input_top_zip_path'] = input_top_path
-    
+
     # STEP 8: minimization pre-processing
     global_log.info("step8_grompp_min: Preprocess energy minimization")
     grompp(**global_paths["step8_grompp_min"], properties=global_prop["step8_grompp_min"])
@@ -224,7 +224,7 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         traj_paths = conf.get_paths_dic(prefix=traj)
 
         # Change seed of temperature coupling algorithm (V-rescale)
-        new_seed = {'ld-seed' : random.randint(1, 1000000)}
+        new_seed = {'ld-seed': random.randint(1, 1000000)}
         traj_prop['step17_grompp_md']['mdp'].update(new_seed)
 
         # STEP 17: free NPT production run pre-processing
@@ -232,8 +232,10 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         # Update common paths to all trajectories
         traj_paths['step17_grompp_md']['input_gro_path'] = global_paths["step17_grompp_md"]['input_gro_path']
         traj_paths['step17_grompp_md']['input_top_zip_path'] = global_paths["step17_grompp_md"]['input_top_zip_path']
-        traj_paths['step17_grompp_md']['input_ndx_path'] = global_paths["step17_grompp_md"]['input_ndx_path']
-        traj_paths['step17_grompp_md']['input_cpt_path'] = global_paths["step17_grompp_md"]['input_cpt_path']
+        if global_paths["step17_grompp_md"].get('input_ndx_path'):
+            traj_paths['step17_grompp_md']['input_ndx_path'] = global_paths["step17_grompp_md"]['input_ndx_path']
+        if global_paths["step17_grompp_md"].get('input_cpt_path'):
+            traj_paths['step17_grompp_md']['input_cpt_path'] = global_paths["step17_grompp_md"]['input_cpt_path']
         grompp(**traj_paths['step17_grompp_md'], properties=traj_prop["step17_grompp_md"])
 
         # STEP 18: free NPT production run
@@ -296,7 +298,7 @@ if __name__ == "__main__":
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)",
                         required=True)
-    
+
     parser.add_argument('--setup_only', action='store_true',
                         help="Only setup the system (default: False)",
                         required=False)
@@ -304,19 +306,19 @@ if __name__ == "__main__":
     parser.add_argument('--num_trajs', dest='num_trajs',
                         help="Number of trajectories (default: 1)",
                         required=False)
-    
+
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
-    
+
     parser.add_argument('--input_pdb', dest='input_pdb_path',
                         help="Input PDB file (default: input_structure_path in step 1 of configuration file)",
                         required=False)
-    
+
     parser.add_argument('--pdb_chains', nargs='+', dest='pdb_chains',
                         help="PDB chains to be extracted from PDB file (default: chains in properties of step 1)",
                         required=False)
-    
+
     parser.add_argument('--mutation_list', nargs='+', dest='mutation_list',
                         help="List of mutations to be introduced in the protein (default: None, ex: A:Arg220Ala)",
                         required=False)
@@ -328,11 +330,11 @@ if __name__ == "__main__":
     parser.add_argument('--input_top', dest='input_top_path',
                         help="Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, use together with --input_gro (default: None)",
                         required=False)
-    
+
     parser.add_argument('--fix_ss', action='store_true',
                         help="Add disulfide bonds to the protein. Use carefully! (default: False)",
                         required=False)
-    
+
     parser.add_argument('--fix_backbone', action='store_true',
                         help="Add missing backbone atoms. Requires internet connection, PDB code and a MODELLER license key (default: False)",
                         required=False)
@@ -345,15 +347,15 @@ if __name__ == "__main__":
     else:
         num_trajs = int(args.num_trajs)
 
-    # Check .gro structure and .zip topology are given together 
+    # Check .gro structure and .zip topology are given together
     if (args.input_gro_path is None and args.input_top_path is not None) or (args.input_gro_path is not None and args.input_top_path is None):
         raise Exception("Both --input_gro and --input_top must be provided together")
 
     # Check .pdb structure and .gro/.zip topology are not given together
     if (args.input_pdb_path is not None and args.input_gro_path is not None):
         raise Exception("Both --input_pdb and --input_gro/--input_top are provided. Please provide only one of them")
-    
-    main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_trajs=num_trajs, output_path=args.output_path, 
+
+    main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_trajs=num_trajs, output_path=args.output_path,
             input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list,
-            input_gro_path=args.input_gro_path, input_top_path=args.input_top_path, 
+            input_gro_path=args.input_gro_path, input_top_path=args.input_top_path,
             fix_backbn=args.fix_backbone, fix_ss=args.fix_ss)
