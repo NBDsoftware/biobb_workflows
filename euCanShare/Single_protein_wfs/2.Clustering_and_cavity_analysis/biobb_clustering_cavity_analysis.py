@@ -12,7 +12,6 @@ import argparse
 import csv
 import yaml
 import json
-import shutil
 from pathlib import Path
 
 from biobb_common.configuration import settings
@@ -24,27 +23,7 @@ from biobb_structure_utils.utils.extract_model import extract_model
 from biobb_vs.fpocket.fpocket_run import fpocket_run
 from biobb_vs.fpocket.fpocket_filter import fpocket_filter
 
-def move_files(dest_src: str, *origin_src):
-    '''
-    Checks the existence of all paths in origin_src and move them to 'dest_src' if they exist
-
-    Inputs
-    ------
-
-        dest_src    :  path to destination folder
-        *origin_src  :  paths to original file including filename
-    '''
-
-    # For each path in origin_src
-    for path in origin_src:
-        # If path exists
-        if os.path.exists(path):
-            # Create new path
-            new_path = os.path.join(dest_src, os.path.basename(path))
-            # Move path to new path
-            shutil.move(path, new_path)
-
-def get_clusters_population(log_name: str, clustering_folder: str, global_log) -> list:
+def get_clusters_population(log_path: str, output_path: str, global_log) -> list:
     '''
     Reads the centroids' ID and populations from the clustering log, sorts the clusters by 
     population in descending order and writes the sorted list to a JSON file in the clustering_folder.
@@ -52,8 +31,9 @@ def get_clusters_population(log_name: str, clustering_folder: str, global_log) -
     Inputs
     -------
 
-        log_name          : log file name from clustering 
-        clustering_folder : path to clustering step folder
+        log_path          : log path of clustering step
+        output_path       : path to the output folder where the population of each cluster will be saved in a JSON file
+        global_log        : global log object
 
     Outputs
     -------
@@ -62,13 +42,9 @@ def get_clusters_population(log_name: str, clustering_folder: str, global_log) -
 
         clusters_population (list<tuple>): list with tuples containing (population, cluster_ID) sorted by population
     '''
-    # NOTE: this is needed because gmx_cluster doesn't include all the required output paths in the constructor and dictionaries
-    # Try to find log in working dir
-    if os.path.exists(log_name):
-        file = open(log_name)
-    # Try to find log in clustering folder
-    elif os.path.exists(os.path.join(clustering_folder, log_name)):
-        file = open(os.path.join(clustering_folder, log_name))
+
+    if os.path.exists(log_path):
+        file = open(log_path)
     # If not found, return error
     else:
         global_log.error("Clustering log file not found")
@@ -121,10 +97,17 @@ def get_clusters_population(log_name: str, clustering_folder: str, global_log) -
             })
     
     # Save list in JSON file
-    with open(os.path.join(clustering_folder, "clusters.json"), 'w') as outfile:
+    with open(os.path.join(output_path, "clusters.json"), 'w') as outfile:
         json.dump(ordered_clusters, outfile)
 
     outfile.close()
+
+    # If the number of clusters is very large, issue a warning - the user might want to increase the RMSD cutoff
+    if len(cluster_ids)>100:
+        global_log.warning(f"   Warning: Large number of clusters found. Consider increasing the RMSD cutoff.")
+        global_log.warning(f"   Warning: Number of clusters: {len(cluster_ids)}")
+        global_log.warning(f"   Warning: Number of clusters with more than 1 member: {len([x for x in populations if x > 1])}")
+        global_log.warning(f"   Warning: Large number of clusters might make model extraction very slow.")
     
     # Return list with cluster population and id sorted by population
     return clusters_population
@@ -384,12 +367,9 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
 
         # Save centroid IDs and populations in JSON file
         global_log.info( "step1_gmx_cluster: Reading clustering outcome, generating clusters JSON file")
-        cluster_populations = get_clusters_population(log_name = "step1_gmx_cluster_cluster.log",
-                                                    clustering_folder = global_prop["step1_gmx_cluster"]['path'],
-                                                    global_log = global_log)
-
-        # NOTE: this is needed because gmx_cluster doesn't include all the output paths in the constructor and dictionaries - thus some are left behind and not copied inside the step folder
-        move_files(global_prop["step1_gmx_cluster"]['path'], "step1_gmx_cluster_cluster.log", "step1_gmx_cluster_rmsd-clust.xpm", "step1_gmx_cluster_rmsd-dist.xvg")
+        cluster_populations = get_clusters_population(log_path = global_paths["step1_gmx_cluster"]['output_cluster_log_path'],
+                                                      output_path = global_prop["step1_gmx_cluster"]['path'],
+                                                      global_log = global_log)
 
         # Number of clusters: minimum between number of clusters requested and number of clusters obtained
         num_clusters = min(conf.properties['num_clusters'], len(cluster_populations))
