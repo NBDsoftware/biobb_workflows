@@ -28,6 +28,6 @@ PYTHON_INTERPRETER_PATH='/home/pnavarro/.conda/envs/protein_protein_wf2/bin'
 # python biobb_pose_refinement.py --config input_HPC.yml 
 
 # Launch workflow 2
-OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Protein_interface_wfs/2.Refinement/output2
-INPUT_ZIP=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Protein_interface_wfs/2.Refinement/input/top_distinct_poses.zip
+OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Protein_interface_wfs/2.Pose_refinement/output3
+INPUT_ZIP=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Protein_interface_wfs/2.Pose_refinement/input/top_distinct_poses.zip
 python biobb_pose_refinement.py --config input_HPC.yml --output $OUTPUT_PATH --input_zip $INPUT_ZIP
