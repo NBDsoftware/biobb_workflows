@@ -138,7 +138,7 @@ def main_wf(configuration_path, input_zip_path, fix_ss, output_path):
             global_log.info(f"{pose_name} >> step2_fixssbonds: Fix SS bonds")
             fix_ssbonds(**global_paths["step2_fixssbonds"], properties=global_prop["step2_fixssbonds"])
         else:
-            global_paths['step3_fixamides']['input_pdb_path'] = global_paths['step1_fixsidechain']['output_pdb_path']
+            pose_paths['step3_fixamides']['input_pdb_path'] = pose_paths['step1_fixsidechain']['output_pdb_path']
 
         # STEP 3: Fix amides
         global_log.info(f"{pose_name} >> step3_fixamides: fix clashing amides")
