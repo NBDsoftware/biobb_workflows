@@ -15,9 +15,7 @@ from pathlib import Path
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 
-from biobb_gromacs.gromacs.make_ndx import make_ndx
-
-from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
+from biobb_structure_utils.utils.extract_molecule import extract_molecule
 
 from biobb_vs.fpocket.fpocket_run import fpocket_run
 from biobb_vs.fpocket.fpocket_filter import fpocket_filter
@@ -45,8 +43,8 @@ def create_summary(poses_name_list, global_paths, output_path, output_summary_pa
     pocketID_pattern = r'pocket(\d+)'
 
     # Find step names
-    filter_cavities_folder = 'step2_filter_cavities'
-    cavity_analysis_folder = 'step1_cavity_analysis'
+    filter_cavities_folder = 'step3_filter_cavities'
+    cavity_analysis_folder = 'step2_cavity_analysis'
 
     # Find summary file name
     pockets_summary_filename = Path(global_paths[cavity_analysis_folder]['output_summary']).name
@@ -236,14 +234,14 @@ def main_wf(configuration_path, input_zip_path, output_path, output_summary_path
     global_paths = conf.get_paths_dic()
 
     # Create a folder for the extracted poses
-    fu.create_dir(global_prop["step0A_extract_poses"]["path"])
+    fu.create_dir(global_prop["step0_extract_poses"]["path"])
 
     # Enforce input_zip_path if provided
     if input_zip_path is not None:
-        global_paths["step0A_extract_poses"]["input_zip_path"] = input_zip_path
+        global_paths["step0_extract_poses"]["input_zip_path"] = input_zip_path
          
-    # STEP 0A: extract poses from zip file
-    poses_path_list = fu.unzip_list(global_paths["step0A_extract_poses"]["input_zip_path"], global_prop["step0A_extract_poses"]["path"])
+    # STEP 0: extract poses from zip file
+    poses_path_list = fu.unzip_list(global_paths["step0_extract_poses"]["input_zip_path"], global_prop["step0_extract_poses"]["path"])
     poses_name_list = [Path(path).stem for path in poses_path_list]
 
     # Analyze cavities of each pdb 
@@ -253,23 +251,19 @@ def main_wf(configuration_path, input_zip_path, output_path, output_summary_path
         pose_paths = conf.get_paths_dic(prefix=name)
 
         # Update input structure path
-        pose_paths['step0B_make_ndx']['input_structure_path'] = path
+        pose_paths['step1_extract_molecule']['input_structure_path'] = path
 
-        # STEP 0B: Make index file
-        global_log.info("step0B_make_ndx: Make index file")
-        make_ndx(**pose_paths['step0B_make_ndx'], properties=pose_prop["step0B_make_ndx"])
+        # STEP 1: extracts molecule of interest
+        global_log.info("step1_extractMolecule: extract molecule of interest (protein)")
+        extract_molecule(**global_paths["step1_extractMolecule"], properties=global_prop["step1_extractMolecule"])
 
-        # STEP 0C: Extract selection
-        global_log.info("step0C_extract_selection: Extract selection")
-        gmx_trjconv_str(**pose_paths['step0C_extract_selection'], properties=pose_prop["step0C_extract_selection"])
+        # STEP 2: Cavity analysis
+        global_log.info("step2_cavity_analysis: Compute cavities using fpocket")
+        fpocket_run(**pose_paths['step2_cavity_analysis'], properties=pose_prop["step2_cavity_analysis"])
 
-        # STEP 1: Cavity analysis
-        global_log.info("step1_cavity_analysis: Compute cavities using fpocket")
-        fpocket_run(**pose_paths['step1_cavity_analysis'], properties=pose_prop["step1_cavity_analysis"])
-
-        # STEP 4: Filtering cavities
-        global_log.info("step2_filter_cavities: Filter found cavities")
-        fpocket_filter(**pose_paths['step2_filter_cavities'], properties=pose_prop["step2_filter_cavities"])
+        # STEP 3: Filtering cavities
+        global_log.info("step3_filter_cavities: Filter found cavities")
+        fpocket_filter(**pose_paths['step3_filter_cavities'], properties=pose_prop["step3_filter_cavities"])
 
     # Create summary with available pockets per cluster 
     global_log.info("    Creating YAML summary file...")
