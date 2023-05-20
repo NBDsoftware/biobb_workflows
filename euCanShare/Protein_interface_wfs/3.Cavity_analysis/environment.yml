@@ -4,5 +4,6 @@ channels:
   - bioconda
 dependencies:
   - biobb_vs>=4.0.0
+  - biobb_gromacs>=4.0.0
   - biobb_common>=4.0.0
   - conda

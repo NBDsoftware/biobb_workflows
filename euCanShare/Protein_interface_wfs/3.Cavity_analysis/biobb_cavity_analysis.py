@@ -7,7 +7,6 @@
 import os
 import re
 import time
-import glob
 import argparse
 import json
 import yaml
@@ -15,6 +14,11 @@ from pathlib import Path
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
+
+from biobb_gromacs.gromacs.make_ndx import make_ndx
+
+from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
+
 from biobb_vs.fpocket.fpocket_run import fpocket_run
 from biobb_vs.fpocket.fpocket_filter import fpocket_filter
 
@@ -232,14 +236,14 @@ def main_wf(configuration_path, input_zip_path, output_path, output_summary_path
     global_paths = conf.get_paths_dic()
 
     # Create a folder for the extracted poses
-    fu.create_dir(global_prop["step0_extract_poses"]["path"])
+    fu.create_dir(global_prop["step0A_extract_poses"]["path"])
 
     # Enforce input_zip_path if provided
     if input_zip_path is not None:
-        global_paths["step0_extract_poses"]["input_zip_path"] = input_zip_path
+        global_paths["step0A_extract_poses"]["input_zip_path"] = input_zip_path
          
-    # STEP 0: extract poses from zip file
-    poses_path_list = fu.unzip_list(global_paths["step0_extract_poses"]["input_zip_path"], global_prop["step0_extract_poses"]["path"])
+    # STEP 0A: extract poses from zip file
+    poses_path_list = fu.unzip_list(global_paths["step0A_extract_poses"]["input_zip_path"], global_prop["step0A_extract_poses"]["path"])
     poses_name_list = [Path(path).stem for path in poses_path_list]
 
     # Analyze cavities of each pdb 
@@ -248,8 +252,16 @@ def main_wf(configuration_path, input_zip_path, output_path, output_summary_path
         pose_prop = conf.get_prop_dic(prefix=name)
         pose_paths = conf.get_paths_dic(prefix=name)
 
-        # Update input pdb path
-        pose_paths['step1_cavity_analysis']['input_pdb_path'] = path
+        # Update input structure path
+        pose_paths['step0B_make_ndx']['input_structure_path'] = path
+
+        # STEP 0B: Make index file
+        global_log.info("step0B_make_ndx: Make index file")
+        make_ndx(**pose_paths['step0B_make_ndx'], properties=pose_prop["step0B_make_ndx"])
+
+        # STEP 0C: Extract selection
+        global_log.info("step0C_extract_selection: Extract selection")
+        gmx_trjconv_str(**pose_paths['step0C_extract_selection'], properties=pose_prop["step0C_extract_selection"])
 
         # STEP 1: Cavity analysis
         global_log.info("step1_cavity_analysis: Compute cavities using fpocket")

@@ -3,15 +3,37 @@ can_write_console_log: True                           # Output log to console   
 remove_tmp: True
 restart: False   
 
-step0_extract_poses:
+step0A_extract_poses:
   paths:
     input_zip_path: /path/to/refined/poses.zip
     output_pdb_path: pose.pdb
 
+step0B_make_ndx:
+  tool: make_ndx 
+  paths:
+    input_structure_path: dependency/step0A_extract_poses/output_pdb_path
+    output_ndx_path: index.ndx
+  properties:
+    selection: "System"
+    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx          
+
+step0C_extract_selection:
+  tool: gmx_trjconv_str
+  paths: 
+    input_structure_path: dependency/step0A_extract_poses/output_pdb_path
+    input_top_path: dependency/step0A_extract_poses/output_pdb_path
+    input_index_path: dependency/step0B_make_ndx/output_ndx_path
+    output_str_path: target.pdb
+  properties:
+    selection: "Protein"
+    center: True
+    pbc: mol
+    ur: compact
+
 step1_cavity_analysis:
   tool: fpocket_run
   paths:
-    input_pdb_path: dependency/step0_extract_poses/output_pdb_path
+    input_pdb_path: dependency/step0C_extract_selection/output_str_path
     output_pockets_zip: all_pockets.zip
     output_summary: summary.json
   properties:
