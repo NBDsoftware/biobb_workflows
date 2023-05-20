@@ -234,8 +234,10 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         # Update common paths to all trajectories
         traj_paths['step17_grompp_md']['input_gro_path'] = global_paths["step17_grompp_md"]['input_gro_path']
         traj_paths['step17_grompp_md']['input_top_zip_path'] = global_paths["step17_grompp_md"]['input_top_zip_path']
-        traj_paths['step17_grompp_md']['input_ndx_path'] = global_paths["step17_grompp_md"]['input_ndx_path']
-        traj_paths['step17_grompp_md']['input_cpt_path'] = global_paths["step17_grompp_md"]['input_cpt_path']
+        if global_paths["step17_grompp_md"].get('input_ndx_path'):
+            traj_paths['step17_grompp_md']['input_ndx_path'] = global_paths["step17_grompp_md"]['input_ndx_path']
+        if global_paths["step17_grompp_md"].get('input_cpt_path'):
+            traj_paths['step17_grompp_md']['input_cpt_path'] = global_paths["step17_grompp_md"]['input_cpt_path']
         grompp(**traj_paths['step17_grompp_md'], properties=traj_prop["step17_grompp_md"])
 
         # STEP 18: free NPT production run

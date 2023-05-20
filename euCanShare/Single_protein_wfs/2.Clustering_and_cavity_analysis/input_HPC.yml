@@ -4,7 +4,7 @@ working_dir_path: output                              # Workflow default output 
 can_write_console_log: True                           # Output log to console
 remove_tmp: True                                      # Remove temporal files
 restart: False                                        # Do not execute steps if output files are already created
-num_clusters: 10                                      # Number of clusters to extract from the trajectory and analyze with fpocket
+num_clusters: 20                                      # Number of clusters to extract from the trajectory and analyze with fpocket
 
 # Step 0: Create index file
 
@@ -24,7 +24,7 @@ step0B_add_rmsd_group:
     input_ndx_path: dependency/step0A_make_ndx/output_ndx_path
     output_ndx_path: index_rmsd.ndx
   properties:
-    selection: '"RmsdGroup" group "Backbone" and group "Protein"' 
+    selection: '"RmsdGroup" resnr 181 to 296' 
     append: True
     binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx          
 
@@ -48,12 +48,16 @@ step1_gmx_cluster:
     input_structure_path: dependency/step0C_add_output_group/input_structure_path  
     input_index_path: dependency/step0C_add_output_group/output_ndx_path
     output_pdb_path: output.cluster.pdb
+    output_cluster_log_path: output.cluster.log
+    output_rmsd_cluster_xpm_path: output.rmsd-clust.xpm
+    output_rmsd_dist_xvg_path: output.rmsd-dist.xvg
   properties:
     fit_selection: RmsdGroup       
     output_selection: OutputGroup        
     dista: False
     method: linkage                      
-    cutoff: 0.06                         # nm (RMSD cut-off)
+    cutoff: 0.10                    # nm (RMSD cut-off)
+    nofit: True                     # Wether to use the RmsdGroups also for fitting or not
     binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
 
 step2_extract_models:
