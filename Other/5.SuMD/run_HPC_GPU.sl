@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=2lwk_SuMD_test
-#SBATCH --ntasks=4                                      # total number of tasks across all nodes
+#SBATCH --job-name=SuMD_test
+#SBATCH --ntasks=2                                      # total number of tasks across all nodes
 #SBATCH --nodes=1
-#SBATCH --time=15:00:00
+#SBATCH --time=00:30:00
 #SBATCH --mem-per-cpu=1000
 #SBATCH --constraint=gpu
 #SBATCH --gres=gpu:1
@@ -23,12 +23,6 @@ module load slurm/slurm/21.08.6
 
 # Activate previously created conda environment from environment.yml
 # source activate /home/pnavarro/.conda/envs/biobb_sumd
-
-# LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/pnavarro/.conda/envs/biobb_sumd/lib
-
-# export LD_LIBRARY_PATH
-
-# export OMP_NUM_THREADS=1
 
 # Launch workflow
 

@@ -24,16 +24,12 @@ module load slurm/slurm/21.08.6
 # Activate previously created conda environment from environment.yml
 source activate /home/pnavarro/.conda/envs/biobb_sumd
 
-#LD_LIBRARY_PATH=/home/pnavarro/.conda/envs/eucanshare_wf1/lib
-
-#export LD_LIBRARY_PATH
-#echo $LD_LIBRARY_PATH
-
 # Launch workflow
 
 INPUT_FOLDER=./input
 STRUCTURE=$INPUT_FOLDER/complex.gro
 TOPOLOGY=$INPUT_FOLDER/topology.zip
+INDEX=$INPUT_FOLDER/index.ndx
 
-/home/pnavarro/.conda/envs/biobb_sumd/bin/python biobb_SuMD.py -structure $STRUCTURE -topology $TOPOLOGY -config input_HPC.yml 
+python biobb_SuMD.py -structure $STRUCTURE -topology $TOPOLOGY -config input_HPC.yml -index $INDEX
 
