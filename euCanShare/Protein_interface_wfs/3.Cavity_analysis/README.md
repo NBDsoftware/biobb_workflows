@@ -34,11 +34,13 @@ The output will be generated in the "working_dir_path" folder selected in the co
 
 This workflow has several steps. The input for the workflow is a zip file containing pdb structures. Its path can be provided through the YAML configuration file or through the command line arguments. The YAML configuration file will contain the default settings and paths of the workflow. The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
 
-- **Step 0**: extraction of all the poses from the input zip file. The next steps are done for each of the structures.
+- **Step 0**: extraction of all the pdb structures from the input zip file. The next steps are done for each of the structures.
 
-- **Step 1**: cavity analysis of the structures using Fpocket.
+- **Step 1**: extract molecule/s of interest. The input structure might contain more than one molecule (extraction of receptor or ligand chain from a protein-protein docking pose for example).
 
-- **Step 2**: filtering of the cavities found according to the criteria defined in the properties of this step.
+- **Step 2**: Cavity analysis of the extracted molecule/s using Fpocket. 
+
+- **Step 3**: filtering of the cavities found according to the criteria defined in the properties of this step (score, druggability and volume).
 
 
 

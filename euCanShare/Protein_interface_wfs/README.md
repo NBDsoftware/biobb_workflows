@@ -10,7 +10,7 @@ Protein interface biobb workflows created for euCanShare. They can be run togeth
 
 **2.Pose_refinement**: Takes in a zip file with docking poses and minimizes the energy of each of them using GROMACS. See corresponding folder for more details.
 
-**3.Cavity_analysis**: Takes in a zip file with pdb structures and analyzes their cavities using Fpocket. It then filters those cavities according to a user-defined criteria. See corresponding folder for more details.
+**3.Cavity_analysis**: Takes in a zip file with pdb structures, extract the molecule/s of interest from the structures and analyzes their cavities using Fpocket. It then filters those cavities according to a user-defined criteria. See corresponding folder for more details.
 
 **4.Virtual_screening**: high-throughput virtual screening of selected pocket using library of ligands (SMILES) and Autodock. See corresponding folder for more details.
 

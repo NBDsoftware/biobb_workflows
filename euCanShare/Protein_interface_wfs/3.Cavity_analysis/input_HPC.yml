@@ -3,37 +3,24 @@ can_write_console_log: True                           # Output log to console   
 remove_tmp: True
 restart: False   
 
-step0A_extract_poses:
+step0_extract_poses:
   paths:
     input_zip_path: /path/to/refined/poses.zip
     output_pdb_path: pose.pdb
 
-step0B_make_ndx:
-  tool: make_ndx 
+step1_extractMolecule:
+  tool: extract_molecule
   paths:
-    input_structure_path: dependency/step0A_extract_poses/output_pdb_path
-    output_ndx_path: index.ndx
+    input_structure_path: /dependency/step0_extract_poses/output_pdb_path
+    output_molecule_path: target.pdb
   properties:
-    selection: "System"
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx          
+    molecule_type: chains          # (all), protein, na, dna, rna, chains
+    chains: [B]                    # None or list: [A, B]
 
-step0C_extract_selection:
-  tool: gmx_trjconv_str
-  paths: 
-    input_structure_path: dependency/step0A_extract_poses/output_pdb_path
-    input_top_path: dependency/step0A_extract_poses/output_pdb_path
-    input_index_path: dependency/step0B_make_ndx/output_ndx_path
-    output_str_path: target.pdb
-  properties:
-    selection: "Protein"
-    center: True
-    pbc: mol
-    ur: compact
-
-step1_cavity_analysis:
+step2_cavity_analysis:
   tool: fpocket_run
   paths:
-    input_pdb_path: dependency/step0C_extract_selection/output_str_path
+    input_pdb_path: dependency/step1_extractMolecule/output_molecule_path
     output_pockets_zip: all_pockets.zip
     output_summary: summary.json
   properties:
@@ -42,11 +29,11 @@ step1_cavity_analysis:
     num_spheres: 35
     sort_by: druggability_score
 
-step2_filter_cavities:
+step3_filter_cavities:
   tool: fpocket_filter
   paths:
-    input_pockets_zip: dependency/step1_cavity_analysis/output_pockets_zip
-    input_summary: dependency/step1_cavity_analysis/output_summary
+    input_pockets_zip: dependency/step2_cavity_analysis/output_pockets_zip
+    input_summary: dependency/step2_cavity_analysis/output_summary
     output_filter_pockets_zip: filtered_pockets.zip
   properties:
     score: [0.3, 1]
