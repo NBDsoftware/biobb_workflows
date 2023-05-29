@@ -8,19 +8,19 @@ step0_extract_poses:
     input_zip_path: /path/to/refined/poses.zip
     output_pdb_path: pose.pdb
 
-step1_extractMolecule:
+step1_extract_molecule:
   tool: extract_molecule
   paths:
-    input_structure_path: /dependency/step0_extract_poses/output_pdb_path
+    input_structure_path: dependency/step0_extract_poses/output_pdb_path
     output_molecule_path: target.pdb
   properties:
     molecule_type: chains          # (all), protein, na, dna, rna, chains
-    chains: [B]                    # None or list: [A, B]
+    chains: [A]                    # None or [A, B]
 
 step2_cavity_analysis:
   tool: fpocket_run
   paths:
-    input_pdb_path: dependency/step1_extractMolecule/output_molecule_path
+    input_pdb_path: dependency/step1_extract_molecule/output_molecule_path
     output_pockets_zip: all_pockets.zip
     output_summary: summary.json
   properties:

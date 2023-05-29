@@ -251,11 +251,11 @@ def main_wf(configuration_path, input_zip_path, output_path, output_summary_path
         pose_paths = conf.get_paths_dic(prefix=name)
 
         # Update input structure path
-        pose_paths['step1_extractMolecule']['input_structure_path'] = path
+        pose_paths['step1_extract_molecule']['input_structure_path'] = path
 
         # STEP 1: Extract molecule
         global_log.info("step1_extract_molecule: Extract molecule from input structure")
-        extract_molecule(**pose_paths['step1_extractMolecule'], properties=pose_prop["step1_extractMolecule"])
+        extract_molecule(**pose_paths['step1_extract_molecule'], properties=pose_prop["step1_extract_molecule"])
 
         # STEP 2: Cavity analysis
         global_log.info("step2_cavity_analysis: Compute cavities using fpocket")
