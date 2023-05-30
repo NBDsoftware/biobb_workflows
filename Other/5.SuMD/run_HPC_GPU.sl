@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=SuMD_test
-#SBATCH --ntasks=2                                      # total number of tasks across all nodes
+#SBATCH --ntasks=4                                      # total number of tasks across all nodes
 #SBATCH --nodes=1
-#SBATCH --time=00:30:00
+#SBATCH --time=02:00:00
 #SBATCH --mem-per-cpu=1000
 #SBATCH --constraint=gpu
 #SBATCH --gres=gpu:1
