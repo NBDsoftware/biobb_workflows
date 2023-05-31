@@ -32,6 +32,7 @@ from biobb_analysis.gromacs.gmx_rgyr import gmx_rgyr
 from biobb_analysis.gromacs.gmx_energy import gmx_energy
 from biobb_analysis.gromacs.gmx_image import gmx_image
 from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
+from biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf
 from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 
@@ -256,26 +257,32 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         global_log.info(f"{traj} >  step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
         gmx_rgyr(**traj_paths['step21_rgyr'], properties=traj_prop['step21_rgyr'])
 
-        # STEP 22: image the trajectory
-        traj_paths['step22_image_traj']['input_index_path'] = global_paths["step22_image_traj"]['input_index_path']
-        global_log.info(f"{traj} >  step22_image_traj: Imaging the trajectory")
-        gmx_image(**traj_paths['step22_image_traj'], properties=traj_prop['step22_image_traj'])
+        # STEP 22: dump RMSF
+        global_log.info(f"{traj} >  step22_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
+        # Update common paths to all trajectories
+        traj_paths['step22_rmsf']['input_top_path'] = global_paths["step22_rmsf"]['input_top_path']
+        cpptraj_rmsf(**traj_paths['step22_rmsf'], properties=traj_prop['step22_rmsf'])
 
-        # STEP 23: fit the trajectory
-        traj_paths['step23_fit_traj']['input_index_path'] = global_paths["step23_fit_traj"]['input_index_path']
-        global_log.info(f"{traj} >  step23_fit_traj: Fit the trajectory")
-        gmx_image(**traj_paths['step23_fit_traj'], properties=traj_prop['step23_fit_traj'])
+        # STEP 23: image the trajectory
+        traj_paths['step23_image_traj']['input_index_path'] = global_paths["step23_image_traj"]['input_index_path']
+        global_log.info(f"{traj} >  step23_image_traj: Imaging the trajectory")
+        gmx_image(**traj_paths['step23_image_traj'], properties=traj_prop['step23_image_traj'])
 
-        traj_list.append(traj_paths['step23_fit_traj']['output_traj_path'])
+        # STEP 24: fit the trajectory
+        traj_paths['step24_fit_traj']['input_index_path'] = global_paths["step24_fit_traj"]['input_index_path']
+        global_log.info(f"{traj} >  step24_fit_traj: Fit the trajectory")
+        gmx_image(**traj_paths['step24_fit_traj'], properties=traj_prop['step24_fit_traj'])
 
-    # STEP 24: obtain dry structure
-    global_log.info("step24_dry_str: Obtain dry structure")
-    gmx_trjconv_str(**global_paths["step24_dry_str"], properties=global_prop["step24_dry_str"])
+        traj_list.append(traj_paths['step24_fit_traj']['output_traj_path'])
 
-    # STEP 25: concatenate trajectories
-    global_log.info("step25_trjcat: Concatenate trajectories")
-    fu.zip_list(zip_file=global_paths["step25_trjcat"]['input_trj_zip_path'], file_list=traj_list)
-    trjcat(**global_paths["step25_trjcat"], properties=global_prop["step25_trjcat"])
+    # STEP 25: obtain dry structure
+    global_log.info("step25_dry_str: Obtain dry structure")
+    gmx_trjconv_str(**global_paths["step25_dry_str"], properties=global_prop["step25_dry_str"])
+
+    # STEP 26: concatenate trajectories
+    global_log.info("step26_trjcat: Concatenate trajectories")
+    fu.zip_list(zip_file=global_paths["step26_trjcat"]['input_trj_zip_path'], file_list=traj_list)
+    trjcat(**global_paths["step26_trjcat"], properties=global_prop["step26_trjcat"])
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time

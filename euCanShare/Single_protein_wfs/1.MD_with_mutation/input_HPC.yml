@@ -152,7 +152,7 @@ step8_grompp_min:
   properties:
     simulation_type: minimization
     mdp:
-      nsteps: 10000 
+      nsteps: 5000 
       emtol: 10
 
 step9_mdrun_min:
@@ -199,7 +199,7 @@ step11_grompp_nvt:
       Define: -DPOSRES
       ref-t: 310 310
       tc-grps: "Protein Water_and_ions"
-      nsteps: 50000
+      nsteps: 5000
       dt: 0.002
 
 step12_mdrun_nvt:
@@ -239,7 +239,7 @@ step14_grompp_npt:
   properties:
     simulation_type: npt
     mdp:
-      nsteps: 50000 
+      nsteps: 5000 
       ref-t: 310 310
       tc-grps: "Protein Water_and_ions"
 
@@ -280,11 +280,13 @@ step17_grompp_md:
   properties:
     simulation_type: free
     mdp:
-      nsteps: 500000 
+      nsteps: 10000 
       ref-t: 310 310
       tc-grps: "Protein Water_and_ions"
-      nstxout: 1000
-      nstvout: 0 
+      nstxout: 0                # freq. of .trr trajectory (coordinates) writing in time steps
+      nstxout-compressed: 1000  # freq. of .xtc trajectory (coordinates) writing in time steps 
+      nstvout: 0                # freq. of .trr trajectory (velocities) writing in time steps
+      nstfout: 0
       continuation: 'no'
       gen-vel: 'yes'          
       gen-temp: 310            
@@ -294,6 +296,7 @@ step18_mdrun_md:
   paths:
     input_tpr_path: dependency/step17_grompp_md/output_tpr_path
     output_trr_path: md.trr
+    output_xtc_path: md.xtc
     output_gro_path: md.gro
     output_edr_path: md.edr
     output_log_path: md.log
@@ -309,7 +312,7 @@ step19_rmsfirst:
   tool: gmx_rms
   paths:
     input_structure_path: dependency/step17_grompp_md/output_tpr_path
-    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    input_traj_path: dependency/step18_mdrun_md/output_xtc_path
     output_xvg_path: md_rmsdfirst.xvg
   properties:
     selection: Backbone
@@ -318,7 +321,7 @@ step20_rmsexp:
   tool: gmx_rms
   paths:
     input_structure_path: dependency/step8_grompp_min/output_tpr_path
-    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    input_traj_path: dependency/step18_mdrun_md/output_xtc_path
     output_xvg_path: md_rmsdexp.xvg
   properties:
     selection: Backbone
@@ -327,15 +330,28 @@ step21_rgyr:
   tool: gmx_rgyr
   paths:
     input_structure_path: dependency/step17_grompp_md/output_tpr_path
-    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    input_traj_path: dependency/step18_mdrun_md/output_xtc_path
     output_xvg_path: md_rgyr.xvg
   properties:
     selection: Backbone
 
-step22_image_traj:
+step22_rmsf:
+  tool: cpptraj_rmsf
+  paths:
+    input_top_path: dependency/step7_genion/output_top_zip_path
+    input_traj_path: dependency/step18_mdrun_md/output_xtc_path
+    output_cpptraj_path: md_rmsf.dat
+  properties:
+    start: 1
+    end: -1
+    steps: 1
+    mask: "!@H=" # "all-atoms" # all non-hydrogen atoms in the solute (protein) 
+    format: xtc
+
+step23_image_traj:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    input_traj_path: dependency/step18_mdrun_md/output_xtc_path
     input_top_path: dependency/step17_grompp_md/output_tpr_path
     input_index_path: dependency/step9B_make_ndx/output_ndx_path
     output_traj_path: imaged_traj.xtc
@@ -346,10 +362,10 @@ step22_image_traj:
     ur: compact
     pbc: mol
 
-step23_fit_traj:
+step24_fit_traj:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/step22_image_traj/output_traj_path
+    input_traj_path: dependency/step23_image_traj/output_traj_path
     input_top_path: dependency/step17_grompp_md/output_tpr_path
     input_index_path: dependency/step9B_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc
@@ -358,7 +374,7 @@ step23_fit_traj:
     output_selection: Protein  
     fit: rot+trans
     
-step24_dry_str:
+step25_dry_str:
   tool: gmx_trjconv_str
   paths: 
     input_structure_path: dependency/step15_mdrun_npt/output_gro_path
@@ -371,7 +387,7 @@ step24_dry_str:
     pbc: mol
     ur: compact
 
-step25_trjcat:
+step26_trjcat:
   tool: trjcat
   paths:
     input_trj_zip_path: all_trajectories.zip

@@ -2,7 +2,7 @@
 #SBATCH --job-name=single_protein_wf1
 #SBATCH --nodes=1                 # node count
 #SBATCH --ntasks=8                                  # total number of tasks across all nodes
-#SBATCH --time=24:00:00
+#SBATCH --time=00:30:00
 #SBATCH --mem-per-cpu=1000
 # #SBATCH --constraint=gpu
 # #SBATCH --gres=gpu:1
@@ -54,6 +54,11 @@ source activate /home/pnavarro/.conda/envs/single_protein_wf1
 # python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --setup_only --pdb_chains A B 
 
 # Launch workflow 6
+# INPUT_PDB=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/input/P38alpha4LOO.pdb
+# OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/output6
+# python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --setup_only --pdb_chains A --mutation_list A:Arg5Ala A:Pro6Ala
+
+# Launch workflow 7
 INPUT_PDB=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/input/P38alpha4LOO.pdb
-OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/output6
-python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --setup_only --pdb_chains A --mutation_list A:Arg5Ala A:Pro6Ala
+OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/output7
+python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --pdb_chains A 
