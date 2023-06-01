@@ -277,12 +277,12 @@ step17_grompp_md:
   properties:
     simulation_type: free
     mdp:
-      nsteps: 10000 
+      nsteps: 10000000 
       ref-t: 310 310
       tc-grps: "Protein Water_and_ions"
-      nstxout: 0                  # freq. of .trr trajectory (coordinates) writing in time steps
-      nstxout-compressed: 10000   # freq. of .xtc trajectory (coordinates) writing in time steps 
-      nstvout: 0                  # freq. of .trr trajectory (velocities) writing in time steps
+      nstxout: 0                   # freq. of .trr trajectory (coordinates) writing in time steps
+      nstxout-compressed: 50000    # freq. of .xtc trajectory (coordinates) writing in time steps 
+      nstvout: 0                   # freq. of .trr trajectory (velocities) writing in time steps
       nstfout: 0
       continuation: 'no'
       gen-vel: 'yes'          
