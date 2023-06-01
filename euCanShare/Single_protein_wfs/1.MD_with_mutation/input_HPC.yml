@@ -263,7 +263,7 @@ step16_density_npt:
   tool: gmx_energy
   paths:
     input_energy_path: dependency/step15_mdrun_npt/output_edr_path
-    output_xvg_path: npt_den_press.xvg
+    output_xvg_path: npt_press_den.xvg
   properties:
     terms: ["Pressure", "Density"]
     xvg: none # xmgrace, xmgr, none
@@ -350,7 +350,6 @@ step22_rmsf:
     end: -1
     steps: 1
     mask: "!@H=" # by default cpptraj already strips solvent atoms
-    format: xtc
 
 step23_image_traj:
   tool: gmx_image
