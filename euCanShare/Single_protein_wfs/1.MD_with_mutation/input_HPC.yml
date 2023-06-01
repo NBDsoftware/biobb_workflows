@@ -152,7 +152,7 @@ step8_grompp_min:
   properties:
     simulation_type: minimization
     mdp:
-      nsteps: 5000 
+      nsteps: 10000
       emtol: 10
 
 step9_mdrun_min:
@@ -183,9 +183,9 @@ step10_energy_min:
     output_xvg_path: min_ene.xvg
   properties:
     terms: ["Potential"]
+    xvg: none # xmgrace, xmgr, none
 
 # Section 4 (Steps 11-13): NVT equilibration
-
 step11_grompp_nvt:
   tool: grompp
   paths:
@@ -196,10 +196,9 @@ step11_grompp_nvt:
   properties:
     simulation_type: nvt
     mdp:
-      Define: -DPOSRES
       ref-t: 310 310
       tc-grps: "Protein Water_and_ions"
-      nsteps: 5000
+      nsteps: 500000
       dt: 0.002
 
 step12_mdrun_nvt:
@@ -218,13 +217,14 @@ step12_mdrun_nvt:
     # binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
     # use_gpu: True
 
-step13_energy_nvt:
+step13_temp_nvt:
   tool: gmx_energy
   paths:
     input_energy_path: dependency/step12_mdrun_nvt/output_edr_path
     output_xvg_path: nvt_temp.xvg
   properties:
     terms: ["Temperature"]
+    xvg: none # xmgrace, xmgr, none
 
 # Section 5 (Steps 14-16): NPT equilibration
 
@@ -239,7 +239,7 @@ step14_grompp_npt:
   properties:
     simulation_type: npt
     mdp:
-      nsteps: 5000 
+      nsteps: 500000 
       ref-t: 310 310
       tc-grps: "Protein Water_and_ions"
 
@@ -259,13 +259,14 @@ step15_mdrun_npt:
     # binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
     # use_gpu: True
 
-step16_energy_npt:
+step16_density_npt:
   tool: gmx_energy
   paths:
     input_energy_path: dependency/step15_mdrun_npt/output_edr_path
     output_xvg_path: npt_den_press.xvg
   properties:
     terms: ["Pressure", "Density"]
+    xvg: none # xmgrace, xmgr, none
 
 # Section 6 (Steps 17-24): production trajectories
 
@@ -283,13 +284,13 @@ step17_grompp_md:
       nsteps: 10000 
       ref-t: 310 310
       tc-grps: "Protein Water_and_ions"
-      nstxout: 0                # freq. of .trr trajectory (coordinates) writing in time steps
-      nstxout-compressed: 1000  # freq. of .xtc trajectory (coordinates) writing in time steps 
-      nstvout: 0                # freq. of .trr trajectory (velocities) writing in time steps
+      nstxout: 0                  # freq. of .trr trajectory (coordinates) writing in time steps
+      nstxout-compressed: 10000   # freq. of .xtc trajectory (coordinates) writing in time steps 
+      nstvout: 0                  # freq. of .trr trajectory (velocities) writing in time steps
       nstfout: 0
       continuation: 'no'
       gen-vel: 'yes'          
-      gen-temp: 310            
+      gen-temp: 310   
 
 step18_mdrun_md:
   tool: mdrun
@@ -316,6 +317,7 @@ step19_rmsfirst:
     output_xvg_path: md_rmsdfirst.xvg
   properties:
     selection: Backbone
+    xvg: none # xmgrace, xmgr, none
 
 step20_rmsexp:
   tool: gmx_rms
@@ -325,6 +327,7 @@ step20_rmsexp:
     output_xvg_path: md_rmsdexp.xvg
   properties:
     selection: Backbone
+    xvg: none # xmgrace, xmgr, none
 
 step21_rgyr:
   tool: gmx_rgyr
@@ -334,6 +337,7 @@ step21_rgyr:
     output_xvg_path: md_rgyr.xvg
   properties:
     selection: Backbone
+    xvg: none # xmgrace, xmgr, none
 
 step22_rmsf:
   tool: cpptraj_rmsf
@@ -345,7 +349,7 @@ step22_rmsf:
     start: 1
     end: -1
     steps: 1
-    mask: "!@H=" # "all-atoms" # all non-hydrogen atoms in the solute (protein) 
+    mask: "!@H=" # by default cpptraj already strips solvent atoms
     format: xtc
 
 step23_image_traj:
@@ -373,7 +377,7 @@ step24_fit_traj:
     fit_selection: Protein
     output_selection: Protein  
     fit: rot+trans
-    
+
 step25_dry_str:
   tool: gmx_trjconv_str
   paths: 

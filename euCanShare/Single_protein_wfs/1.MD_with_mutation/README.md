@@ -77,13 +77,13 @@ This workflow has several steps. The input for the workflow can be (1) a pdb fil
 
 To make sure the system has been correctly prepared before minimizing or running MD, launch the workflow adding the '--setup_only' command line option. This will stop the workflow before the energy minimization. 
 
-**Steps 8 - 10**: energy minimization
+**Steps 8 - 10**: energy minimization (including position restraints on the proteins heavy atoms)
 
-**Steps 10 - 13**: NVT equilibration
+**Steps 10 - 13**: NVT equilibration (including position restraints on the proteins heavy atoms)
 
-**Steps 14 - 16**: NPT equilibration
+**Steps 14 - 16**: NPT equilibration (including position restraints on the proteins heavy atoms)
 
-**Steps 17 - 26**: launch several production trajectories from equilibrated structure (see --n_trajs command line argument). Concatenate the imaged trajectories afterwards.
+**Steps 17 - 26**: launch several production trajectories from equilibrated structure (see --n_trajs command line argument). Concatenate the imaged trajectories afterwards. Computation of RMSD (with fitting) with respect to experimental structure and with respect to equilibrated structure (protein backbone atoms). Computation of Radius of gyration (protein backbone atoms) and RMSF (protein heavy atoms).
 
 Note that re-launching the workflow will skip the previously successful steps if restart is True and the output folder is the same. 
 

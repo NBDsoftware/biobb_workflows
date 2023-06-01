@@ -201,8 +201,8 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     mdrun(**global_paths["step12_mdrun_nvt"], properties=global_prop["step12_mdrun_nvt"])
 
     # STEP 13: dump temperature evolution
-    global_log.info("step13_energy_nvt: Compute temperature during NVT equilibration")
-    gmx_energy(**global_paths["step13_energy_nvt"], properties=global_prop["step13_energy_nvt"])
+    global_log.info("step13_temp_nvt: Compute temperature during NVT equilibration")
+    gmx_energy(**global_paths["step13_temp_nvt"], properties=global_prop["step13_temp_nvt"])
 
     # STEP 14: NPT equilibration pre-processing
     global_log.info("step14_grompp_npt: Preprocess system pressure equilibration")
@@ -213,8 +213,8 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     mdrun(**global_paths["step15_mdrun_npt"], properties=global_prop["step15_mdrun_npt"])
 
     # STEP 16: dump density and pressure evolution
-    global_log.info("step16_energy_npt: Compute Density & Pressure during NPT equilibration")
-    gmx_energy(**global_paths["step16_energy_npt"], properties=global_prop["step16_energy_npt"])
+    global_log.info("step16_density_npt: Compute Density & Pressure during NPT equilibration")
+    gmx_energy(**global_paths["step16_density_npt"], properties=global_prop["step16_density_npt"])
 
     # Production trajectories
     global_log.info(f"Number of trajectories: {num_trajs}")

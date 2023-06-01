@@ -11,7 +11,6 @@ import argparse
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
-
 from pycompss.api.api import compss_wait_on_file
 from biobb_adapters.pycompss.biobb_io.api.canonical_fasta import canonical_fasta
 from biobb_adapters.pycompss.biobb_model.model.fix_backbone import fix_backbone
@@ -34,11 +33,12 @@ from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_rgyr import gmx_rgyr
 from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_energy import gmx_energy
 from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_image import gmx_image
 from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
+from biobb_adapters.pycompss.biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf
 from biobb_adapters.pycompss.biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_adapters.pycompss.biobb_structure_utils.utils.renumber_structure import renumber_structure
 
 
-def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input_pdb_path = None, pdb_chains = None, 
+def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input_pdb_path = None, pdb_chains = None,
             mutation_list = None, input_gro_path = None, input_top_path = None, fix_backbn = None, fix_ss = None):
     '''
     Main MD Setup, mutation and run workflow. Can be used to retrieve a PDB, fix some defects of the structure,
@@ -54,10 +54,10 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         input_pdb_path     (str): (Optional) path to input PDB file
         pdb_chains         (str): (Optional) chains to be extracted from the input PDB file
         mutation_list      (str): (Optional) list of mutations to be introduced in the structure
-        input_gro_path     (str): (Optional) path to input structure file (.gro) 
+        input_gro_path     (str): (Optional) path to input structure file (.gro)
         input_top_path     (str): (Optional) path to input topology file (.zip)
         fix_backbn        (bool): (Optional) wether to add missing backbone atoms
-        fix_ss            (bool): (Optional) wether to add disulfide bonds 
+        fix_ss            (bool): (Optional) wether to add disulfide bonds
 
     Outputs
     -------
@@ -69,7 +69,7 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     '''
 
     start_time = time.time()
-    
+
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
 
@@ -88,13 +88,13 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
 
-    # If prepared structure is not provided 
+    # If prepared structure is not provided
     if input_gro_path is None:
-        
+
         # If input PDB is given as argument
         if input_pdb_path is not None:
             global_paths["step1_extractMolecule"]["input_structure_path"] = input_pdb_path
-        
+
         # If chains are given as argument
         if pdb_chains is not None:
             global_prop["step1_extractMolecule"]["chains"] = pdb_chains
@@ -130,7 +130,7 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         fix_side_chain(**global_paths["step2E_fixsidechain"], properties=global_prop["step2E_fixsidechain"])
 
         if fix_ss:
-            # STEP 2 (F): model SS bonds (CYS -> CYX) 
+            # STEP 2 (F): model SS bonds (CYS -> CYX)
             global_log.info("step2F_fixssbonds: Fix SS bonds")
             fix_ssbonds(**global_paths["step2F_fixssbonds"], properties=global_prop["step2F_fixssbonds"])
         else:
@@ -171,12 +171,12 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         if setup_only:
             global_log.info("setup_only: setup_only flag is set to True, exiting...")
             return
-    
+
     else:
 
         global_paths['step8_grompp_min']['input_gro_path'] = input_gro_path
         global_paths['step8_grompp_min']['input_top_zip_path'] = input_top_path
-    
+
     # STEP 8: minimization pre-processing
     global_log.info("step8_grompp_min: Preprocess energy minimization")
     grompp(**global_paths["step8_grompp_min"], properties=global_prop["step8_grompp_min"])
@@ -202,8 +202,8 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     mdrun(**global_paths["step12_mdrun_nvt"], properties=global_prop["step12_mdrun_nvt"])
 
     # STEP 13: dump temperature evolution
-    global_log.info("step13_energy_nvt: Compute temperature during NVT equilibration")
-    gmx_energy(**global_paths["step13_energy_nvt"], properties=global_prop["step13_energy_nvt"])
+    global_log.info("step13_temp_nvt: Compute temperature during NVT equilibration")
+    gmx_energy(**global_paths["step13_temp_nvt"], properties=global_prop["step13_temp_nvt"])
 
     # STEP 14: NPT equilibration pre-processing
     global_log.info("step14_grompp_npt: Preprocess system pressure equilibration")
@@ -214,8 +214,8 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     mdrun(**global_paths["step15_mdrun_npt"], properties=global_prop["step15_mdrun_npt"])
 
     # STEP 16: dump density and pressure evolution
-    global_log.info("step16_energy_npt: Compute Density & Pressure during NPT equilibration")
-    gmx_energy(**global_paths["step16_energy_npt"], properties=global_prop["step16_energy_npt"])
+    global_log.info("step16_density_npt: Compute Density & Pressure during NPT equilibration")
+    gmx_energy(**global_paths["step16_density_npt"], properties=global_prop["step16_density_npt"])
 
     # Production trajectories
     global_log.info(f"Number of trajectories: {num_trajs}")
@@ -226,7 +226,7 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         traj_paths = conf.get_paths_dic(prefix=traj)
 
         # Change seed of temperature coupling algorithm (V-rescale)
-        new_seed = {'ld-seed' : random.randint(1, 1000000)}
+        new_seed = {'ld-seed': random.randint(1, 1000000)}
         traj_prop['step17_grompp_md']['mdp'].update(new_seed)
 
         # STEP 17: free NPT production run pre-processing
@@ -258,29 +258,35 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         global_log.info(f"{traj} >  step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
         gmx_rgyr(**traj_paths['step21_rgyr'], properties=traj_prop['step21_rgyr'])
 
-        # STEP 22: image the trajectory
-        traj_paths['step22_image_traj']['input_index_path'] = global_paths["step22_image_traj"]['input_index_path']
-        global_log.info(f"{traj} >  step22_image_traj: Imaging the trajectory")
-        gmx_image(**traj_paths['step22_image_traj'], properties=traj_prop['step22_image_traj'])
+        # STEP 22: dump RMSF
+        global_log.info(f"{traj} >  step22_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
+        # Update common paths to all trajectories
+        traj_paths['step22_rmsf']['input_top_path'] = global_paths["step22_rmsf"]['input_top_path']
+        cpptraj_rmsf(**traj_paths['step22_rmsf'], properties=traj_prop['step22_rmsf'])
 
-        # STEP 23: fit the trajectory
-        traj_paths['step23_fit_traj']['input_index_path'] = global_paths["step23_fit_traj"]['input_index_path']
-        global_log.info(f"{traj} >  step23_fit_traj: Fit the trajectory")
-        gmx_image(**traj_paths['step23_fit_traj'], properties=traj_prop['step23_fit_traj'])
+        # STEP 23: image the trajectory
+        traj_paths['step23_image_traj']['input_index_path'] = global_paths["step23_image_traj"]['input_index_path']
+        global_log.info(f"{traj} >  step23_image_traj: Imaging the trajectory")
+        gmx_image(**traj_paths['step23_image_traj'], properties=traj_prop['step23_image_traj'])
 
-        traj_list.append(traj_paths['step23_fit_traj']['output_traj_path'])
+        # STEP 24: fit the trajectory
+        traj_paths['step24_fit_traj']['input_index_path'] = global_paths["step24_fit_traj"]['input_index_path']
+        global_log.info(f"{traj} >  step24_fit_traj: Fit the trajectory")
+        gmx_image(**traj_paths['step24_fit_traj'], properties=traj_prop['step24_fit_traj'])
+
+        traj_list.append(traj_paths['step24_fit_traj']['output_traj_path'])
 
     for traj in traj_list:
         compss_wait_on_file(traj)
     
-    # STEP 24: obtain dry structure
-    global_log.info("step24_dry_str: Obtain dry structure")
-    gmx_trjconv_str(**global_paths["step24_dry_str"], properties=global_prop["step24_dry_str"])
+    # STEP 25: obtain dry structure
+    global_log.info("step25_dry_str: Obtain dry structure")
+    gmx_trjconv_str(**global_paths["step25_dry_str"], properties=global_prop["step25_dry_str"])
 
-    # STEP 25: concatenate trajectories
-    global_log.info("step25_trjcat: Concatenate trajectories")
-    fu.zip_list(zip_file=global_paths["step25_trjcat"]['input_trj_zip_path'], file_list=traj_list)
-    trjcat(**global_paths["step25_trjcat"], properties=global_prop["step25_trjcat"])
+    # STEP 26: concatenate trajectories
+    global_log.info("step26_trjcat: Concatenate trajectories")
+    fu.zip_list(zip_file=global_paths["step26_trjcat"]['input_trj_zip_path'], file_list=traj_list)
+    trjcat(**global_paths["step26_trjcat"], properties=global_prop["step26_trjcat"])
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -303,7 +309,7 @@ if __name__ == "__main__":
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)",
                         required=True)
-    
+
     parser.add_argument('--setup_only', action='store_true',
                         help="Only setup the system (default: False)",
                         required=False)
@@ -311,19 +317,19 @@ if __name__ == "__main__":
     parser.add_argument('--num_trajs', dest='num_trajs',
                         help="Number of trajectories (default: 1)",
                         required=False)
-    
+
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
-    
+
     parser.add_argument('--input_pdb', dest='input_pdb_path',
                         help="Input PDB file (default: input_structure_path in step 1 of configuration file)",
                         required=False)
-    
+
     parser.add_argument('--pdb_chains', nargs='+', dest='pdb_chains',
                         help="PDB chains to be extracted from PDB file (default: chains in properties of step 1)",
                         required=False)
-    
+
     parser.add_argument('--mutation_list', nargs='+', dest='mutation_list',
                         help="List of mutations to be introduced in the protein (default: None, ex: A:Arg220Ala)",
                         required=False)
@@ -335,11 +341,11 @@ if __name__ == "__main__":
     parser.add_argument('--input_top', dest='input_top_path',
                         help="Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, use together with --input_gro (default: None)",
                         required=False)
-    
+
     parser.add_argument('--fix_ss', action='store_true',
                         help="Add disulfide bonds to the protein. Use carefully! (default: False)",
                         required=False)
-    
+
     parser.add_argument('--fix_backbone', action='store_true',
                         help="Add missing backbone atoms. Requires internet connection, PDB code and a MODELLER license key (default: False)",
                         required=False)
@@ -352,15 +358,15 @@ if __name__ == "__main__":
     else:
         num_trajs = int(args.num_trajs)
 
-    # Check .gro structure and .zip topology are given together 
+    # Check .gro structure and .zip topology are given together
     if (args.input_gro_path is None and args.input_top_path is not None) or (args.input_gro_path is not None and args.input_top_path is None):
         raise Exception("Both --input_gro and --input_top must be provided together")
 
     # Check .pdb structure and .gro/.zip topology are not given together
     if (args.input_pdb_path is not None and args.input_gro_path is not None):
         raise Exception("Both --input_pdb and --input_gro/--input_top are provided. Please provide only one of them")
-    
-    main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_trajs=num_trajs, output_path=args.output_path, 
+
+    main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_trajs=num_trajs, output_path=args.output_path,
             input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list,
-            input_gro_path=args.input_gro_path, input_top_path=args.input_top_path, 
+            input_gro_path=args.input_gro_path, input_top_path=args.input_top_path,
             fix_backbn=args.fix_backbone, fix_ss=args.fix_ss)
