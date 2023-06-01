@@ -24,6 +24,7 @@ from biobb_gromacs.gromacs.grompp import grompp
 from biobb_gromacs.gromacs.mdrun import mdrun
 from biobb_analysis.gromacs.gmx_image import gmx_image
 from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
+from biobb_analysis.gromacs.gmx_trjconv_trj import gmx_trjconv_trj
 
 def analyze_cv(traj_path, topology_path, MD_properties, accepted_steps, sumd_properties, sumd_log, output_path):
     """
@@ -177,6 +178,41 @@ def save_cv_data(cv_time_series, time, path):
 
     return
 
+def remove_logs(continuation_MD_prop, global_prop):
+    """
+    Remove all log files in previous steps
+    """
+
+    # Find generic paths to log files from steps
+    short_MD_stdout_path = os.path.join(continuation_MD_prop["path"], continuation_MD_prop["step"] + "_log*.out")
+    short_MD_stderr_path = os.path.join(continuation_MD_prop["path"], continuation_MD_prop["step"] + "_log*.err")
+    mdrun_stdout_path = os.path.join(global_prop["short_MD_mdrun"]["path"], global_prop["short_MD_mdrun"]["step"] + "_log*.out")
+    mdrun_stderr_path = os.path.join(global_prop["short_MD_mdrun"]["path"], global_prop["short_MD_mdrun"]["step"] + "_log*.err")
+    pbc_1_stdout_path = os.path.join(global_prop["pbc_1_whole"]["path"], global_prop["pbc_1_whole"]["step"] + "_log*.out")
+    pbc_1_stderr_path = os.path.join(global_prop["pbc_1_whole"]["path"], global_prop["pbc_1_whole"]["step"] + "_log*.err")
+    pbc_2_stdout_path = os.path.join(global_prop["pbc_2_extract_frame"]["path"], global_prop["pbc_2_extract_frame"]["step"] + "_log*.out")
+    pbc_2_stderr_path = os.path.join(global_prop["pbc_2_extract_frame"]["path"], global_prop["pbc_2_extract_frame"]["step"] + "_log*.err")
+    pbc_3_stdout_path = os.path.join(global_prop["pbc_3_nojump"]["path"], global_prop["pbc_3_nojump"]["step"] + "_log*.out")
+    pbc_3_stderr_path = os.path.join(global_prop["pbc_3_nojump"]["path"], global_prop["pbc_3_nojump"]["step"] + "_log*.err")
+    pbc_4_stdout_path = os.path.join(global_prop["pbc_4_center"]["path"], global_prop["pbc_4_center"]["step"] + "_log*.out")
+    pbc_4_stderr_path = os.path.join(global_prop["pbc_4_center"]["path"], global_prop["pbc_4_center"]["step"] + "_log*.err")
+    pbc_5_stdout_path = os.path.join(global_prop["pbc_5_fit"]["path"], global_prop["pbc_5_fit"]["step"] + "_log*.out")
+    pbc_5_stderr_path = os.path.join(global_prop["pbc_5_fit"]["path"], global_prop["pbc_5_fit"]["step"] + "_log*.err")
+    concat_stdout_path = os.path.join(global_prop["trajectory_cat"]["path"], global_prop["trajectory_cat"]["step"] + "_log*.out")
+    concat_stderr_path = os.path.join(global_prop["trajectory_cat"]["path"], global_prop["trajectory_cat"]["step"] + "_log*.err")
+
+    # Remove log files
+    remove_tmp_files(short_MD_stdout_path, short_MD_stderr_path,
+                        mdrun_stdout_path, mdrun_stderr_path, 
+                        pbc_1_stdout_path, pbc_1_stderr_path,
+                        pbc_2_stdout_path, pbc_2_stderr_path,
+                        pbc_3_stdout_path, pbc_3_stderr_path,
+                        pbc_4_stdout_path, pbc_4_stderr_path,
+                        pbc_5_stdout_path, pbc_5_stderr_path,
+                        concat_stdout_path, concat_stderr_path)
+
+    return
+
 def remove_tmp_files(*paths):
     """
     Remove temporal files if they exist
@@ -201,7 +237,7 @@ def remove_tmp_files(*paths):
 def get_tmp_folders(a_dir):
     """
     Temporal fix!
-    Get all the unique temporal directories created by grompp_mdrun. Exclude all other directories
+    Get all the unique temporal directories created by biobb. Exclude all other directories
     """
 
     all_subdirs = [name for name in os.listdir(a_dir) if os.path.isdir(os.path.join(a_dir, name))]
@@ -277,24 +313,16 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
     continuation_MD_prop['mdp']['gen-vel'] = 'no'
     _ = continuation_MD_prop['mdp'].pop('gen-temp', None)
 
-    # Paths and properties of short MD imaging step
-    imaging_MD_paths = global_paths['short_MD_image'].copy()
-    imaging_MD_prop = global_prop['short_MD_image'].copy()
-
-    # Paths and properties of short MD structure extraction step
-    str_MD_paths = global_paths['short_MD_str'].copy()
-    str_MD_prop = global_prop['short_MD_str'].copy()
-
     # Add index path to steps if provided
     if index_path is not None:
+        global_paths['dry_structure']['input_index_path'] = index_path
         new_MD_paths['input_ndx_path'] = index_path
         continuation_MD_paths['input_ndx_path'] = index_path
-        imaging_MD_paths['input_index_path'] = index_path
-        str_MD_paths['input_index_path'] = index_path
-
-    # Paths and properties of concatenation step 
-    concat_prop = global_prop["trajectory_cat"]
-    concat_paths = global_paths["trajectory_cat"] 
+        global_paths['pbc_1_whole']['input_index_path'] = index_path
+        global_paths['pbc_2_extract_frame']['input_index_path'] = index_path
+        global_paths['pbc_3_nojump']['input_index_path'] = index_path
+        global_paths['pbc_4_center']['input_index_path'] = index_path
+        global_paths['pbc_5_fit']['input_index_path'] = index_path
 
     # Initialize a SuMD log file
     sumd_log, _ = fu.get_logs(path=conf.get_working_dir_path(), light_format=True, prefix='sumd')
@@ -311,16 +339,8 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
     shutil.copy(topology_path, continuation_MD_paths["input_top_zip_path"])
 
     # Create concatenation folder -> to put Zip file inside before step execution
-    if not os.path.exists(concat_prop["path"]):
-        os.makedirs(concat_prop["path"])
-
-    # Create imaging folder -> temporal fix TODO: check if still needed
-    if not os.path.exists(imaging_MD_prop["path"]):
-        os.makedirs(imaging_MD_prop["path"])
-    
-    # Create structure extraction folder -> temporal fix  TODO: check if still needed
-    if not os.path.exists(str_MD_prop["path"]):
-        os.makedirs(str_MD_prop["path"])
+    if not os.path.exists(global_prop["trajectory_cat"]["path"]):
+        os.makedirs(global_prop["trajectory_cat"]["path"])
 
     # Initialize 'last step accepted' condition
     last_step_accepted = False
@@ -330,6 +350,11 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
 
     # Find max number of steps (short MDs) to do
     max_num_steps = sumd_prop['num_steps']['max_total']
+
+    # Extract dry structure from input structure
+    global_paths['dry_structure']['input_structure_path'] = input_structure
+    global_paths['dry_structure']['input_top_path'] = input_structure
+    gmx_trjconv_str(**global_paths['dry_structure'], properties=global_prop['dry_structure'])
 
     while (total_steps < max_num_steps):
 
@@ -356,44 +381,55 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
             grompp(**new_MD_paths, properties=new_MD_prop)
             mdrun(**global_paths['short_MD_mdrun'], properties=global_prop['short_MD_mdrun'])
 
-        # Image short MD trajectory (to avoid PBC issues when analyzing the CV)
-        gmx_image(**imaging_MD_paths, properties=imaging_MD_prop)
+        # Take care of PBC (before the analysis of the CV)
+        
+        # Make molecule whole
+        gmx_image(**global_paths['pbc_1_whole'], properties=global_prop['pbc_1_whole'])
 
-        # Extract structure from short MD trajectory
-        gmx_trjconv_str(**str_MD_paths, properties=str_MD_prop)
+        # Cluster the RNA and Ligand atoms
+        gmx_trjconv_trj(**global_paths['pbc_2_extract_frame'], properties=global_prop['pbc_2_extract_frame'])
+
+        # Avoid jumps of the ligand
+        gmx_image(**global_paths['pbc_3_nojump'], properties=global_prop['pbc_3_nojump'])
+        
+        # Center both the RNA and the ligand
+        gmx_image(**global_paths['pbc_4_center'], properties=global_prop['pbc_4_center'])
+
+        # Minimize RMSD of RNA atoms
+        gmx_image(**global_paths['pbc_5_fit'], properties=global_prop['pbc_5_fit'])
 
         # Use MDAnalysis to analyze the CV (distance between 2 user-defined groups)
-        last_step_accepted = analyze_cv(imaging_MD_paths["output_traj_path"], str_MD_paths["output_str_path"], 
+        last_step_accepted = analyze_cv(global_paths['pbc_5_fit']["output_traj_path"], global_paths['dry_structure']["output_str_path"], 
                                         continuation_MD_prop['mdp'], accepted_steps, sumd_prop, sumd_log, output_path = conf.get_working_dir_path())
         
         if last_step_accepted:
 
             # First accepted step
-            if not os.path.exists(concat_paths["output_trj_path"]):
+            if not os.path.exists(global_paths["trajectory_cat"]["output_trj_path"]):
                 
                 # Copy short MD trajectory to concatenation folder
-                shutil.copyfile(imaging_MD_paths["output_traj_path"], concat_paths["output_trj_path"])
+                shutil.copyfile(global_paths['pbc_5_fit']["output_traj_path"], global_paths["trajectory_cat"]["output_trj_path"])
             
             # Subsequent accepted steps
             else:
 
                 # remove previous zip trajectory bundle if it exists
-                remove_tmp_files(concat_paths["input_trj_zip_path"])
+                remove_tmp_files(global_paths["trajectory_cat"]["input_trj_zip_path"])
 
                 # Create a ZipFile object
-                zipObject = ZipFile(concat_paths["input_trj_zip_path"], 'w')
+                zipObject = ZipFile(global_paths["trajectory_cat"]["input_trj_zip_path"], 'w')
 
                 # Add previously concatenated trajectory to zip file
-                zipObject.write(concat_paths["output_trj_path"])
+                zipObject.write(global_paths["trajectory_cat"]["output_trj_path"])
 
                 # Add short MD trajectory to zip file
-                zipObject.write(imaging_MD_paths["output_traj_path"])
+                zipObject.write(global_paths['pbc_5_fit']["output_traj_path"])
 
                 # Close zip file
                 zipObject.close()
 
                 # Concatenate
-                trjcat(**concat_paths, properties=concat_prop)
+                trjcat(**global_paths["trajectory_cat"], properties=global_prop["trajectory_cat"])
 
             # Reset failed steps counter
             failed_steps = 0
@@ -409,27 +445,21 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
         if last_step_accepted or (failed_steps > sumd_prop['num_steps']['max_failed']):
             
             # Replace last accepted structure and checkpoint for newly accepted ones
-            shutil.copyfile(continuation_MD_paths["output_gro_path"], continuation_MD_paths["input_gro_path"])
-            shutil.copyfile(continuation_MD_paths["output_cpt_path"], continuation_MD_paths["input_cpt_path"])
+            shutil.copyfile(global_paths["short_MD_mdrun"]["output_gro_path"], continuation_MD_paths["input_gro_path"])
+            shutil.copyfile(global_paths["short_MD_mdrun"]["output_cpt_path"], continuation_MD_paths["input_cpt_path"])
 
         # Increase total counter
         total_steps += 1
 
-        # Find generic paths to temporal log files from steps
-        short_MD_stdout_path = os.path.join(continuation_MD_prop["path"], continuation_MD_prop["step"] + "_log*.out")
-        short_MD_stderr_path = os.path.join(continuation_MD_prop["path"], continuation_MD_prop["step"] + "_log*.err")
-        mdrun_stdout_path = os.path.join(global_prop["short_MD_mdrun"]["path"], global_prop["short_MD_mdrun"]["step"] + "_log*.out")
-        mdrun_stderr_path = os.path.join(global_prop["short_MD_mdrun"]["path"], global_prop["short_MD_mdrun"]["step"] + "_log*.err")
-        image_MD_stdout_path = os.path.join(imaging_MD_prop["path"], imaging_MD_prop["step"] + "_log*.out")
-        image_MD_stderr_path = os.path.join(imaging_MD_prop["path"], imaging_MD_prop["step"] + "_log*.err")
-        concat_stdout_path = os.path.join(concat_prop["path"], concat_prop["step"] + "_log*.out")
-        concat_stderr_path = os.path.join(concat_prop["path"], concat_prop["step"] + "_log*.err")
+        # Remove log files from previous steps
+        remove_logs(continuation_MD_prop, global_prop)
 
-        # Remove temporal log files from steps
-        remove_tmp_files(short_MD_stdout_path, short_MD_stderr_path,
-                         mdrun_stdout_path, mdrun_stderr_path,
-                         image_MD_stdout_path, image_MD_stderr_path, 
-                         concat_stdout_path, concat_stderr_path)
+    # Get all temporal unique folders with -> will be fixed
+    tmp_folders=get_tmp_folders(os.getcwd())
+
+    # Move all temporal unique folders to common folder -> will be fixed
+    for tmp_folder in tmp_folders:
+        shutil.move(tmp_folder, os.path.join(os.getcwd(), "tmp"))
 
     # Print timing information to the log file
     elapsed_time = time.time() - start_time
