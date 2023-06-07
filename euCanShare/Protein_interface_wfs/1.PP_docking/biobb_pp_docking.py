@@ -14,6 +14,7 @@ from biobb_pydock.pydock.setup import setup
 from biobb_pydock.pydock.ftdock import ftdock
 from biobb_pydock.pydock.dockser import dockser
 from biobb_pydock.pydock.makePDB import makePDB
+from biobb_pydock.pydock.oda import oda
 
 import MDAnalysis as mda
 from MDAnalysis.analysis.diffusionmap import DistanceMatrix
@@ -128,8 +129,10 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path)
     # Enforce receptor_pdb_path and ligand_pdb_path if provided
     if receptor_pdb_path is not None:
         global_paths["step1_setup"]["input_rec_pdb_path"] = receptor_pdb_path
+        global_paths["step6_oda_receptor"]["input_structure_path"] = receptor_pdb_path
     if ligand_pdb_path is not None:
         global_paths["step1_setup"]["input_lig_pdb_path"] = ligand_pdb_path
+        global_paths["step7_oda_ligand"]["input_structure_path"] = ligand_pdb_path
 
     # STEP 1: Prepare receptor and ligand proteins for pyDock
     global_log.info("step1_setup: setup receptor and ligand proteins for pyDock")
@@ -194,6 +197,14 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path)
     # Zip the best ranking pose paths into a zip file
     fu.zip_list(zip_file = global_paths["step5_clustering"]["output_zip_path"], file_list = top_distinct_poses_paths)
 
+    # STEP 6: Optimal Docking Area (ODA) analysis for the receptor
+    global_log.info("step6_oda_receptor: optimal docking area (ODA) analysis for the receptor")
+    oda(**global_paths["step6_oda_receptor"], properties=global_prop["step6_oda_receptor"])
+
+    # STEP 7: Optimal Docking Area (ODA) analysis for the ligand
+    global_log.info("step7_oda_ligand: optimal docking area (ODA) analysis for the ligand")
+    oda(**global_paths["step7_oda_ligand"], properties=global_prop["step7_oda_ligand"])
+
     # Print timing information to log file
     elapsed_time = time.time() - start_time
     global_log.info('')
@@ -206,7 +217,6 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path)
     global_log.info('')
 
     return global_paths, global_prop
-
 
 if __name__ == "__main__":
 

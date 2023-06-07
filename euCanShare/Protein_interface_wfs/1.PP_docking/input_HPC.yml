@@ -91,3 +91,35 @@ step5_clustering:
     output_zip_path: top_distinct_poses.zip
   properties:
     rmsd_threshold: 80.0
+
+step6_oda_receptor:
+  tool: oda 
+  paths:
+    input_structure_path: dependency/step1_setup/input_rec_pdb_path
+    output_oda_path: receptor.pdb.oda
+    output_oda_H_path: receptor.pdb.oda.H
+    output_oda_tab_path: receptor.pdb.oda.ODAtab
+    output_oda_amber_path: receptor.oda.amber
+  properties:
+    subunit_name: receptor
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+
+step7_oda_ligand:
+  tool: oda 
+  paths:
+    input_structure_path: dependency/step1_setup/input_lig_pdb_path
+    output_oda_path: ligand.pdb.oda
+    output_oda_H_path: ligand.pdb.oda.H
+    output_oda_tab_path: ligand.pdb.oda.ODAtab
+    output_oda_amber_path: ligand.oda.amber
+  properties:
+    subunit_name: ligand
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
