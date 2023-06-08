@@ -190,16 +190,20 @@ def remove_logs(continuation_MD_prop, global_prop):
     mdrun_stderr_path = os.path.join(global_prop["short_MD_mdrun"]["path"], global_prop["short_MD_mdrun"]["step"] + "_log*.err")
     pbc_1_stdout_path = os.path.join(global_prop["pbc_1_whole"]["path"], global_prop["pbc_1_whole"]["step"] + "_log*.out")
     pbc_1_stderr_path = os.path.join(global_prop["pbc_1_whole"]["path"], global_prop["pbc_1_whole"]["step"] + "_log*.err")
-    pbc_2_stdout_path = os.path.join(global_prop["pbc_2_extract_frame"]["path"], global_prop["pbc_2_extract_frame"]["step"] + "_log*.out")
-    pbc_2_stderr_path = os.path.join(global_prop["pbc_2_extract_frame"]["path"], global_prop["pbc_2_extract_frame"]["step"] + "_log*.err")
-    pbc_3_stdout_path = os.path.join(global_prop["pbc_3_nojump"]["path"], global_prop["pbc_3_nojump"]["step"] + "_log*.out")
-    pbc_3_stderr_path = os.path.join(global_prop["pbc_3_nojump"]["path"], global_prop["pbc_3_nojump"]["step"] + "_log*.err")
-    pbc_4_stdout_path = os.path.join(global_prop["pbc_4_center"]["path"], global_prop["pbc_4_center"]["step"] + "_log*.out")
-    pbc_4_stderr_path = os.path.join(global_prop["pbc_4_center"]["path"], global_prop["pbc_4_center"]["step"] + "_log*.err")
-    pbc_5_stdout_path = os.path.join(global_prop["pbc_5_fit"]["path"], global_prop["pbc_5_fit"]["step"] + "_log*.out")
-    pbc_5_stderr_path = os.path.join(global_prop["pbc_5_fit"]["path"], global_prop["pbc_5_fit"]["step"] + "_log*.err")
-    concat_stdout_path = os.path.join(global_prop["trajectory_cat"]["path"], global_prop["trajectory_cat"]["step"] + "_log*.out")
-    concat_stderr_path = os.path.join(global_prop["trajectory_cat"]["path"], global_prop["trajectory_cat"]["step"] + "_log*.err")
+    pbc_2_stdout_path = os.path.join(global_prop["pbc_2_cluster"]["path"], global_prop["pbc_2_cluster"]["step"] + "_log*.out")
+    pbc_2_stderr_path = os.path.join(global_prop["pbc_2_cluster"]["path"], global_prop["pbc_2_cluster"]["step"] + "_log*.err")
+    pbc_3_stdout_path = os.path.join(global_prop["pbc_3_extract_frame"]["path"], global_prop["pbc_3_extract_frame"]["step"] + "_log*.out")
+    pbc_3_stderr_path = os.path.join(global_prop["pbc_3_extract_frame"]["path"], global_prop["pbc_3_extract_frame"]["step"] + "_log*.err")
+    pbc_4_stdout_path = os.path.join(global_prop["pbc_4_nojump"]["path"], global_prop["pbc_4_nojump"]["step"] + "_log*.out")
+    pbc_4_stderr_path = os.path.join(global_prop["pbc_4_nojump"]["path"], global_prop["pbc_4_nojump"]["step"] + "_log*.err")
+    pbc_5_stdout_path = os.path.join(global_prop["pbc_5_center"]["path"], global_prop["pbc_5_center"]["step"] + "_log*.out")
+    pbc_5_stderr_path = os.path.join(global_prop["pbc_5_center"]["path"], global_prop["pbc_5_center"]["step"] + "_log*.err")
+    pbc_6_stdout_path = os.path.join(global_prop["pbc_6_fit"]["path"], global_prop["pbc_6_fit"]["step"] + "_log*.out")
+    pbc_6_stderr_path = os.path.join(global_prop["pbc_6_fit"]["path"], global_prop["pbc_6_fit"]["step"] + "_log*.err")
+    concat_stdout_path = os.path.join(global_prop["prepared_trajectory_cat"]["path"], global_prop["prepared_trajectory_cat"]["step"] + "_log*.out")
+    concat_stderr_path = os.path.join(global_prop["prepared_trajectory_cat"]["path"], global_prop["prepared_trajectory_cat"]["step"] + "_log*.err")
+    concat2_stdout_path = os.path.join(global_prop["original_trajectory_cat"]["path"], global_prop["original_trajectory_cat"]["step"] + "_log*.out")
+    concat2_stderr_path = os.path.join(global_prop["original_trajectory_cat"]["path"], global_prop["original_trajectory_cat"]["step"] + "_log*.err")
 
     # Remove log files
     remove_tmp_files(short_MD_stdout_path, short_MD_stderr_path,
@@ -209,7 +213,9 @@ def remove_logs(continuation_MD_prop, global_prop):
                         pbc_3_stdout_path, pbc_3_stderr_path,
                         pbc_4_stdout_path, pbc_4_stderr_path,
                         pbc_5_stdout_path, pbc_5_stderr_path,
-                        concat_stdout_path, concat_stderr_path)
+                        pbc_6_stdout_path, pbc_6_stderr_path,
+                        concat_stdout_path, concat_stderr_path,
+                        concat2_stdout_path, concat2_stderr_path)
 
     return
 
@@ -319,10 +325,11 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
         new_MD_paths['input_ndx_path'] = index_path
         continuation_MD_paths['input_ndx_path'] = index_path
         global_paths['pbc_1_whole']['input_index_path'] = index_path
-        global_paths['pbc_2_extract_frame']['input_index_path'] = index_path
-        global_paths['pbc_3_nojump']['input_index_path'] = index_path
-        global_paths['pbc_4_center']['input_index_path'] = index_path
-        global_paths['pbc_5_fit']['input_index_path'] = index_path
+        global_paths['pbc_2_cluster']['input_index_path'] = index_path
+        global_paths['pbc_3_extract_frame']['input_index_path'] = index_path
+        global_paths['pbc_4_nojump']['input_index_path'] = index_path
+        global_paths['pbc_5_center']['input_index_path'] = index_path
+        global_paths['pbc_6_fit']['input_index_path'] = index_path
 
     # Initialize a SuMD log file
     sumd_log, _ = fu.get_logs(path=conf.get_working_dir_path(), light_format=True, prefix='sumd')
@@ -338,9 +345,10 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
     shutil.copy(input_structure, continuation_MD_paths["input_gro_path"])
     shutil.copy(topology_path, continuation_MD_paths["input_top_zip_path"])
 
-    # Create concatenation folder -> to put Zip file inside before step execution
-    if not os.path.exists(global_prop["trajectory_cat"]["path"]):
-        os.makedirs(global_prop["trajectory_cat"]["path"])
+    # Create concatenation folders 
+    if not os.path.exists(global_prop["prepared_trajectory_cat"]["path"]):
+        os.makedirs(global_prop["prepared_trajectory_cat"]["path"])
+        os.makedirs(global_prop["original_trajectory_cat"]["path"])
 
     # Initialize 'last step accepted' condition
     last_step_accepted = False
@@ -387,49 +395,59 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
         gmx_image(**global_paths['pbc_1_whole'], properties=global_prop['pbc_1_whole'])
 
         # Cluster the RNA and Ligand atoms
-        gmx_trjconv_trj(**global_paths['pbc_2_extract_frame'], properties=global_prop['pbc_2_extract_frame'])
+        gmx_image(**global_paths['pbc_2_cluster'], properties=global_prop['pbc_2_cluster'])
 
-        # Avoid jumps of the ligand
-        gmx_image(**global_paths['pbc_3_nojump'], properties=global_prop['pbc_3_nojump'])
+        # Extract initial frame from trajectory
+        gmx_trjconv_trj(**global_paths['pbc_3_extract_frame'], properties=global_prop['pbc_3_extract_frame'])
+
+        # Avoid jumps of the ligand and use extracted frame as reference
+        gmx_image(**global_paths['pbc_4_nojump'], properties=global_prop['pbc_4_nojump'])
         
-        # Center both the RNA and the ligand
-        gmx_image(**global_paths['pbc_4_center'], properties=global_prop['pbc_4_center'])
+        # Center both the RNA and the ligand in the box
+        gmx_image(**global_paths['pbc_5_center'], properties=global_prop['pbc_5_center'])
 
-        # Minimize RMSD of RNA atoms
-        gmx_image(**global_paths['pbc_5_fit'], properties=global_prop['pbc_5_fit'])
+        # Minimize RMSD of RNA atoms wrt reference (fitting)
+        gmx_image(**global_paths['pbc_6_fit'], properties=global_prop['pbc_6_fit'])
 
         # Use MDAnalysis to analyze the CV (distance between 2 user-defined groups)
-        last_step_accepted = analyze_cv(global_paths['pbc_5_fit']["output_traj_path"], global_paths['dry_structure']["output_str_path"], 
+        last_step_accepted = analyze_cv(global_paths['pbc_6_fit']["output_traj_path"], global_paths['dry_structure']["output_str_path"], 
                                         continuation_MD_prop['mdp'], accepted_steps, sumd_prop, sumd_log, output_path = conf.get_working_dir_path())
         
         if last_step_accepted:
 
             # First accepted step
-            if not os.path.exists(global_paths["trajectory_cat"]["output_trj_path"]):
+            if not os.path.exists(global_paths["prepared_trajectory_cat"]["output_trj_path"]):
                 
-                # Copy short MD trajectory to concatenation folder
-                shutil.copyfile(global_paths['pbc_5_fit']["output_traj_path"], global_paths["trajectory_cat"]["output_trj_path"])
+                # Copy short MD trajectory to concatenation folders
+                shutil.copyfile(global_paths['pbc_6_fit']["output_traj_path"], global_paths["prepared_trajectory_cat"]["output_trj_path"])
+                shutil.copyfile(global_paths['short_MD_mdrun']['output_xtc_path'], global_paths["original_trajectory_cat"]["output_trj_path"])
             
             # Subsequent accepted steps
             else:
 
-                # remove previous zip trajectory bundle if it exists
-                remove_tmp_files(global_paths["trajectory_cat"]["input_trj_zip_path"])
+                # remove previous zip trajectory bundles if they exists
+                remove_tmp_files(global_paths["prepared_trajectory_cat"]["input_trj_zip_path"])
+                remove_tmp_files(global_paths["original_trajectory_cat"]["input_trj_zip_path"])
 
-                # Create a ZipFile object
-                zipObject = ZipFile(global_paths["trajectory_cat"]["input_trj_zip_path"], 'w')
+                # Create a ZipFile objects
+                zipObject = ZipFile(global_paths["prepared_trajectory_cat"]["input_trj_zip_path"], 'w')
+                zipObject2 = ZipFile(global_paths["original_trajectory_cat"]["input_trj_zip_path"], 'w')
 
-                # Add previously concatenated trajectory to zip file
-                zipObject.write(global_paths["trajectory_cat"]["output_trj_path"])
+                # Add previously concatenated trajectories to zip files
+                zipObject.write(global_paths["prepared_trajectory_cat"]["output_trj_path"])
+                zipObject2.write(global_paths["original_trajectory_cat"]["output_trj_path"])
 
-                # Add short MD trajectory to zip file
-                zipObject.write(global_paths['pbc_5_fit']["output_traj_path"])
+                # Add short MD trajectory to zip files
+                zipObject.write(global_paths['pbc_6_fit']["output_traj_path"])
+                zipObject2.write(global_paths['short_MD_mdrun']['output_xtc_path'])
 
-                # Close zip file
+                # Close zip files
                 zipObject.close()
+                zipObject2.close()
 
                 # Concatenate
-                trjcat(**global_paths["trajectory_cat"], properties=global_prop["trajectory_cat"])
+                trjcat(**global_paths["prepared_trajectory_cat"], properties=global_prop["prepared_trajectory_cat"])
+                trjcat(**global_paths["original_trajectory_cat"], properties=global_prop["original_trajectory_cat"])
 
             # Reset failed steps counter
             failed_steps = 0

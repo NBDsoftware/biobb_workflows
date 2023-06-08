@@ -5,6 +5,7 @@
 #SBATCH --time=02:00:00
 #SBATCH --mem-per-cpu=1000
 #SBATCH --constraint=gpu
+#SBATCH --exclude=gpu003
 #SBATCH --gres=gpu:1
 #SBATCH --output=report_%j.out
 #SBATCH --error=report_%j.err

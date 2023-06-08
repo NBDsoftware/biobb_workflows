@@ -12,7 +12,7 @@ sumd:
     target: 0.4                   # Target value of colvar in nm
     threshold: 0.25               # Go to unsupervised MD once within threshold of target
   num_steps:
-    max_total: 1                # Maximum number of total steps
+    max_total: 15               # Maximum number of total steps
     max_failed: 40              # Maximum number of tries for same initial conditions
   slope_threshold: 0.1          # Slope threshold in absolute value in nm/ns
 
@@ -43,10 +43,10 @@ short_MD_grompp:
     mdp:
       integrator: md            # integrator algorithm
       dt: 0.002                 # time step (ps)
-      nsteps: 50000            # total number of time steps
+      nsteps: 5000              # total number of time steps
       ref-t: 300 300            # reference temperature for coupling
       nstxout: 0                # freq. of .trr trajectory (coordinates) writing in time steps
-      nstxout-compressed: 1000 # freq. of .xtc trajectory (coordinates) writing in time steps (the one used to compute the CV)
+      nstxout-compressed: 100   # freq. of .xtc trajectory (coordinates) writing in time steps (the one used to compute the CV)
       nstvout: 0                # freq. of .trr trajectory (velocities) writing in time steps
       nstfout: 0                # freq. of .trr trajectory (forces) writing in time steps
       continuation: 'no'
@@ -103,10 +103,23 @@ pbc_1_whole:
     center: False
     pbc: whole
 
-pbc_2_extract_frame:
-  tool: gmx_trjconv_trj
+pbc_2_cluster:
+  tool: gmx_image 
   paths: 
     input_traj_path: dependency/pbc_1_whole/output_traj_path
+    input_top_path: dependency/short_MD_grompp/output_tpr_path
+    output_traj_path: step_clustered.xtc
+  properties:
+    center_selection: 'RNA_and_Ligand'
+    cluster_selection: 'RNA_and_Ligand'
+    output_selection: 'RNA_and_Ligand'
+    center: False
+    pbc: cluster
+
+pbc_3_extract_frame:
+  tool: gmx_trjconv_trj
+  paths: 
+    input_traj_path: dependency/pbc_2_cluster/output_traj_path
     input_top_path: dependency/short_MD_grompp/output_tpr_path
     output_traj_path: step_frame.gro
   properties:
@@ -115,11 +128,11 @@ pbc_2_extract_frame:
     end: 0
     dt: 0
 
-pbc_3_nojump:
+pbc_4_nojump:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/pbc_1_whole/output_traj_path
-    input_top_path: dependency/pbc_2_extract_frame/output_traj_path
+    input_traj_path: dependency/pbc_2_cluster/output_traj_path
+    input_top_path: dependency/pbc_3_extract_frame/output_traj_path
     output_traj_path: step_nojump.xtc
   properties:
     center_selection: 'RNA_and_Ligand'
@@ -127,24 +140,24 @@ pbc_3_nojump:
     center: False
     pbc: nojump
 
-pbc_4_center:
+pbc_5_center:
  tool: gmx_image
  paths:
-   input_traj_path: dependency/pbc_3_nojump/output_traj_path
+   input_traj_path: dependency/pbc_4_nojump/output_traj_path
    input_top_path: dependency/dry_structure/output_str_path
-   output_traj_path: step_center.xtc
+   output_traj_path: step_centered.xtc
  properties:
    center_selection: 'RNA_and_Ligand'   # Should include the group1 and group2 selections!
    output_selection: 'RNA_and_Ligand'
    center: True
    pbc: mol
 
-pbc_5_fit:
+pbc_6_fit:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/pbc_4_center/output_traj_path
+    input_traj_path: dependency/pbc_5_center/output_traj_path
     input_top_path: dependency/dry_structure/output_str_path
-    output_traj_path: fitted_traj.xtc
+    output_traj_path: step_fitted.xtc
   properties:
     fit_selection: 'RNA'
     center_selection: 'RNA_and_Ligand'
@@ -154,10 +167,16 @@ pbc_5_fit:
 
 # Configuration of trajectory concatenation
 
-trajectory_cat:
+prepared_trajectory_cat:
   paths:
     input_trj_zip_path: trajectory_bundle.zip
     output_trj_path: trajectory.xtc
   properties: 
     concatenate: True
 
+original_trajectory_cat:
+  paths:
+    input_trj_zip_path: trajectory_bundle.zip
+    output_trj_path: trajectory.xtc
+  properties: 
+    concatenate: True
