@@ -394,7 +394,7 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
         # Make molecule whole
         gmx_image(**global_paths['pbc_1_whole'], properties=global_prop['pbc_1_whole'])
 
-        # Cluster the RNA and Ligand atoms
+        # Cluster molecules - e.g. RNA strands and ligand
         gmx_image(**global_paths['pbc_2_cluster'], properties=global_prop['pbc_2_cluster'])
 
         # Extract initial frame from trajectory
@@ -410,7 +410,7 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
         gmx_image(**global_paths['pbc_6_fit'], properties=global_prop['pbc_6_fit'])
 
         # Use MDAnalysis to analyze the CV (distance between 2 user-defined groups)
-        last_step_accepted = analyze_cv(global_paths['pbc_6_fit']["output_traj_path"], global_paths['dry_structure']["output_str_path"], 
+        last_step_accepted = analyze_cv(global_paths['short_MD_mdrun']["output_xtc_path"], global_paths['short_MD_mdrun']["output_gro_path"], 
                                         continuation_MD_prop['mdp'], accepted_steps, sumd_prop, sumd_log, output_path = conf.get_working_dir_path())
         
         if last_step_accepted:
