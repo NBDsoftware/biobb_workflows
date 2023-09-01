@@ -16,20 +16,7 @@ sumd:
     max_failed: 50               # Maximum number of tries for same initial conditions
   slope_threshold: 0.05          # Slope threshold in absolute value in nm/ns
 
-# Configuration to extract a dry structure file 
-
-dry_structure:
-  tool: gmx_trjconv_str
-  paths: 
-    input_structure_path: path/to/input_structure.gro
-    input_top_path: path/to/input_structure.gro
-    output_str_path: dry_structure.gro
-  properties:
-    selection: RNA_and_Ligand    # Should include the group1 and group2 selections!
-    center: False
-    pbc: none
-
-# Configuration of short MD simulation
+# Configuration of short MD simulations
 
 short_MD_grompp:
   paths:
@@ -89,12 +76,34 @@ short_MD_mdrun:
     binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
     use_gpu: True
 
-# Configuration of short MD to image and dry the trajectory (PBC treatment to compute the CV correctly)
+# Configuration of trajectory concatenation
+
+original_trajectory_cat:
+  paths:
+    input_trj_zip_path: trajectory_bundle.zip
+    output_trj_path: trajectory.xtc
+  properties: 
+    concatenate: True
+
+# Configuration to extract a dry structure file 
+
+dry_structure:
+  tool: gmx_trjconv_str
+  paths: 
+    input_structure_path: path/to/input_structure.gro
+    input_top_path: path/to/input_structure.gro
+    output_str_path: dry_structure.gro
+  properties:
+    selection: RNA_and_Ligand    # Should include the group1 and group2 selections!
+    center: False
+    pbc: none
+
+# Configuration to image and dry the trajectory (PBC treatment of the original trajectory)
 
 pbc_1_whole:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/short_MD_mdrun/output_xtc_path
+    input_traj_path: dependency/original_trajectory_cat/output_trj_path
     input_top_path: dependency/short_MD_grompp/output_tpr_path
     output_traj_path: step_whole.xtc
   properties:   
@@ -103,7 +112,7 @@ pbc_1_whole:
     center: False
     pbc: whole
 
-pbc_2_cluster:
+pbc_2_cluster: 
   tool: gmx_image 
   paths: 
     input_traj_path: dependency/pbc_1_whole/output_traj_path
@@ -165,19 +174,3 @@ pbc_6_fit:
     output_selection: 'RNA_and_Ligand'
     center: False  
     fit: rot+trans
-
-# Configuration of trajectory concatenation
-
-prepared_trajectory_cat:
-  paths:
-    input_trj_zip_path: trajectory_bundle.zip
-    output_trj_path: trajectory.xtc
-  properties: 
-    concatenate: True
-
-original_trajectory_cat:
-  paths:
-    input_trj_zip_path: trajectory_bundle.zip
-    output_trj_path: trajectory.xtc
-  properties: 
-    concatenate: True
