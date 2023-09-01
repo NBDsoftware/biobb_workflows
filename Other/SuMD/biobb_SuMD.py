@@ -200,10 +200,8 @@ def remove_logs(continuation_MD_prop, global_prop):
     pbc_5_stderr_path = os.path.join(global_prop["pbc_5_center"]["path"], global_prop["pbc_5_center"]["step"] + "_log*.err")
     pbc_6_stdout_path = os.path.join(global_prop["pbc_6_fit"]["path"], global_prop["pbc_6_fit"]["step"] + "_log*.out")
     pbc_6_stderr_path = os.path.join(global_prop["pbc_6_fit"]["path"], global_prop["pbc_6_fit"]["step"] + "_log*.err")
-    concat_stdout_path = os.path.join(global_prop["prepared_trajectory_cat"]["path"], global_prop["prepared_trajectory_cat"]["step"] + "_log*.out")
-    concat_stderr_path = os.path.join(global_prop["prepared_trajectory_cat"]["path"], global_prop["prepared_trajectory_cat"]["step"] + "_log*.err")
-    concat2_stdout_path = os.path.join(global_prop["original_trajectory_cat"]["path"], global_prop["original_trajectory_cat"]["step"] + "_log*.out")
-    concat2_stderr_path = os.path.join(global_prop["original_trajectory_cat"]["path"], global_prop["original_trajectory_cat"]["step"] + "_log*.err")
+    concat_stdout_path = os.path.join(global_prop["original_trajectory_cat"]["path"], global_prop["original_trajectory_cat"]["step"] + "_log*.out")
+    concat_stderr_path = os.path.join(global_prop["original_trajectory_cat"]["path"], global_prop["original_trajectory_cat"]["step"] + "_log*.err")
 
     # Remove log files
     remove_tmp_files(short_MD_stdout_path, short_MD_stderr_path,
@@ -214,8 +212,7 @@ def remove_logs(continuation_MD_prop, global_prop):
                         pbc_4_stdout_path, pbc_4_stderr_path,
                         pbc_5_stdout_path, pbc_5_stderr_path,
                         pbc_6_stdout_path, pbc_6_stderr_path,
-                        concat_stdout_path, concat_stderr_path,
-                        concat2_stdout_path, concat2_stderr_path)
+                        concat_stdout_path, concat_stderr_path)
 
     return
 
@@ -261,20 +258,6 @@ def get_tmp_folders(a_dir):
             paths.append(os.path.join(a_dir, name))
 
     return paths
-
-def get_tpr_file(paths):
-    """
-    Temporal fix! - Deprecated
-    Finds the internal.tpr file in the temporal directories created by grompp_mdrun
-    Returns the path to that file or None if it does not exist
-    """
-
-    for path in paths:
-        matching_files = glob(os.path.join(path, 'internal.tpr'))
-        if matching_files:
-            return matching_files[0]
-    
-    return None
 
 def main_wf(configuration_path, input_structure, topology_path, index_path):
     '''
@@ -346,8 +329,7 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
     shutil.copy(topology_path, continuation_MD_paths["input_top_zip_path"])
 
     # Create concatenation folders 
-    if not os.path.exists(global_prop["prepared_trajectory_cat"]["path"]):
-        os.makedirs(global_prop["prepared_trajectory_cat"]["path"])
+    if not os.path.exists(global_prop["original_trajectory_cat"]["path"]):
         os.makedirs(global_prop["original_trajectory_cat"]["path"])
 
     # Initialize 'last step accepted' condition
@@ -389,26 +371,6 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
             grompp(**new_MD_paths, properties=new_MD_prop)
             mdrun(**global_paths['short_MD_mdrun'], properties=global_prop['short_MD_mdrun'])
 
-        # Take care of PBC (before the analysis of the CV)
-        
-        # Make molecule whole
-        gmx_image(**global_paths['pbc_1_whole'], properties=global_prop['pbc_1_whole'])
-
-        # Cluster molecules - e.g. RNA strands and ligand
-        gmx_image(**global_paths['pbc_2_cluster'], properties=global_prop['pbc_2_cluster'])
-
-        # Extract initial frame from trajectory
-        gmx_trjconv_trj(**global_paths['pbc_3_extract_frame'], properties=global_prop['pbc_3_extract_frame'])
-
-        # Avoid jumps of the ligand and use extracted frame as reference
-        gmx_image(**global_paths['pbc_4_nojump'], properties=global_prop['pbc_4_nojump'])
-        
-        # Center both the RNA and the ligand in the box
-        gmx_image(**global_paths['pbc_5_center'], properties=global_prop['pbc_5_center'])
-
-        # Minimize RMSD of RNA atoms wrt reference (fitting)
-        gmx_image(**global_paths['pbc_6_fit'], properties=global_prop['pbc_6_fit'])
-
         # Use MDAnalysis to analyze the CV (distance between 2 user-defined groups)
         last_step_accepted = analyze_cv(global_paths['short_MD_mdrun']["output_xtc_path"], global_paths['short_MD_mdrun']["output_gro_path"], 
                                         continuation_MD_prop['mdp'], accepted_steps, sumd_prop, sumd_log, output_path = conf.get_working_dir_path())
@@ -416,37 +378,30 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
         if last_step_accepted:
 
             # First accepted step
-            if not os.path.exists(global_paths["prepared_trajectory_cat"]["output_trj_path"]):
+            if not os.path.exists(global_paths["original_trajectory_cat"]["output_trj_path"]):
                 
                 # Copy short MD trajectory to concatenation folders
-                shutil.copyfile(global_paths['pbc_6_fit']["output_traj_path"], global_paths["prepared_trajectory_cat"]["output_trj_path"])
                 shutil.copyfile(global_paths['short_MD_mdrun']['output_xtc_path'], global_paths["original_trajectory_cat"]["output_trj_path"])
             
             # Subsequent accepted steps
             else:
 
                 # remove previous zip trajectory bundles if they exists
-                remove_tmp_files(global_paths["prepared_trajectory_cat"]["input_trj_zip_path"])
                 remove_tmp_files(global_paths["original_trajectory_cat"]["input_trj_zip_path"])
 
                 # Create a ZipFile objects
-                zipObject = ZipFile(global_paths["prepared_trajectory_cat"]["input_trj_zip_path"], 'w')
-                zipObject2 = ZipFile(global_paths["original_trajectory_cat"]["input_trj_zip_path"], 'w')
+                zipObject = ZipFile(global_paths["original_trajectory_cat"]["input_trj_zip_path"], 'w')
 
                 # Add previously concatenated trajectories to zip files
-                zipObject.write(global_paths["prepared_trajectory_cat"]["output_trj_path"])
-                zipObject2.write(global_paths["original_trajectory_cat"]["output_trj_path"])
+                zipObject.write(global_paths["original_trajectory_cat"]["output_trj_path"])
 
                 # Add short MD trajectory to zip files
-                zipObject.write(global_paths['pbc_6_fit']["output_traj_path"])
-                zipObject2.write(global_paths['short_MD_mdrun']['output_xtc_path'])
+                zipObject.write(global_paths['short_MD_mdrun']['output_xtc_path'])
 
                 # Close zip files
                 zipObject.close()
-                zipObject2.close()
 
                 # Concatenate
-                trjcat(**global_paths["prepared_trajectory_cat"], properties=global_prop["prepared_trajectory_cat"])
                 trjcat(**global_paths["original_trajectory_cat"], properties=global_prop["original_trajectory_cat"])
 
             # Reset failed steps counter
@@ -479,6 +434,26 @@ def main_wf(configuration_path, input_structure, topology_path, index_path):
     for tmp_folder in tmp_folders:
         shutil.move(tmp_folder, os.path.join(os.getcwd(), "tmp"))
 
+    # Try to image the concatenated trajectory
+
+    # Make molecule whole
+    gmx_image(**global_paths['pbc_1_whole'], properties=global_prop['pbc_1_whole'])
+
+    # Cluster molecules - e.g. RNA strands and ligand
+    gmx_image(**global_paths['pbc_2_cluster'], properties=global_prop['pbc_2_cluster'])
+
+    # Extract initial frame from trajectory
+    gmx_trjconv_trj(**global_paths['pbc_3_extract_frame'], properties=global_prop['pbc_3_extract_frame'])
+
+    # Avoid jumps of the ligand and use extracted frame as reference
+    gmx_image(**global_paths['pbc_4_nojump'], properties=global_prop['pbc_4_nojump'])
+    
+    # Center both the RNA and the ligand in the box
+    gmx_image(**global_paths['pbc_5_center'], properties=global_prop['pbc_5_center'])
+
+    # Minimize RMSD of RNA atoms wrt reference (fitting)
+    gmx_image(**global_paths['pbc_6_fit'], properties=global_prop['pbc_6_fit'])
+
     # Print timing information to the log file
     elapsed_time = time.time() - start_time
 
@@ -509,7 +484,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     main_wf(configuration_path = args.config_path, input_structure = args.structure_path, topology_path = args.topology_path, index_path = args.index_path)
-
-    # TODO: estimate CV's local fluctuations and relaxation time from the first step, and adjust the CV's slope threshold and the output frequency accordingly
-    # TODO: as we are keeping only the dry trajectory - we could increase the output frequency of the MD simulation
-    # TODO: add biasing potential to RC - several approaches (start from the most simple)
