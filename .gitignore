@@ -2,6 +2,7 @@ output*/
 output/
 input*/
 input/
+tmp/
 *.log
 *.err
 *.out
