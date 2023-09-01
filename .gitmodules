@@ -1,0 +1,3 @@
+[submodule "Other/SuMD-analyzer"]
+	path = Other/SuMD-analyzer
+	url = https://github.com/PabloNA97/SuMD-analyzer.git
