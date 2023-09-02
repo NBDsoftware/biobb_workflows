@@ -12,7 +12,10 @@ import argparse
 import csv
 import yaml
 import json
+import numpy as np
 from pathlib import Path
+
+import MDAnalysis as mda
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
@@ -112,7 +115,7 @@ def get_clusters_population(log_path: str, output_path: str, global_log) -> list
     # Return list with cluster population and id sorted by population
     return clusters_population
 
-def create_summary(cluster_names, cluster_populations, global_paths, output_path, output_summary_path = None):
+def create_summary(cluster_names, cluster_populations, cluster_filtered_pockets, global_paths, output_path, output_summary_path = None):
     '''
     Print in log file all available pockets after filtering for each centroid. 
     Include also information for each pocket and population for each centroid if available.
@@ -122,6 +125,7 @@ def create_summary(cluster_names, cluster_populations, global_paths, output_path
 
         cluster_names         (list): List with names of centroids
         cluster_populations   (list): List with tuples containing (population, cluster_ID) ordered by population
+        cluster_filtered_pockets (dict): Dictionary with filtered pockets for each centroid
         global_paths          (dict): global paths dictionary
         output_path            (str): path to output folder
         output_summary_path    (str): path to output summary file
@@ -132,11 +136,7 @@ def create_summary(cluster_names, cluster_populations, global_paths, output_path
         Info dumped to yaml summary file
     '''
 
-    # Pattern that can be used to extract pocket ID from string with pocket name: (str) pocket3 -> (int) 3
-    pocketID_pattern = r'pocket(\d+)'
-
     # Find step names
-    filter_cavities_folder = 'step4_filter_cavities'
     cavity_analysis_folder = 'step3_cavity_analysis'
 
     # Find summary file name
@@ -147,18 +147,12 @@ def create_summary(cluster_names, cluster_populations, global_paths, output_path
 
     # For each centroid
     for cluster_index, cluster_name in enumerate(cluster_names):
-
-        # Name of filtered pockets log file
-        filtering_log_name =  f"{cluster_name}_{filter_cavities_folder}_log.out"
-
-        # Path to filtered pockets log file
-        filtering_log_path = os.path.join(output_path, cluster_name, filter_cavities_folder, filtering_log_name)
-
-        # Find pockets in log file
-        pocket_names = find_matching_lines(pattern=r'pocket\d+$', filepath=filtering_log_path)
+        
+        # Find list of pocket names for this cluster
+        pocket_names = cluster_filtered_pockets[cluster_name]
 
         # If any pockets are found 
-        if pocket_names is not None:
+        if len(pocket_names) > 0:
 
             # Dictionary with information for this cluster
             cluster_summary = {}
@@ -176,26 +170,14 @@ def create_summary(cluster_names, cluster_populations, global_paths, output_path
             with open(summary_path) as json_file:
                 all_pockets_summary = json.load(json_file)
 
-            # list with pocket IDs for this cluster
-            pocket_IDs = []
-
-            # For each filtered pocket: pocket1, pocket4 ...
+            # For each filtered pocket
             for pocket_name in pocket_names:
-
-                # Strip whitespaces
-                pocket_name = pocket_name.strip()
 
                 # Save entry with pocket information
                 cluster_summary.update({pocket_name : all_pockets_summary[pocket_name]})
 
-                # Search for the pocket ID in pocket name
-                match = re.search(pocketID_pattern, pocket_name)
-
-                # Append pocket ID to list
-                pocket_IDs.append(int(match[1]))
-
             # Save pocket IDs
-            cluster_summary.update({'pockets' : pocket_IDs})
+            cluster_summary.update({'pockets' : pocket_names})
 
             # Update global_summary
             global_summary.update({cluster_name : cluster_summary})
@@ -209,86 +191,103 @@ def create_summary(cluster_names, cluster_populations, global_paths, output_path
 
     return 
 
-def find_matching_line(pattern, filepath):
-    '''
-    Finds first line in file containing a given pattern
+def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filter_pockets_zip: str, properties: dict, global_log):
+    """
+    Function that filters pockets by the distance of their center of mass to a group of residues.
 
     Inputs
     ------
 
-        pattern  (regex pattern): regular expression pattern to search in file lines
-        filepath           (str): file path to search in
-    
-    Output
-    ------
-    
-        line (str): line matching the pattern or None if no line matches the pattern
-    '''
-
-    # Open log file
-    file = open(filepath, 'r')
-    
-    # Read all lines
-    lines = file.readlines()
-
-    # Search matching string in each line
-    for line in lines:
-
-        match = re.search(pattern, line)
-
-        if match is not None:
-
-            # Close file
-            file.close()
-
-            return match[1]
-    
-    file.close()
-
-    return None
-
-def find_matching_lines(pattern, filepath):
-    '''
-    Finds all lines in file containing a given pattern
-
-    Inputs
-    ------
-
-        pattern  (regex pattern): regular expression pattern to search in file lines
-        filepath           (str): file path to search in
+        input_pockets_zip         (str): path to input pockets zip file
+        input_pdb_path            (str): path to input pdb with the pocket model 
+        output_filter_pockets_zip (str): path to filtered pockets zip file
+        properties               (dict): dictionary with properties for this step
+        global_log                (log): global log object
     
     Output
     ------
 
-        lines (list(str)): lines matching the pattern or None if no line matches the pattern
-    '''
+        filtered_pocket_IDs (list(str)): list with pocket IDs that passed the filter
+    """
 
-    # Open log file
-    file = open(filepath, 'r')
+
+    # To return and use to create the summary file
+    filtered_pocket_IDs = []
+
+    # Create step folder
+    fu.create_dir(properties['path'])
+
+    # Extract all pockets in step folder
+    pocket_paths = fu.unzip_list(zip_file=input_pockets_zip, dest_dir=properties['path'])
+
+    # If no pockets are found, return
+    if len(pocket_paths) == 0:
+        global_log.warning("No pockets found after filtering")
+        # Erase all the pockets remaining in the step folder
+        fu.rm_file_list(file_list=pocket_paths)
+        return filtered_pocket_IDs
     
-    # Read all lines
-    lines = file.readlines()
+    # Load input pdb
+    model_universe = mda.Universe(input_pdb_path)
 
-    # List to save matching lines
-    matchingLines = []
+    # Select the residue of interest, e.g., residue number 42
+    residue_selection = model_universe.select_atoms(properties['residue_selection'])
 
-    # Search matching string in each line
-    for line in lines:
+    # Compute the center of mass of the selected residue
+    residue_com = np.array(residue_selection.center_of_mass())
 
-        match = re.search(pattern, line)
-
-        if match is not None:
-
-            matchingLines.append(match[0])
-
-    # Close file
-    file.close()
-
-    # If no lines contained the pattern, return None
-    if len(matchingLines) == 0:
-        matchingLines = None
+    # Save paths to pqr files in another list
+    pockets_pqr_paths = []
     
-    return matchingLines
+    # For each pocket
+    for pocket_path in pocket_paths:
+
+        # If path is a pqr file, append to list
+        if pocket_path.endswith('.pqr'):
+            pockets_pqr_paths.append(pocket_path)
+
+    # To zip only the filtered pockets
+    filtered_pocket_paths = []
+
+    # Iterate over all pqr files
+    for pocket_pqr_path in pockets_pqr_paths:
+
+        # Find pocket ID as file name without "_vert.pqr"
+        pocket_ID = Path(pocket_pqr_path).stem.replace("_vert", "")
+
+        # Load pocket
+        pocket_universe = mda.Universe(pocket_pqr_path)
+
+        # Select all atoms in pocket
+        pocket_selection = pocket_universe.select_atoms('all')
+
+        # Compute the center of mass of the pocket
+        pocket_com = np.array(pocket_selection.center_of_mass())
+
+        # Compute distance between pocket and residue center of mass using numpy
+        distance = np.linalg.norm(pocket_com - residue_com)
+
+        # Save pocket if distance is smaller than threshold
+        if distance < properties['distance_threshold']:
+
+            # Save pocket
+            filtered_pocket_IDs.append(pocket_ID)
+            filtered_pocket_paths.append(pocket_pqr_path)
+
+    # If no pockets are found, return
+    if len(filtered_pocket_paths) == 0:
+        global_log.warning("No pockets found after filtering")
+        # Erase all the pockets remaining in the step folder
+        fu.rm_file_list(file_list=pocket_paths)
+        return filtered_pocket_IDs
+    
+    # Zip filtered pockets
+    fu.zip_list(zip_file=output_filter_pockets_zip, file_list=filtered_pocket_paths)
+
+    # Erase all the pockets remaining in the step folder
+    fu.rm_file_list(file_list=pocket_paths)
+
+    return filtered_pocket_IDs
 
 
 def main_wf(configuration_path, traj_path, top_path, clustering_path, output_path, output_summary_path):
@@ -390,7 +389,10 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
         # Cluster names are the pdb file names
         cluster_names = [Path(pdb_path).stem for pdb_path in pdb_paths]
     
-    global_log.info(f"Number of clusters to analyze: {num_clusters}")
+    global_log.info(f"Number of models to analyze: {num_clusters}")
+
+    # Dictionary to save the filtered pocket IDs for each model
+    cluster_filtered_pockets = {}
 
     for cluster_index, cluster_name in enumerate(cluster_names):
 
@@ -410,6 +412,7 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
 
             # Update input structure path of step3
             cluster_paths['step3_cavity_analysis']['input_pdb_path'] = pdb_paths[cluster_index]
+            cluster_paths['step5_filter_residue_com']['input_pdb_path'] = pdb_paths[cluster_index]
         
         # STEP 3: Cavity analysis
         global_log.info("step3_cavity_analysis: Compute protein cavities using fpocket")
@@ -419,9 +422,16 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
         global_log.info("step4_filter_cavities: Filter found cavities")
         fpocket_filter(**cluster_paths['step4_filter_cavities'], properties=cluster_prop["step4_filter_cavities"])
 
+        # STEP 5: Filter by pocket center of mass 
+        global_log.info("step5_filter_residue_com: Filter cavities by center of mass distance to a group of residues") 
+        filtered_pockets_IDs = filter_residue_com(**cluster_paths['step5_filter_residue_com'], properties=cluster_prop["step5_filter_residue_com"], global_log=global_log)
+
+        # Update dictionary with filtered pockets
+        cluster_filtered_pockets.update({cluster_name : filtered_pockets_IDs})
+
     # Create summary with available pockets per cluster 
     global_log.info("    Creating YAML summary file...")
-    create_summary(cluster_names, cluster_populations, global_paths, output_path, output_summary_path)
+    create_summary(cluster_names, cluster_populations, cluster_filtered_pockets, global_paths, output_path, output_summary_path)
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time

@@ -8,4 +8,5 @@ dependencies:
   - biobb_structure_utils>=4.0.0
   - biobb_analysis>=4.0.1
   - biobb_gromacs>=4.0.0
+  - mdanalysis
   - conda
