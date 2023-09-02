@@ -54,6 +54,7 @@ step1_gmx_cluster:
     dista: False
     method: linkage                      
     cutoff: 0.06                         # nm (RMSD cut-off)
+    nofit: True                     # Wether to use the RmsdGroups also for fitting or not
 
 step2_extract_models:
   tool: extract_model

@@ -67,7 +67,7 @@ step2_extract_models:
     output_structure_path: cluster.pdb     
   properties:
 
-# Step 3-4: Cavity analysis with fpocket on centroids + filter
+# Step 3-5: Cavity analysis with fpocket on centroids + filter
 
 step3_cavity_analysis:
   tool: fpocket_run
@@ -88,6 +88,15 @@ step4_filter_cavities:
     input_summary: dependency/step3_cavity_analysis/output_summary
     output_filter_pockets_zip: filtered_pockets.zip
   properties:
-    score: [0.3, 1]
-    druggability_score: [0.3, 1]
-    volume: [200, 5000]
+    score: [0.1, 1]
+    druggability_score: [0.1, 1]
+    volume: [100, 5000]
+
+step5_filter_residue_com:
+  paths: 
+    input_pockets_zip: dependency/step4_filter_cavities/output_filter_pockets_zip
+    input_pdb_path: dependency/step2_extract_models/output_structure_path
+    output_filter_pockets_zip: filtered_pockets.zip
+  properties:
+    residue_selection: "resid 124"      # MDAnalysis selection string
+    distance_threshold: 6               # Distance threshold in Angstroms (6-8 are reasonable values if the residue/s are part of the pocket)
