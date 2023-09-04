@@ -217,14 +217,17 @@ def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filte
     # Create step folder
     fu.create_dir(properties['path'])
 
+    # Check if input pockets zip file exists
+    if not os.path.exists(input_pockets_zip):
+        global_log.warning("Input pockets zip file not found, previous step didn't find any pockets or failed")
+        return filtered_pocket_IDs
+
     # Extract all pockets in step folder
     pocket_paths = fu.unzip_list(zip_file=input_pockets_zip, dest_dir=properties['path'])
 
     # If no pockets are found, return
     if len(pocket_paths) == 0:
         global_log.warning("No pockets found after filtering")
-        # Erase all the pockets remaining in the step folder
-        fu.rm_file_list(file_list=pocket_paths)
         return filtered_pocket_IDs
     
     # Load input pdb
