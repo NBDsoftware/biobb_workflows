@@ -10,6 +10,26 @@ import logging
 import regex as re
 from pathlib import Path
 
+def load_model(model_name, model_path, residues_to_highlight):
+
+    """
+    Function to load a model and highlight the special residues 
+    """
+
+    # Log
+    logger.info(f"Loading {model_name}")
+
+    # Load model
+    pymol.cmd.load(model_path, model_name)
+
+    # Change color of the model
+    pymol.cmd.color("gray", model_name)
+
+    # Change color of the special residues
+    pymol.cmd.color("cyan", f"{model_name} and {residues_to_highlight}")
+
+    return
+
 # Define constants
 LOG_FILENAME = "visualize_results.log"
 
@@ -39,17 +59,20 @@ logger.info("==============\n")
 ##########
 
 # Change to the output folder of the cavity analysis
-output_folder = "/home/nbd-pablo/repos/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/output"
+output_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/Crystals_and_models/prepared/pocket_analysis"
 
 # Change to the input folder of the cavity analysis or path were the models are stored
-input_folder = "/home/nbd-pablo/repos/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/input"
+input_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/Crystals_and_models/prepared"
+
+# Wether to show all the models or just the ones with pockets
+show_all_models = False
 
 # Should be ok by default
 filtered_pockets_folder = "step5_filter_residue_com"
 filtered_pockets_filename = "filtered_pockets.zip"
 
 # Special residues to highlight
-residues_to_highlight = f"i. 114-124" # f"i. 21-31" 
+residues_to_highlight = f"i. 114-124" # f"i. 21-31"
 
 # List pdb files inside the input folder
 model_paths = glob.glob(f"{input_folder}/*.pdb")
@@ -90,17 +113,9 @@ for model_path in model_paths:
     # Find model name
     model_name = Path(model_path).stem
 
-    # Log
-    logger.info(f"Loading {model_name}")
-
-    # Load model
-    pymol.cmd.load(model_path, model_name)
-
-    # Change color of the model
-    pymol.cmd.color("gray", model_name)
-
-    # Change color of the special residues
-    pymol.cmd.color("cyan", f"{model_name} and {residues_to_highlight}")
+    # Load all models
+    if show_all_models:
+        load_model(model_name, model_path, residues_to_highlight)
 
     # Create corresponding filtered pockets path
     filtered_pockets_path = os.path.join(output_folder, f"{model_name}/{filtered_pockets_folder}/")
@@ -113,6 +128,10 @@ for model_path in model_paths:
 
         # If pockets were found, load them
         if len(pocket_paths) > 0:
+            
+            # Load only the models with pockets
+            if not show_all_models:
+                load_model(model_name, model_path, residues_to_highlight)
 
             pocket_objects = []
 
