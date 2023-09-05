@@ -10,10 +10,18 @@ import logging
 import regex as re
 from pathlib import Path
 
-def load_model(model_name, model_path, residues_to_highlight):
+def load_model(model_name, model_path, models_cartoon_color, residues_to_highlight):
 
     """
-    Function to load a model and highlight the special residues 
+    Function to load a model and highlights the special residues 
+
+    Inputs:
+    -------
+        
+        model_name (str): name of the model to load (object name in pymol)
+        model_path (str): path to the model to load (pdb file)
+        models_cartoon_color (str): color of the model
+        residues_to_highlight (dict): dictionary with the special residues to highlight, e.g. {"i. 114-124": "cyan"}
     """
 
     # Log
@@ -23,10 +31,11 @@ def load_model(model_name, model_path, residues_to_highlight):
     pymol.cmd.load(model_path, model_name)
 
     # Change color of the model
-    pymol.cmd.color("gray", model_name)
+    pymol.cmd.color(models_cartoon_color, model_name)
 
     # Change color of the special residues
-    pymol.cmd.color("cyan", f"{model_name} and {residues_to_highlight}")
+    for residues in residues_to_highlight.keys():
+        pymol.cmd.color(residues_to_highlight[residues], f"{model_name} and {residues}")
 
     return
 
@@ -67,12 +76,44 @@ input_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/Crystals_and_models/pre
 # Wether to show all the models or just the ones with pockets
 show_all_models = False
 
+# Distance to the pocket to show the atoms explicitly
+distance_to_pocket = 6
+
+# Color of the models
+models_cartoon_color = "white"
+
+# Align all models to the first one - use with care if several pockets are found for each model
+align_all = True
+
 # Should be ok by default
 filtered_pockets_folder = "step5_filter_residue_com"
 filtered_pockets_filename = "filtered_pockets.zip"
 
-# Special residues to highlight
-residues_to_highlight = f"i. 114-124" # f"i. 21-31"
+# Default dictionary with special residues to highlight
+residues_to_highlight = {
+}
+    
+# Dictionary with special residues to highlight, e.g. {"i. 114-124": "cyan"} 
+#residues_to_highlight = {
+#    "i. 114-124": "cyan",
+#    "i. 125-127": "blue",
+#    "i. 131-136": "magenta",
+#    "i. 139-146": "yellow",
+#    "i. 277-289": "red",
+#    "i. 221-230": "orange",
+#    "i. 231-236": "green"
+# }
+
+# Different version of the dictionary (for simulation structures)
+# residues_to_highlight = {
+#     "i. 21-31": "cyan",
+#     "i. 32-34": "blue", 
+#     "i. 38-43": "magenta",
+#     "i. 46-53": "yellow",
+#     "i. 184-196": "red",
+#     "i. 128-137": "orange",
+#     "i. 138-143": "green"
+# }
 
 # List pdb files inside the input folder
 model_paths = glob.glob(f"{input_folder}/*.pdb")
@@ -107,6 +148,10 @@ for filtered_pockets_path in filtered_pockets_paths:
 # Load models and pockets #
 ###########################
 
+# Load the first model as reference
+reference_model = Path(model_paths[0]).stem
+load_model(reference_model, model_paths[0], models_cartoon_color, residues_to_highlight)
+
 # Load all models and corresponding filtered pockets if any
 for model_path in model_paths:
 
@@ -115,7 +160,7 @@ for model_path in model_paths:
 
     # Load all models
     if show_all_models:
-        load_model(model_name, model_path, residues_to_highlight)
+        load_model(model_name, model_path, models_cartoon_color, residues_to_highlight)
 
     # Create corresponding filtered pockets path
     filtered_pockets_path = os.path.join(output_folder, f"{model_name}/{filtered_pockets_folder}/")
@@ -131,7 +176,7 @@ for model_path in model_paths:
             
             # Load only the models with pockets
             if not show_all_models:
-                load_model(model_name, model_path, residues_to_highlight)
+                load_model(model_name, model_path, models_cartoon_color, residues_to_highlight)
 
             pocket_objects = []
 
@@ -159,13 +204,38 @@ for model_path in model_paths:
                 # Hide licorice representation (hide licorice, pocket_name)
                 pymol.cmd.hide("licorice", pocket_name)
 
+                # Color pocket by atom type using util.cbag
+                pymol.cmd.util.cbac(pocket_name)
+
                 # Show mesh representation (show mesh, pocket_name)
                 pymol.cmd.show("mesh", pocket_name)
 
                 # Show licorice representation of the atoms close to the pocket (show licorice, (all within 5 of pocket_name) and not pocket_name)
-                pymol.cmd.show("licorice", f"({model_name} within 6 of {pocket_name}) and not {pocket_name}")
+                pymol.cmd.show("licorice", f"({model_name} within {distance_to_pocket} of {pocket_name}) and not {pocket_name}")
+
+                # Color the side-chain atoms close to the pocket by atom type using util.cbac
+                pymol.cmd.util.cbaw(f"({model_name} within {distance_to_pocket} of {pocket_name}) and not {pocket_name}")
             
-            # Group models and pockets together
+            # Copy the last pocket into temporal new object before aligning to reference model
+            pymol.cmd.copy_to(f"{model_name}_and_pockets", f"{model_name} or {pocket_objects[-1]}")
+
+            # Delete the original objects
+            pymol.cmd.delete(pocket_objects[-1])
+            pymol.cmd.delete(model_name)
+            
+            # Align temporal object to reference 
+            pymol.cmd.align(f"{model_name}_and_pockets", reference_model)
+
+            # Extract the pocket  
+            pymol.cmd.extract(f"{pocket_objects[-1]}", f"{model_name}_and_pockets and resname STP")
+
+            # Extract the model
+            pymol.cmd.extract(f"{model_name}", f"{model_name}_and_pockets and not resname STP")
+
+            # Delete temporal object
+            pymol.cmd.delete(f"{model_name}_and_pockets")
+
+            # Group model and pockets together
             pymol.cmd.group(f"{model_name}_group", f"{model_name} {' '.join(pocket_objects)}")
 
         else:
@@ -176,3 +246,6 @@ for model_path in model_paths:
 
 # Hide all hydrogens (hide licorice, hydrogens)
 pymol.cmd.hide("licorice", "hydrogens")
+
+# Hide reference model
+pymol.cmd.hide("everything", reference_model)
