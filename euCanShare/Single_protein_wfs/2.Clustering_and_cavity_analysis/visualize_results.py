@@ -68,22 +68,26 @@ logger.info("==============\n")
 ##########
 
 # Change to the output folder of the cavity analysis
-output_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/Crystals_and_models/prepared/pocket_analysis"
+output_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/round3_new/clustering/extended_pocket/states/pocket_analysis"
 
 # Change to the input folder of the cavity analysis or path were the models are stored
-input_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/Crystals_and_models/prepared"
+input_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/round3_new/clustering/extended_pocket/states/input"
+
+# Experimental structure to compare the models to
+experimental_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/Crystals_and_models/prepared"
+experimental_colors = ["tv_red", "salmon", "orange", "yellow", "tv_green", "cyan", "marine", 
+                "purple", "white", "chocolate", "forest", "magenta", "teal", "deepblue", 
+                "limon", "splitpea", "blue", "gray", "red", "pink" ]
+experimental_colors.extend(experimental_colors)
 
 # Wether to show all the models or just the ones with pockets
 show_all_models = False
 
 # Distance to the pocket to show the atoms explicitly
-distance_to_pocket = 6
+distance_to_pocket = 8
 
 # Color of the models
 models_cartoon_color = "white"
-
-# Align all models to the first one - use with care if several pockets are found for each model
-align_all = True
 
 # Should be ok by default
 filtered_pockets_folder = "step5_filter_residue_com"
@@ -241,8 +245,38 @@ for model_path in model_paths:
         else:
             logger.info(f"No pockets found for {model_name}")
 
+            # If we are showing all models, align it to the reference
+            if show_all_models and model_name != reference_model:
+                pymol.cmd.align(model_name, reference_model)
     else:
         logger.info(f"No {filtered_pockets_folder} folder found for {model_name}")
+
+        # If we are showing all models, align it to the reference
+        if show_all_models and model_name != reference_model:
+            pymol.cmd.align(model_name, reference_model)
+
+
+#################################
+# Load experimental structures  #
+#################################
+
+# Find the experimental paths
+experimental_paths = sorted(glob.glob(f"{experimental_folder}/*.pdb"))
+
+# Load experimental structures
+for model_index, model_path in enumerate(experimental_paths):
+
+    # Find model name
+    model_name = Path(model_path).stem
+
+    # Load model
+    pymol.cmd.load(model_path, model_name)
+
+    # Align to the reference structure. NOTE: "and not {flexible_loop_selection} and name CA"
+    result = pymol.cmd.align(model_name , reference_model, cycles = 20)
+
+    # Set a random color to the model
+    pymol.cmd.color(experimental_colors[model_index], model_name)
 
 # Hide all hydrogens (hide licorice, hydrogens)
 pymol.cmd.hide("licorice", "hydrogens")
