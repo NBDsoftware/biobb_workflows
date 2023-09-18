@@ -1,4 +1,4 @@
-##!/usr/bin/env python3
+#!/usr/bin/env python3
 
 # Conversion of the BioExcel building blocks Python tutorials
 # to a command line workflow with two files: Python Script and YAML input configuration file
