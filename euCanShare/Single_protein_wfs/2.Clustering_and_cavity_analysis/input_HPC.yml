@@ -98,5 +98,5 @@ step5_filter_residue_com:
     input_pdb_path: dependency/step2_extract_models/output_structure_path
     output_filter_pockets_zip: filtered_pockets.zip
   properties:
-    residue_selection: "resid 124"      # MDAnalysis selection string
+    residue_selection: "resid 31 or resid 21"      # MDAnalysis selection string
     distance_threshold: 6               # Distance threshold in Angstroms (6-8 are reasonable values if the residue/s are part of the pocket)
