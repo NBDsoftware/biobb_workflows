@@ -117,50 +117,50 @@ def get_clusters_population(log_path: str, output_path: str, global_log) -> list
 
 def create_summary(cluster_names, cluster_populations, cluster_filtered_pockets, global_paths, output_path, output_summary_path = None):
     '''
-    Print in log file all available pockets after filtering for each centroid. 
-    Include also information for each pocket and population for each centroid if available.
+    Creates 3 sorted summary files with information for each pocket found and filtered for each model. 
+    The summary file is a YAML file.
+
     
     Inputs
     ------
 
-        cluster_names         (list): List with names of centroids
-        cluster_populations   (list): List with tuples containing (population, cluster_ID) ordered by population
-        cluster_filtered_pockets (dict): Dictionary with filtered pockets for each centroid
-        global_paths          (dict): global paths dictionary
-        output_path            (str): path to output folder
-        output_summary_path    (str): path to output summary file
+        cluster_names            (list): List with names of clusters
+        cluster_populations      (list): List with tuples containing (population, cluster_ID) ordered by population
+        cluster_filtered_pockets (dict): Dictionary with filtered pocket's IDs for each cluster
+        global_paths             (dict): global paths dictionary
+        output_path               (str): path to output folder
+        output_summary_path       (str): path to output summary file
     
     Output
     ------
 
-        Info dumped to yaml summary file
+        Info dumped to yaml summary files
     '''
 
     # Find step names
     cavity_analysis_folder = 'step3_cavity_analysis'
 
-    # Find summary file name
+    # Find unfiltered summary file name
     pockets_summary_filename = Path(global_paths[cavity_analysis_folder]['output_summary']).name
 
     # Dictionary where all available cluster_summary dictionaries will be saved
     global_summary = {}
 
-    # For each centroid
+    # For each cluster
     for cluster_index, cluster_name in enumerate(cluster_names):
         
-        # Find list of pocket names for this cluster
-        pocket_names = cluster_filtered_pockets[cluster_name]
+        # Find list of filtered pocket IDs for this cluster
+        filtered_pocket_names = cluster_filtered_pockets[cluster_name]
 
         # If any pockets are found 
-        if len(pocket_names) > 0:
+        if len(filtered_pocket_names) > 0:
 
             # Dictionary with information for this cluster
             cluster_summary = {}
 
             # If clustering was done externally we might not have this information 
             if cluster_populations is not None:
-
-                # Save population of centroid
+                # Save population of cluster
                 cluster_summary.update({'population' : cluster_populations[cluster_index][0]})
 
             # Path to this cluster's summary with information for all pocket found
@@ -171,23 +171,43 @@ def create_summary(cluster_names, cluster_populations, cluster_filtered_pockets,
                 all_pockets_summary = json.load(json_file)
 
             # For each filtered pocket
-            for pocket_name in pocket_names:
+            for pocket_name in filtered_pocket_names:
 
                 # Save entry with pocket information
                 cluster_summary.update({pocket_name : all_pockets_summary[pocket_name]})
 
             # Save pocket IDs
-            cluster_summary.update({'pockets' : pocket_names})
+            cluster_summary.update({'pockets' : filtered_pocket_names})
 
             # Update global_summary
             global_summary.update({cluster_name : cluster_summary})
 
-    # Save global summary in YAML file
+    # Sort models by 3 criteria (volume, druggability score, score)
+    sorted_pockets_by_volume, sorted_pockets_by_drug_score, sorted_pockets_by_score = sort_summary(global_summary)
+    
+    # Create file names for sorted summary files
     if output_summary_path is None:
-        output_summary_path = os.path.join(output_path, 'summary.yml')
-    with open(output_summary_path, 'w') as outfile:
-        yaml.dump(global_summary, outfile)
-    outfile.close()
+        volume_summary_path = os.path.join(output_path, f"pocket_analysis_by_volume.yml")
+        drug_score_summary_path = os.path.join(output_path, f"pocket_analysis_by_drug_score.yml")
+        score_summary_path = os.path.join(output_path, f"pocket_analysis_by_score.yml")
+    else:
+        parent_path = Path(output_summary_path).parent
+        stem_name = Path(output_summary_path).stem
+        volume_summary_path = os.path.join(parent_path, f"{stem_name}_by_volume.yml")
+        drug_score_summary_path = os.path.join(parent_path, f"{stem_name}_by_drug_score.yml")
+        score_summary_path = os.path.join(parent_path, f"{stem_name}_by_score.yml")
+
+    # Write the sorted pockets by volume to a YAML file
+    with open(volume_summary_path, 'w') as f:
+        yaml.dump(sorted_pockets_by_volume, f, sort_keys = False)
+
+    # Write the sorted pockets by druggability score to a YAML file
+    with open(drug_score_summary_path, 'w') as f:
+        yaml.dump(sorted_pockets_by_drug_score, f, sort_keys = False)
+    
+    # Write the sorted pockets by score to a YAML file
+    with open(score_summary_path, 'w') as f:
+        yaml.dump(sorted_pockets_by_score, f, sort_keys = False)
 
     return 
 
@@ -233,10 +253,10 @@ def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filte
     # Load input pdb
     model_universe = mda.Universe(input_pdb_path)
 
-    # Select the residue of interest, e.g., residue number 42
+    # Select the residues of interest, e.g. residue number 42
     residue_selection = model_universe.select_atoms(properties['residue_selection'])
 
-    # Compute the center of mass of the selected residue
+    # Compute the center of mass of the selected residues
     residue_com = np.array(residue_selection.center_of_mass())
 
     # Save paths to pqr files in another list
@@ -249,7 +269,7 @@ def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filte
         if pocket_path.endswith('.pqr'):
             pockets_pqr_paths.append(pocket_path)
 
-    # To zip only the filtered pockets
+    # Save pockets that pass the distance filter in another list
     filtered_pocket_paths = []
 
     # Iterate over all pqr files
@@ -291,6 +311,80 @@ def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filte
     fu.rm_file_list(file_list=pocket_paths)
 
     return filtered_pocket_IDs
+
+def sort_summary(pockets_summary: dict):
+    """
+    Function that reads the dictionary with all models and pockets and sorts the models by:
+
+        1. Volume of the largest pocket in that model
+        2. Druggability score of the best pocket in that model
+        3. Score of the best pocket in that model
+    
+    It returns the 3 dictionaries with sorted models and their pockets.
+
+    Inputs
+    ------
+
+        pockets_summary (dict): dictionary with all models and pockets
+    
+    Outputs
+    -------
+
+        sorted_pockets_by_volume     (dict): dictionary with models sorted by volume
+        sorted_pockets_by_drug_score (dict): dictionary with models sorted by druggability score
+        sorted_pockets_by_score      (dict): dictionary with models sorted by score
+    
+    """
+
+    # Sort the pockets by volume
+    sorted_pockets_by_volume = dict(sorted(pockets_summary.items(), key = lambda x: largest_volume(x[1]), reverse = True))
+
+    # Sort the pockets by druggability score
+    sorted_pockets_by_drug_score = dict(sorted(pockets_summary.items(), key = lambda x: highest_drug_score(x[1]), reverse = True))
+
+    # Sort the pockets by score
+    sorted_pockets_by_score = dict(sorted(pockets_summary.items(), key = lambda x: highest_score(x[1]), reverse = True))
+    
+    return sorted_pockets_by_volume, sorted_pockets_by_drug_score, sorted_pockets_by_score
+
+def largest_volume(model: dict):
+    """
+    Function to sort the pockets by volume
+    """
+
+    # Find the largest volume
+    largest_volume = 0
+    for pocket in model["pockets"]:
+        if model[pocket]["volume"] > largest_volume:
+            largest_volume = model[pocket]["volume"]
+
+    return largest_volume
+
+def highest_drug_score(model: dict):
+    """
+    Function to sort the pockets by druggability score
+    """
+
+    # Find the highest druggability score
+    highest_drug_score = 0
+    for pocket in model["pockets"]:
+        if model[pocket]["druggability_score"] > highest_drug_score:
+            highest_drug_score = model[pocket]["druggability_score"]
+
+    return highest_drug_score
+
+def highest_score(model: dict):
+    """
+    Function to sort the pockets by score
+    """
+
+    # Find the highest score
+    highest_score = 0
+    for pocket in model["pockets"]:
+        if model[pocket]["score"] > highest_score:
+            highest_score = model[pocket]["score"]
+
+    return highest_score
 
 
 def main_wf(configuration_path, traj_path, top_path, clustering_path, output_path, output_summary_path):
