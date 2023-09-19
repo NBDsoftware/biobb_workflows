@@ -389,5 +389,8 @@ for model_index, model_path in enumerate(experimental_paths):
 # Hide all hydrogens (hide licorice, hydrogens)
 pymol.cmd.hide("licorice", "hydrogens")
 
+# Hide reference model
+pymol.cmd.hide("everything", reference_model)
+
 # Set min_mesh_spacing to 0.4
 pymol.cmd.set("min_mesh_spacing", 0.4)
