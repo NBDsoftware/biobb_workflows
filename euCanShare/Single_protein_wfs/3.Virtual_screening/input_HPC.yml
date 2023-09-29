@@ -8,7 +8,7 @@ remove_tmp: True
 step1_fpocket_select:
   tool: fpocket_select
   paths:
-    input_pockets_zip: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/2.Clustering_and_cavity_analysis/output/step4_filter_cavities/filtered_pockets_cluster_2.zip
+    input_pockets_zip: /path/to/input_pockets.zip
     output_pocket_pdb: fpocket_cavity.pdb
     output_pocket_pqr: fpocket_pocket.pqr
   properties:
@@ -17,7 +17,7 @@ step1_fpocket_select:
 step1b_extract_residues:
   tool: extract_residues
   paths:
-    input_structure_path: dependency/step1_fpocket_select/output_pocket_pdb
+    input_structure_path: /path/to/input_structure.pdb
     output_residues_path: pocket_residues.pdb
   properties:
     residues: [4,5,6]
@@ -34,7 +34,7 @@ step2_box:
 step3_str_check_add_hydrogens:
   tool: str_check_add_hydrogens
   paths:
-    input_structure_path: /shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/EUCANSHARE/Single_protein_wfs/2.Clustering_and_cavity_analysis/output/step2_extract_models/cluster_2.pdb
+    input_structure_path: /path/to/input_structure.pdb
     output_structure_path: prep_receptor.pdbqt
   properties:
     charges: True
