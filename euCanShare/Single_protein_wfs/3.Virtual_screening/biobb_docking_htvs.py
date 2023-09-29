@@ -15,6 +15,7 @@ from biobb_vs.fpocket.fpocket_select import fpocket_select
 from biobb_vs.vina.autodock_vina_run import autodock_vina_run
 from biobb_chemistry.babelm.babel_convert import babel_convert
 from biobb_structure_utils.utils.str_check_add_hydrogens import str_check_add_hydrogens
+from biobb_structure_utils.utils.extract_residues import extract_residues
 
 def find_matching_str(pattern, filepath):
     '''
@@ -294,7 +295,7 @@ def clean_output(ligand_names, output_path):
         ligand_path = os.path.join(output_path, name)
         shutil.rmtree(ligand_path)
     
-def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_zip, pocket, output_path, num_top_ligands, keep_poses):
+def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_zip, pocket, output_path, num_top_ligands, keep_poses, dock_to_residues):
     '''
     Main HTVS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
     and a receptor to screen the pocket of the receptor using the ligand library (with AutoDock).
@@ -310,6 +311,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
         output_path          (str): path to output directory
         num_top_ligands      (int): number of top ligands to be saved
         keep_poses          (bool): keep poses of top ligands
+        dock_to_residues    (bool): dock to residues instead of cavity
 
     Outputs
     -------
@@ -347,9 +349,17 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     if pocket is not None:
         global_prop['step1_fpocket_select']['pocket'] = pocket
 
-    # STEP 1: Pocket selection from filtered list 
-    global_log.info("step1_fpocket_select: Extract pocket cavity")
-    fpocket_select(**global_paths["step1_fpocket_select"], properties=global_prop["step1_fpocket_select"])
+    if dock_to_residues:
+        # STEP 1: Extract residues from structure
+        global_log.info("step1b_extract_residues: Extracting residues from structure")
+        extract_residues(**global_paths["step1b_extract_residues"], properties=global_prop["step1b_extract_residues"])
+
+        # Modify step2_box paths to use residues
+        global_paths['step2_box']['input_pdb_path'] = global_paths['step1b_extract_residues']['output_residues_path']
+    else:
+        # STEP 1: Pocket selection from filtered list 
+        global_log.info("step1_fpocket_select: Extract pocket cavity")
+        fpocket_select(**global_paths["step1_fpocket_select"], properties=global_prop["step1_fpocket_select"])
 
     # STEP 2: Generate box around selected cavity or residues
     global_log.info("step2_box: Generating cavity box")
@@ -490,6 +500,10 @@ if __name__ == '__main__':
                         help="Save docking poses for top ligands (default: False)",
                         required=False)
     
+    parser.add_argument('--dock_to_residues', dest='dock_to_residues', action='store_true',
+                        help="Dock to residues instead of cavity. Define the docking box using a set of residues instead of a pocket. (default: False)",
+                        required=False)
+    
     args = parser.parse_args()
 
     main_wf(configuration_path = args.config_path, 
@@ -499,4 +513,5 @@ if __name__ == '__main__':
             pocket = args.pocket,
             output_path = args.output_path,
             num_top_ligands = args.num_top_ligands,
-            keep_poses = args.keep_poses)
+            keep_poses = args.keep_poses,
+            dock_to_residues = args.dock_to_residues)
