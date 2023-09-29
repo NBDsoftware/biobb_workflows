@@ -1,4 +1,4 @@
-name: single_protein_wf1
+name: biobb_sp_md
 channels:
   - conda-forge
   - bioconda

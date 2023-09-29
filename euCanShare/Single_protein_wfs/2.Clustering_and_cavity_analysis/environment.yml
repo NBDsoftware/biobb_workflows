@@ -1,4 +1,4 @@
-name: single_protein_wf2
+name: biobb_sp_cavity
 channels:
   - conda-forge
   - bioconda

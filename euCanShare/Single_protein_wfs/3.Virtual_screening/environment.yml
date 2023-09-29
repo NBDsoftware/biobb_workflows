@@ -1,4 +1,4 @@
-name: single_protein_wf3
+name: biobb_sp_virtual_screening
 channels:
   - conda-forge
   - bioconda
