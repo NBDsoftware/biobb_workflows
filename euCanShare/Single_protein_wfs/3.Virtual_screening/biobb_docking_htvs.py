@@ -349,6 +349,11 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     if pocket is not None:
         global_prop['step1_fpocket_select']['pocket'] = pocket
 
+    # Enforce structure_path if provided
+    if structure_path is not None:
+        global_paths['step1b_extract_residues']['input_structure_path'] = structure_path
+        global_paths['step3_str_check_add_hydrogens']['input_structure_path'] = structure_path
+    
     if dock_to_residues:
         # STEP 1: Extract residues from structure
         global_log.info("step1b_extract_residues: Extracting residues from structure")
@@ -364,11 +369,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     # STEP 2: Generate box around selected cavity or residues
     global_log.info("step2_box: Generating cavity box")
     box(**global_paths["step2_box"], properties=global_prop["step2_box"])
-
-    # Enforce structure_path if provided
-    if structure_path is not None:
-        global_paths['step3_str_check_add_hydrogens']['input_structure_path'] = structure_path
-        
+    
     # STEP 3: Prepare target protein for docking 
     global_log.info("step3_str_check_add_hydrogens: Preparing target protein for docking")
     str_check_add_hydrogens(**global_paths["step3_str_check_add_hydrogens"], properties=global_prop["step3_str_check_add_hydrogens"]) 
