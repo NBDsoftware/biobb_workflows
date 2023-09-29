@@ -361,6 +361,10 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
 
         # Modify step2_box paths to use residues
         global_paths['step2_box']['input_pdb_path'] = global_paths['step1b_extract_residues']['output_residues_path']
+    
+        # Check size of box
+        if global_prop['step2_box']['offset'] > 5:
+            global_log.warning(f"step2_box: box offset is {global_prop['step2_box']['offset']} angstroms. This may be unnecessarily large when docking to residues surrounding the binding site. Consider using a smaller value to improve performance.")
     else:
         # STEP 1: Pocket selection from filtered list 
         global_log.info("step1_fpocket_select: Extract pocket cavity")
