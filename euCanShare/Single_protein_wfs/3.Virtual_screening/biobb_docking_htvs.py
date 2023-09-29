@@ -279,7 +279,7 @@ def get_affinities(ligand_smiles, ligand_names, global_paths, output_path):
 
         if affinity:
             affinities.append((affinity, name, smiles))
-    
+
     # Sort list according to affinity
     affinities = sorted(affinities)
 
@@ -373,7 +373,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     # STEP 2: Generate box around selected cavity or residues
     global_log.info("step2_box: Generating cavity box")
     box(**global_paths["step2_box"], properties=global_prop["step2_box"])
-    
+
     # STEP 3: Prepare target protein for docking 
     global_log.info("step3_str_check_add_hydrogens: Preparing target protein for docking")
     str_check_add_hydrogens(**global_paths["step3_str_check_add_hydrogens"], properties=global_prop["step3_str_check_add_hydrogens"]) 
@@ -488,7 +488,7 @@ if __name__ == '__main__':
     parser.add_argument('--input_pockets_zip', dest='input_pockets_zip',
                         help="Path to file with pockets in a zip file",
                         required=False)
-    
+
     parser.add_argument('--pocket', dest='pocket',
                         help="Pocket number to be used (default: 1)",
                         required=False)
@@ -500,11 +500,11 @@ if __name__ == '__main__':
     parser.add_argument('--num_top_ligands', dest='num_top_ligands',
                         help="Number of top ligands to be saved (default: corresponding value in YAML config file)",
                         required=False)
-    
+
     parser.add_argument('--keep_poses', dest='keep_poses', action='store_true',
                         help="Save docking poses for top ligands (default: False)",
                         required=False)
-    
+
     parser.add_argument('--dock_to_residues', dest='dock_to_residues', action='store_true',
                         help="Dock to residues instead of cavity. Define the docking box using a set of residues instead of a pocket. (default: False)",
                         required=False)
