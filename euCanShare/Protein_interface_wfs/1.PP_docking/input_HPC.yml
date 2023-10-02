@@ -29,70 +29,7 @@ step1_setup:
     container_working_dir: /
     container_generic_command: exec
 
-step2_ftdock:
-  tool: ftdock
-  paths:
-    input_rec_path: dependency/step1_setup/output_rec_path
-    input_lig_path: dependency/step1_setup/output_lig_path
-    output_ftdock_path: ftdock_output.ftdock
-    output_rot_path: rotftdock_output.rot
-  properties:
-    docking_name: docking_test
-    container_path: singularity
-    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
-    container_volume_path: /data
-    container_working_dir: /
-    container_generic_command: exec
-
-step3_dockser:
-  tool: dockser
-  paths:
-    input_rec_path: dependency/step1_setup/output_rec_path
-    input_rec_H_path: dependency/step1_setup/output_rec_H_path
-    input_rec_amber_path: dependency/step1_setup/output_rec_amber_path
-    input_lig_path: dependency/step1_setup/output_lig_path
-    input_lig_H_path: dependency/step1_setup/output_lig_H_path
-    input_lig_amber_path: dependency/step1_setup/output_lig_amber_path
-    input_rot_path: dependency/step2_ftdock/output_rot_path
-    output_ene_path: dockser_output.ene
-  properties:
-    docking_name: docking_test
-    container_path: singularity
-    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
-    container_volume_path: /data
-    container_working_dir: /
-    container_generic_command: exec
-
-step4_makePDB:
-  tool: makePDB
-  paths:
-    input_rec_path: dependency/step1_setup/output_rec_path
-    input_rec_H_path: dependency/step1_setup/output_rec_H_path
-    input_rec_amber_path: dependency/step1_setup/output_rec_amber_path
-    input_lig_path: dependency/step1_setup/output_lig_path
-    input_lig_H_path: dependency/step1_setup/output_lig_H_path
-    input_lig_amber_path: dependency/step1_setup/output_lig_amber_path
-    input_rot_path: dependency/step2_ftdock/output_rot_path
-    input_ene_path: dependency/step3_dockser/output_ene_path
-    output_zip_path: top_poses.zip
-  properties:
-    docking_name: docking_test
-    rank1: 1
-    rank2: 100
-    container_path: singularity
-    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
-    container_volume_path: /data
-    container_working_dir: /
-    container_generic_command: exec
-
-step5_clustering:
-  paths: 
-    input_zip_path: dependency/step4_makePDB/output_zip_path
-    output_zip_path: top_distinct_poses.zip
-  properties:
-    rmsd_threshold: 80.0
-
-step6_oda_receptor:
+step2_oda_receptor:
   tool: oda 
   paths:
     input_structure_path: dependency/step1_setup/input_rec_pdb_path
@@ -108,7 +45,7 @@ step6_oda_receptor:
     container_working_dir: /
     container_generic_command: exec
 
-step7_oda_ligand:
+step3_oda_ligand:
   tool: oda 
   paths:
     input_structure_path: dependency/step1_setup/input_lig_pdb_path
@@ -123,3 +60,75 @@ step7_oda_ligand:
     container_volume_path: /data
     container_working_dir: /
     container_generic_command: exec
+    
+step4_ftdock:
+  tool: ftdock
+  paths:
+    input_rec_path: dependency/step1_setup/output_rec_path
+    input_lig_path: dependency/step1_setup/output_lig_path
+    output_ftdock_path: ftdock_output.ftdock
+    output_rot_path: rotftdock_output.rot
+  properties:
+    docking_name: docking_test
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+
+step5_dockser:
+  tool: dockser
+  paths:
+    input_rec_path: dependency/step1_setup/output_rec_path
+    input_rec_H_path: dependency/step1_setup/output_rec_H_path
+    input_rec_amber_path: dependency/step1_setup/output_rec_amber_path
+    input_lig_path: dependency/step1_setup/output_lig_path
+    input_lig_H_path: dependency/step1_setup/output_lig_H_path
+    input_lig_amber_path: dependency/step1_setup/output_lig_amber_path
+    input_rot_path: dependency/step4_ftdock/output_rot_path
+    output_ene_path: dockser_output.ene
+  properties:
+    docking_name: docking_test
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+
+step6_makePDB:
+  tool: makePDB
+  paths:
+    input_rec_path: dependency/step1_setup/output_rec_path
+    input_rec_H_path: dependency/step1_setup/output_rec_H_path
+    input_rec_amber_path: dependency/step1_setup/output_rec_amber_path
+    input_lig_path: dependency/step1_setup/output_lig_path
+    input_lig_H_path: dependency/step1_setup/output_lig_H_path
+    input_lig_amber_path: dependency/step1_setup/output_lig_amber_path
+    input_rot_path: dependency/step4_ftdock/output_rot_path
+    input_ene_path: dependency/step5_dockser/output_ene_path
+    output_zip_path: top_poses.zip
+  properties:
+    docking_name: docking_test
+    rank1: 1
+    rank2: 100
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+
+step7_clustering:
+  paths: 
+    input_zip_path: dependency/step6_makePDB/output_zip_path
+    output_zip_path: top_distinct_poses.zip
+  properties:
+    rmsd_threshold: 80.0
+
+step8_oda_filtering:
+  paths: 
+    input_zip_path: dependency/step7_clustering/output_zip_path
+    output_zip_path: top_distinct_filtered_poses.zip
+  properties:
+    oda_threshold: -15                    # ODA score threshold for a residue to be considered as part of a hydrophobic patch 
+    distance_threshold: 10.0              # Distance threshold for two residues to be considered as neighbors
+    hydrophobic_residues_ratio: 0.1       # Ratio of hydrophobic residues in the interface
