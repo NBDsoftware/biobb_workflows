@@ -1,4 +1,4 @@
-name: biobb_sp_cavity
+name: biobb_sp_cavity_analysis
 channels:
   - conda-forge
   - bioconda
