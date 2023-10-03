@@ -20,6 +20,40 @@ import MDAnalysis as mda
 from MDAnalysis.analysis.diffusionmap import DistanceMatrix
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 
+def link_previous_steps(global_log, step_folders, output_path, previous_output_path):
+    """
+    Link step folders in previous output path to output path
+
+    Inputs
+    ------
+
+        step_folders          (list): list of step folders to link
+        output_path            (str): path to output folder
+        previous_output_path   (str): path to previous output folder
+    """
+
+    # Check if previous output path is provided
+    if previous_output_path is None:
+        return
+
+    # For each step folder, check if it exists in previous output path and link it to output path
+    for step in step_folders:
+
+        # Check if step folder exists in previous output path
+        if not os.path.exists(str(Path(previous_output_path).joinpath(step))):
+            global_log.warning(f"WARNING: The step folder {step} does not exist in the previous output path provided!")
+            continue
+
+        # Check if step folder exists in output path
+        if os.path.exists(str(Path(output_path).joinpath(step))):
+            global_log.warning(f"WARNING: The step folder {step} already exists in the output path provided!")
+            continue
+
+        # Link step folder in previous output path to output path
+        os.symlink(str(Path(previous_output_path).joinpath(step)), str(Path(output_path).joinpath(step)))
+    
+    return
+
 def check_arguments(global_log, receptor_pdb_path, ligand_pdb_path, output_path, previous_output_path, skip_until):
     """
     Check the arguments provided by the user
@@ -42,24 +76,20 @@ def check_arguments(global_log, receptor_pdb_path, ligand_pdb_path, output_path,
         if skip_until not in ["makePDB", "clustering", "oda_filtering"]:
             global_log.error("ERROR: --skip_until must be one of the following options: makePDB, clustering, oda_filtering!")
 
-def link_previous_results(global_log, output_path, previous_output_path):
-    """
-    Link previous output path to output path if provided and check if it exists and its a folder
-    """
-
-    # Check if previous output path is provided
+    
     if previous_output_path is not None:
 
         # Check if previous output path exists
         if not os.path.exists(previous_output_path):
             global_log.error("ERROR: The previous output path provided does not exist!")
-        else:
-            # Check if previous output path is a folder
-            if not os.path.isdir(previous_output_path):
-                global_log.error("ERROR: The previous output path provided is not a folder!")
-            else:
-                # Link previous output path to output path
-                os.symlink(previous_output_path, output_path)
+
+        # Check if previous output path is a folder
+        if not os.path.isdir(previous_output_path):
+            global_log.error("ERROR: The previous output path provided is not a folder!")
+
+        # Check if output path and previous output path are the same
+        if output_path == previous_output_path:
+            global_log.error("ERROR: The output path and the previous output path are the same!")
 
 def prepare_clustering_step(input_zip_path: dict, prop: dict):
     """ Create step7_clustering folder, create top docking poses subfolder and unzip top docking poses into it"""
@@ -197,9 +227,6 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path,
     else:
         output_path = conf.get_working_dir_path()
 
-    # Link previous output path to output path if provided 
-    link_previous_results(global_log, output_path, previous_output_path)
-
     # Initializing a global log file
     global_log, _ = fu.get_logs(path=output_path, light_format=True)
 
@@ -207,6 +234,9 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path,
     # Dividing it in global paths and global properties
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
+
+    # Check arguments
+    check_arguments(global_log, receptor_pdb_path, ligand_pdb_path, output_path, previous_output_path, skip_until)
     
     # Enforce receptor_pdb_path and ligand_pdb_path if provided
     if receptor_pdb_path is not None:
@@ -216,11 +246,9 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path,
         global_paths["step1_setup"]["input_lig_pdb_path"] = ligand_pdb_path
         global_paths["step3_oda_ligand"]["input_structure_path"] = ligand_pdb_path
 
-    # Check arguments
-    check_arguments(global_log, receptor_pdb_path, ligand_pdb_path, output_path, previous_output_path, skip_until)
-
     # Skip steps only if requested
-    if skip_until is None:
+    run_remaining_steps = skip_until is None
+    if run_remaining_steps:
 
         # STEP 1: Prepare receptor and ligand proteins for pyDock
         global_log.info("step1_setup: setup receptor and ligand proteins for pyDock")
@@ -242,23 +270,36 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path,
         global_log.info("step5_dockser: score docking poses using pyDock")
         dockser(**global_paths["step5_dockser"], properties=global_prop["step5_dockser"])
 
+    else:
+
+        # Link Steps 1-5 folders in previous output path to output path
+        steps_to_link = ["step1_setup", "step2_oda_receptor", "step3_oda_ligand", "step4_ftdock", "step5_dockser"]
+        link_previous_steps(global_log, steps_to_link, output_path, previous_output_path)
+
     # Read csv with ranking of docking poses (pydock score)
     ranking_df = pd.read_csv(global_paths["step5_dockser"]["output_ene_path"], sep='\s+', skiprows=[1], header=0)
 
     # Skip step if requested
-    if skip_until is None or skip_until == "makePDB":
+    run_remaining_steps = run_remaining_steps or skip_until == "makePDB"
+    if run_remaining_steps:
 
         # STEP 6: Generate PDB files for top scoring docking poses
         global_log.info("step6_makePDB: generate PDB files for top scoring docking poses")
         makePDB(**global_paths["step6_makePDB"], properties=global_prop["step6_makePDB"])
     
+    else:
+
+        # Link Step 6 folder in previous output path to output path
+        link_previous_steps(global_log, ["step6_makePDB"], output_path, previous_output_path)
+
     # Keep only top scoring docking poses in the ranking data frame
     rank1 = global_prop["step6_makePDB"]["rank1"]
     rank2 = global_prop["step6_makePDB"]["rank2"]
     top_ranking_df = ranking_df[(ranking_df["RANK"] >= rank1) & (ranking_df["RANK"] <= rank2)] 
 
     # Skip step if requested
-    if skip_until is None or skip_until == "clustering":
+    run_remaining_steps = run_remaining_steps or skip_until == "clustering"
+    if run_remaining_steps:
        
         # Add docking name and ligand chain to clustering step properties
         global_prop["step7_clustering"]["docking_name"] = global_prop["step6_makePDB"]["docking_name"]
@@ -268,11 +309,13 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path,
         global_log.info("step7_clustering: clustering with RMSD")
         rmsd_clustering(**global_paths["step7_clustering"], properties=global_prop["step7_clustering"], ranking_df=top_ranking_df) 
 
-    # Skip step if requested
-    if skip_until is None or skip_until == "oda_filtering":
+    else:
 
-        # STEP 8: Filtering with ODA patches
-        global_log.info("step8_oda_filtering: filtering with ODA patches")
+        # Link Step 7 folder in previous output path to output path
+        link_previous_steps(global_log, ["step7_clustering"], output_path, previous_output_path)
+
+    # STEP 8: Filtering with ODA patches
+    global_log.info("step8_oda_filtering: filtering with ODA patches")
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
