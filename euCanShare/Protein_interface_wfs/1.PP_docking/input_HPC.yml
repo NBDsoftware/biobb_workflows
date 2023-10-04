@@ -126,6 +126,8 @@ step7_clustering:
 
 step8_oda_filtering:
   paths: 
+    input_receptor_path: dependency/step2_oda_receptor/output_oda_path
+    input_ligand_path: dependency/step3_oda_ligand/output_oda_path
     input_zip_path: dependency/step7_clustering/output_zip_path
     output_zip_path: top_distinct_filtered_poses.zip
   properties:

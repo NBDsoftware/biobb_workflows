@@ -20,6 +20,8 @@ import MDAnalysis as mda
 from MDAnalysis.analysis.diffusionmap import DistanceMatrix
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 
+from Bio.PDB import PDBParser
+from Bio.PDB.SASA import ShrakeRupley
 
 def link_previous_steps(global_log, step_folders, output_path, previous_output_path):
     """
@@ -153,7 +155,113 @@ def plot_dendogram(linkage_matrix, labels, rmsd_threshold, output_path):
     plt.savefig(str(Path(output_path).joinpath("dendrogram.png")))
     plt.close() 
 
-# - it could be parallelized with MDAnalysis.analysis.encore.confdistmatrix if needed
+def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_path: str, output_zip_path: str, properties: dict):
+    """
+    Function that filters docking poses using ODA patches and saves the filtered poses into a zip file in PDB format.
+
+    The input zip file contains docking poses in PDB format. The function will decorate the receptor and ligand with the ODA values.
+    Then a threshold for the ODA values will be used to determine if a residue is part of an ODA patch or not. Finally the docking
+    poses will be filtered based on how many interface neighbor residues pertain to an ODA patch.
+    """
+
+    # Prepare oda_filtering step folder
+    oda_poses_paths = prepare_oda_filtering_step(input_receptor_path, input_ligand_path, input_zip_path, properties)
+
+    # Filter docking poses based on ODA patches 
+
+def prepare_oda_filtering_step(input_receptor_path: str, input_ligand_path: str, input_zip_path: str, prop: dict):
+    """
+    1. Create oda_filtering folder
+    2. Create docking poses subfolder and unzip docking poses into it
+    3. Decorate the receptor and the ligand proteins of each pose with the corresponding ODA values
+
+    Inputs
+    ------
+
+        input_receptor_path     (str): path to receptor pdb file with ODA values
+        input_ligand_path       (str): path to ligand pdb file with ODA values
+        input_zip_path          (str): path to zip file with docking poses
+        prop                   (dict): dictionary with oda_filtering step properties
+    
+    Returns
+    -------
+
+        poses_paths            (list): list with paths to docking poses
+    """
+
+    # Create oda filtering folder
+    fu.create_dir(prop["path"])
+
+    # Create subfolder for poses
+    poses_folder_path = fu.create_dir(str(Path(prop["path"]).joinpath("poses")))
+
+    # Extract the file with the docking poses into the subfolder
+    poses_paths = fu.unzip_list(zip_file = input_zip_path, dest_dir = poses_folder_path)
+
+    # Create subfolder for poses with ODA values
+    oda_poses_folder_path = fu.create_dir(str(Path(prop["path"]).joinpath("oda_poses")))
+
+    # Iterate over the docking poses
+    decorated_poses_paths = []
+    for pose_path in poses_paths:
+
+        # Decorate the receptor and the ligand proteins of the pose with the corresponding ODA values
+        decorated_pose_path = decorate_with_oda_values(pose_path, input_receptor_path, input_ligand_path, oda_poses_folder_path, prop["receptor_chain"], prop["ligand_chain"])
+        decorated_poses_paths.append(decorated_pose_path)
+
+    return decorated_poses_paths
+
+def decorate_with_oda_values(pose_path: str, input_receptor_path: str, input_ligand_path: str, oda_poses_folder_path: str, receptor_chain: str, ligand_chain: str):
+    """
+    Takes a docking pose and decorates the receptor and ligand proteins with the corresponding ODA values.
+
+    Inputs
+    ------
+
+        pose_path               (str): path to docking pose (contains receptor and ligand)
+        input_receptor_path     (str): path to receptor pdb file with ODA values in the B-factor column
+        input_ligand_path       (str): path to ligand pdb file with ODA values in the B-factor column
+        oda_poses_folder_path   (str): path to folder where the decorated docking pose will be saved
+        receptor_chain          (str): chain of the receptor protein
+        ligand_chain            (str): chain of the ligand protein
+    """
+
+    # Load the docking pose
+    pose = mda.Universe(pose_path, format = "PDB", topology_format="PDB")
+
+    # Select the receptor and ligand atoms from the docking pose
+    receptor = pose.select_atoms(f"chainid {receptor_chain}")
+
+    # Show the receptor atoms
+    print(receptor)
+
+    ligand = pose.select_atoms(f"chainid {ligand_chain}")
+
+    # Load the receptor and ligand with the ODA values 
+    receptor_oda = mda.Universe(input_receptor_path, format = "PDB", topology_format="PDB") 
+    ligand_oda = mda.Universe(input_ligand_path, format = "PDB", topology_format="PDB")
+
+    # Iterate over all ligand atoms and decorate them with the corresponding ODA value
+    for atom, atom_oda in zip(ligand.atoms, ligand_oda.atoms):
+        atom.bfactor = atom_oda.bfactor
+    
+    # Iterate over all receptor atoms and decorate them with the corresponding ODA value
+    for atom, atom_oda in zip(receptor.atoms, receptor_oda.atoms):
+        atom.bfactor = atom_oda.bfactor
+
+    # Find the name of the docking pose file
+    pose_name = Path(pose_path).name
+
+    # Create new file name for the decorated docking pose
+    decorated_pose_name = f"oda_{pose_name}"
+
+    # Create new path for the decorated docking pose
+    decorated_pose_path = str(Path(oda_poses_folder_path).joinpath(decorated_pose_name))
+
+    # Save the decorated docking pose
+    pose.atoms.write(decorated_pose_path)
+
+    return decorated_pose_path
 
 def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict, ranking_df: pd.DataFrame):
 
@@ -177,6 +285,7 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
     # Prepare clustering step folder 
     poses_ranked_paths, paths_ranking = prepare_clustering_step(input_zip_path, ranking_df, properties)
 
+    # - it could be parallelized with MDAnalysis.analysis.encore.confdistmatrix if needed
     # Calculate the RMSD matrix using only CA ligand atoms without alignment 
     u = mda.Universe(poses_ranked_paths[0], poses_ranked_paths)
     ligand_chain = properties["ligand_chain"]
@@ -240,6 +349,7 @@ def prepare_clustering_step(input_zip_path: dict, ranking_df: pd.DataFrame, prop
     poses_ranked_paths, paths_ranking = rename_with_rank(poses_paths, ranking_df, prop['docking_name'])
 
     return poses_ranked_paths, paths_ranking
+
 
 def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path, previous_output_path, skip_until):
     '''
@@ -364,6 +474,10 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path,
 
         # Link Step 7 folder in previous output path to output path
         link_previous_steps(global_log, ["step7_clustering"], output_path, previous_output_path)
+
+    # Add receptor and ligand chains to oda_filtering step properties
+    global_prop["step8_oda_filtering"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["newmol"]
+    global_prop["step8_oda_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
 
     # STEP 8: Filtering with ODA patches
     global_log.info("step8_oda_filtering: filtering with ODA patches")
