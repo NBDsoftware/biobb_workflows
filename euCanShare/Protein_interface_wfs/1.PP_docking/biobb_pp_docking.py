@@ -20,6 +20,7 @@ import MDAnalysis as mda
 from MDAnalysis.analysis.diffusionmap import DistanceMatrix
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 
+
 def link_previous_steps(global_log, step_folders, output_path, previous_output_path):
     """
     Link step folders in previous output path to output path
@@ -91,48 +92,48 @@ def check_arguments(global_log, receptor_pdb_path, ligand_pdb_path, output_path,
         if output_path == previous_output_path:
             global_log.error("ERROR: The output path and the previous output path are the same!")
 
-def prepare_clustering_step(input_zip_path: dict, prop: dict):
-    """ Create step7_clustering folder, create top docking poses subfolder and unzip top docking poses into it"""
+def rename_with_rank(poses_paths: list, ranking_df: pd.DataFrame, docking_name: str):
+    """ 
+    Change pdb poses file names from conformation number to rank.
+
+    Inputs
+    ------
+
+        poses_paths         (list): list with paths to docking poses
+        ranking_df  (pd.DataFrame): dataframe with ranking of docking poses
+        docking_name         (str): name of the docking run
+
+    Returns
+    -------
+
+        poses_ranked_paths (list): list with paths to docking poses with ranked file names
+        paths_ranking      (list): list with the corresponding rank for each docking pose
     
-    # Create step7_clustering folder
-    fu.create_dir(prop["path"])
-
-    # Create subfolder for top poses
-    top_poses_path = fu.create_dir(str(Path(prop["path"]).joinpath("top_poses")))
-
-    # Extract the file with the top docking poses into the subfolder
-    pdb_paths = fu.unzip_list(zip_file = input_zip_path, dest_dir = top_poses_path)
-
-    return pdb_paths, top_poses_path
-
-def rename_with_rank(pdb_paths, top_poses_path, top_ranking_df, docking_name):
-    """ Change pdb file names from conformation number to rank. Return a list with the new file paths and a list with the corresponding rank for each file
     """
     paths_ranking = []
-    new_pdb_paths = []
+    poses_ranked_paths = []
+
+    # Find the parent path to the poses
+    poses_parent_path = str(Path(poses_paths[0]).parent)
 
     # Change pdb file name for rank and create a list with the ranking
-    for pdb_path in pdb_paths:
+    for pdb_path in poses_paths:
 
         # Get the conformation number from the file name
         conformation_number = Path(pdb_path).stem.strip(f"{docking_name}_")
 
-        # Get the rank from the ranking data frame
-        rank = top_ranking_df[top_ranking_df["Conf"] == int(conformation_number)]["RANK"].values[0]
-
-        # Add the rank to the list
+        # Get the rank from the ranking Dataframe
+        rank = ranking_df[ranking_df["Conf"] == int(conformation_number)]["RANK"].values[0]
         paths_ranking.append(int(rank))
 
-        # Create the new file path
-        new_pdb_path = str(Path(top_poses_path).joinpath(f"rank_{rank}.pdb"))
-
-        # Rename the file with the new file path
+        # Rename the file with the ranking
+        new_pdb_path = str(Path(poses_parent_path).joinpath(f"rank_{rank}.pdb"))
         os.rename(pdb_path, new_pdb_path)
 
         # Add the new file path to the list
-        new_pdb_paths.append(new_pdb_path)
+        poses_ranked_paths.append(new_pdb_path)
     
-    return new_pdb_paths, paths_ranking
+    return poses_ranked_paths, paths_ranking
 
 def plot_dendogram(linkage_matrix, labels, rmsd_threshold, output_path):
     """ Plot the dendogram and save it as a png file """
@@ -152,16 +153,32 @@ def plot_dendogram(linkage_matrix, labels, rmsd_threshold, output_path):
     plt.savefig(str(Path(output_path).joinpath("dendrogram.png")))
     plt.close() 
 
+# - it could be parallelized with MDAnalysis.analysis.encore.confdistmatrix if needed
+
 def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict, ranking_df: pd.DataFrame):
 
-    # Prepare clustering step folder - unzip top docking poses into subfolder
-    conf_pdb_paths, top_poses_path = prepare_clustering_step(input_zip_path, properties)
+    """ 
+    Cluster the docking poses based on RMSD and save the best ranking pose from each cluster into a zip file.
 
-    # Prepare top docking poses - change file names from conformation number to rank and create a list with the corresponding rank for each file
-    pdb_paths, paths_ranking = rename_with_rank(conf_pdb_paths, top_poses_path, ranking_df, properties['docking_name'])
+    The input zip file contains docking poses in PDB format. The function will calculate the RMSD matrix
+    between all poses using only the CA atoms of the ligand (as the receptor didn't move during docking). 
+    Then it will calculate the linkage matrix and the clusters for a given RMSD threshold. Finally it will
+    find the best ranking pose for each cluster and save it into a zip file in PDB format.
 
-    # Calculate the RMSD matrix using only CA ligand atoms without alignment - it could be parallelized with MDAnalysis.analysis.encore.confdistmatrix if needed
-    u = mda.Universe(pdb_paths[0], pdb_paths)
+    Inputs
+    ------
+
+        input_zip_path          (str): path to zip file with docking poses
+        output_zip_path         (str): path to output zip file with best ranking docking poses
+        properties             (dict): dictionary with clustering step properties
+        ranking_df     (pd.Dataframe): dataframe with ranking of docking poses
+    """
+
+    # Prepare clustering step folder 
+    poses_ranked_paths, paths_ranking = prepare_clustering_step(input_zip_path, ranking_df, properties)
+
+    # Calculate the RMSD matrix using only CA ligand atoms without alignment 
+    u = mda.Universe(poses_ranked_paths[0], poses_ranked_paths)
     ligand_chain = properties["ligand_chain"]
     matrix = DistanceMatrix(u, select =f'chainID {ligand_chain} and name CA').run()
 
@@ -181,7 +198,7 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
         cluster_ranking = [paths_ranking[i] for i in np.where(cluster_labels == cluster)[0]]
 
         # Get the paths of the poses in the cluster
-        cluster_paths = [pdb_paths[i] for i in np.where(cluster_labels == cluster)[0]]
+        cluster_paths = [poses_ranked_paths[i] for i in np.where(cluster_labels == cluster)[0]]
 
         # Find the path of the pose with the best ranking in the cluster
         best_pose_path = cluster_paths[cluster_ranking.index(min(cluster_ranking))]
@@ -189,6 +206,40 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
 
     # Zip the best ranking pose paths into a zip file
     fu.zip_list(zip_file = output_zip_path, file_list = top_distinct_poses_paths)
+
+def prepare_clustering_step(input_zip_path: dict, ranking_df: pd.DataFrame, prop: dict):
+    """ 
+    1. Create clustering folder
+    2. Create docking poses subfolder and unzip docking poses into it
+    3. Rename docking poses with rank and create a list with the corresponding rank for each file
+
+    Inputs
+    ------
+
+        input_zip_path          (str): path to zip file with docking poses
+        ranking_df     (pd.Dataframe): dataframe with ranking of docking poses
+        prop                   (dict): dictionary with clustering step properties
+
+    Returns
+    -------
+
+        poses_ranked_paths     (list): list with paths to docking poses
+        paths_ranking          (list): list with the corresponding rank for each docking pose
+    """
+    
+    # Create clustering folder
+    fu.create_dir(prop["path"])
+
+    # Create subfolder for poses
+    poses_folder_path = fu.create_dir(str(Path(prop["path"]).joinpath("poses")))
+
+    # Extract the file with the docking poses into the subfolder
+    poses_paths = fu.unzip_list(zip_file = input_zip_path, dest_dir = poses_folder_path)
+
+    # Prepare docking poses - change file names from conformation number to rank and create a list with the corresponding rank for each file
+    poses_ranked_paths, paths_ranking = rename_with_rank(poses_paths, ranking_df, prop['docking_name'])
+
+    return poses_ranked_paths, paths_ranking
 
 def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path, previous_output_path, skip_until):
     '''
@@ -316,6 +367,7 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path,
 
     # STEP 8: Filtering with ODA patches
     global_log.info("step8_oda_filtering: filtering with ODA patches")
+    oda_filtering(**global_paths["step8_oda_filtering"], properties=global_prop["step8_oda_filtering"])
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
