@@ -392,21 +392,21 @@ def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_pa
     oda_poses_paths = prepare_oda_filtering_step(input_receptor_path, input_ligand_path, input_zip_path, properties)
 
     # Find all residues pertaining to the surface of the receptor and ligand proteins (through their SASA values).
-    receptor_surface_residues = find_surface_residues(input_receptor_path)
-    ligand_surface_residues = find_surface_residues(input_ligand_path)
+    receptor_surface_residues = find_surface_residues(input_receptor_path, properties["path"])
+    ligand_surface_residues = find_surface_residues(input_ligand_path, properties["path"])
 
     # For each pose
     filtered_poses_paths = []
-    # for pose_path in oda_poses_paths:
+    for pose_path in oda_poses_paths:
 
-        # Identify interface residues between the receptor and ligand proteins
-        # interface_residues = find_interface_residues(pose_path, receptor_surface_residues, ligand_surface_residues, properties)
+        # Identify interface residues for the pose
+        receptor_interface_residues, ligand_interface_residues = find_interface_residues(pose_path, receptor_surface_residues, ligand_surface_residues, properties)
 
-        # Compute the percentage of interface residues that are covered by ODA patches
-        # percentage_covered = compute_percentage_covered(interface_residues, properties["receptor_chain"], properties["ligand_chain"])
+        # Compute the "PIR COP" (Percentage of Interface Residues Covered by ODA Patches) for the pose
+        # pir_cop = compute_pir_cop(interface_residues, properties["receptor_chain"], properties["ligand_chain"])
 
-        # Keep only the poses with a percentage of interface residues covered by ODA patches above a given threshold
-        # if percentage_covered >= properties["threshold"]:
+        # Keep only the poses with a "PIR COP" above a given threshold
+        # if pir_cop >= properties["threshold"]:
         #     filtered_poses_paths.append(pose_path)
     
     # Zip the filtered docking pose paths into a zip file
@@ -518,26 +518,61 @@ def decorate_with_oda_values(pose_path, input_receptor_path, input_ligand_path, 
 
     return decorated_pose_path
 
-def find_surface_residues(pdb_path: str):
+def find_surface_residues(pdb_path: str, output_path: str):
     """
     Find all residues pertaining to the surface of the pdb structure (through the Solvent Accessible Surface Area).
+    Save a structure showing the surface residues in the output path.
 
     Inputs
     ------
 
         pdb_path (str): path to pdb file
+
+    Returns
+    -------
+
+        surface_residues (list): list with surface residues ids
     """
+    # SASA threshold to classify residues as surface or not
+    sasa_threshold = 10 
 
     # Load the pdb structure
-    structure = PDB.PDBParser().get_structure("pdb", pdb_path)
+    structure = PDB.PDBParser(QUIET=True).get_structure("pdb", pdb_path)
+
+    # Find the pdb name
+    pdb_name = Path(pdb_path).name
 
     # Calculate the SASA for each residue
-    sasa_calc = PDB.SASA.ShrakeRupley()
+    sasa_calc = PDB.SASA.ShrakeRupley(probe_radius=1.4, n_points=100)
     sasa_calc.compute(structure, level="R")
 
-    # Print the SASA for each residue
+    # Classify residues as surface or not
+    surface_residues = []
     for residue in structure.get_residues():
-        print(f"Residue {residue.resname} has SASA: {residue.sasa}")
+
+        if residue.sasa > sasa_threshold:
+            surface_residues.append(residue.id[1])
+            
+            # Mark surface residue
+            for atom in residue:
+                atom.set_bfactor(100)
+        else:
+            # Mark non-surface residue
+            for atom in residue:
+                atom.set_bfactor(0)
+
+    # Save the SASA values in the beta factor column of the pdb file
+    io = PDB.PDBIO()
+    io.set_structure(structure)
+    file_name = f"{pdb_name}_surface.pdb"
+    file_path = os.path.join(output_path, file_name)
+    io.save(file_path)
+
+    # Check if any surface residue was found
+    if len(surface_residues) == 0:
+        raise ValueError("No surface residues found!")
+
+    return surface_residues
 
 def find_interface_residues(pose_path, receptor_surface_residues, ligand_surface_residues, properties):
     """
@@ -549,14 +584,14 @@ def find_interface_residues(pose_path, receptor_surface_residues, ligand_surface
     Inputs
     ------
 
-        pose_path                  (str): path to docking pose
-        receptor_surface_residues (list): list with surface residues of the receptor protein
-        ligand_surface_residues   (list): list with surface residues of the ligand protein
+        pose_path                  (str): path to docking pose with receptor and ligand
+        receptor_surface_residues (list): list with surface residues id of the receptor protein
+        ligand_surface_residues   (list): list with surface residues id of the ligand protein
         properties                (dict): dictionary with step properties
     """
 
     # Load the docking pose using bioPython
-    pose = PDB.PDBParser().get_structure("pdb", pose_path)
+    pose = PDB.PDBParser(QUIET=True).get_structure("pdb", pose_path)
 
     # Iterate over surface residues
     interface_residues = []
