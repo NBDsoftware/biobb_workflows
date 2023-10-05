@@ -3,11 +3,13 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - python
-  - biobb_common>=3.9.0
-  - nb_conda_kernels
-  - pytest
+  - python==3.10.0
+  - biobb_common>=4.0.0   
+  - biopython>=1.80
   - zip
   - pandas
-  - mdanalysis
-  - conda
+  - scipy
+  - matplotlib
+
+# Add --pwd flag to singularity exec command in biobb_common.py after installing! 
+# Add biobb_pydock.pth (with path to biobb_pydock) to site-packages folder after installing!
