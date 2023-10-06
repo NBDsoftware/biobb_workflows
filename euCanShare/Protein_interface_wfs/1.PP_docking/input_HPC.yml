@@ -95,7 +95,7 @@ step5_dockser:
     container_working_dir: /
     container_generic_command: exec
 
-step6_makePDB:
+step7_makePDB:
   tool: makePDB
   paths:
     input_rec_path: dependency/step1_setup/output_rec_path
@@ -117,20 +117,20 @@ step6_makePDB:
     container_working_dir: /
     container_generic_command: exec
 
-step7_clustering:
+step8_clustering:
   paths: 
-    input_zip_path: dependency/step6_makePDB/output_zip_path
+    input_zip_path: dependency/step7_makePDB/output_zip_path
     output_zip_path: top_distinct_poses.zip
   properties:
     rmsd_threshold: 80.0
 
-step8_oda_filtering:
+step9_oda_filtering:
   paths: 
     input_receptor_path: dependency/step2_oda_receptor/output_oda_path
     input_ligand_path: dependency/step3_oda_ligand/output_oda_path
-    input_zip_path: dependency/step7_clustering/output_zip_path
+    input_zip_path: dependency/step8_clustering/output_zip_path
     output_zip_path: top_distinct_filtered_poses.zip
   properties:
     oda_threshold: -15                    # ODA score threshold for a residue to be considered as part of a hydrophobic patch 
     distance_threshold: 10.0              # Distance threshold for two residues to be considered as neighbors
-    hydrophobic_residues_ratio: 0.1       # Ratio of hydrophobic residues in the interface
+    pir_cop_threshold: 0.1                # PIR COP (Percentage of Interface Residues Covered by ODA Patches) threshold
