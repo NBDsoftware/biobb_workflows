@@ -9,6 +9,7 @@ import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
+from scipy.spatial.distance import squareform
 from Bio import PDB
 
 from biobb_common.configuration import settings
@@ -45,7 +46,6 @@ def check_arguments(global_log, receptor_pdb_path, ligand_pdb_path, output_path,
         if skip_until not in ["makePDB", "clustering", "oda_filtering"]:
             global_log.error("ERROR: --skip_until must be one of the following options: makePDB, clustering, oda_filtering!")
 
-    
     if previous_output_path is not None:
 
         # Check if previous output path exists
@@ -174,6 +174,9 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
     # Debug
     elapsed_time = time.time() - start_time
     global_log.info(f"Elapsed time: {elapsed_time / 60} min")
+
+    # Convert the RMSD matrix into a condensed distance matrix
+    rmsd_matrix = squareform(rmsd_matrix)
 
     # Calculate the linkage matrix
     Z = linkage(rmsd_matrix, method = "average")
@@ -395,22 +398,30 @@ def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_pa
     receptor_surface_residues = find_surface_residues(input_receptor_path, properties["path"])
     ligand_surface_residues = find_surface_residues(input_ligand_path, properties["path"])
 
+    # Find the list of atoms defining the receptor surface (receptor remains fixed during docking)
+    receptor_surface_atoms = []
+    for residue in receptor_surface_residues:
+        receptor_surface_atoms.extend(residue.get_atoms())
+
+    # Create the Neighbour Search object for the receptor surface atoms
+    Receptor_Neighbor_Search = PDB.NeighborSearch(receptor_surface_atoms)
+
     # For each pose
     filtered_poses_paths = []
     for pose_path in oda_poses_paths:
 
         # Identify interface residues for the pose
-        receptor_interface_residues, ligand_interface_residues = find_interface_residues(pose_path, receptor_surface_residues, ligand_surface_residues, properties)
+        interface_residues = find_interface_residues(pose_path, ligand_surface_residues, Receptor_Neighbor_Search, properties)
 
         # Compute the "PIR COP" (Percentage of Interface Residues Covered by ODA Patches) for the pose
-        # pir_cop = compute_pir_cop(interface_residues, properties["receptor_chain"], properties["ligand_chain"])
+        pir_cop = compute_pir_cop(interface_residues, properties["oda_threshold"])
 
         # Keep only the poses with a "PIR COP" above a given threshold
-        # if pir_cop >= properties["threshold"]:
-        #     filtered_poses_paths.append(pose_path)
+        if pir_cop >= properties["pir_cop_threshold"]:
+             filtered_poses_paths.append(pose_path)
     
     # Zip the filtered docking pose paths into a zip file
-    #fu.zip_list(zip_file = output_zip_path, file_list = filtered_poses_paths)
+    fu.zip_list(zip_file = output_zip_path, file_list = filtered_poses_paths)
 
 def prepare_oda_filtering_step(input_receptor_path: str, input_ligand_path: str, input_zip_path: str, prop: dict):
     """
@@ -522,6 +533,7 @@ def find_surface_residues(pdb_path: str, output_path: str):
     """
     Find all residues pertaining to the surface of the pdb structure (through the Solvent Accessible Surface Area).
     Save a structure showing the surface residues in the output path.
+    Return a list with the surface residues (Bio.PDB.Residue objects)
 
     Inputs
     ------
@@ -531,7 +543,7 @@ def find_surface_residues(pdb_path: str, output_path: str):
     Returns
     -------
 
-        surface_residues (list): list with surface residues ids
+        surface_residues (list): list with surface residues (Bio.PDB.Residue objects)
     """
     # SASA threshold to classify residues as surface or not
     sasa_threshold = 10 
@@ -551,7 +563,7 @@ def find_surface_residues(pdb_path: str, output_path: str):
     for residue in structure.get_residues():
 
         if residue.sasa > sasa_threshold:
-            surface_residues.append(residue.id[1])
+            surface_residues.append(residue)
             
             # Mark surface residue
             for atom in residue:
@@ -574,28 +586,131 @@ def find_surface_residues(pdb_path: str, output_path: str):
 
     return surface_residues
 
-def find_interface_residues(pose_path, receptor_surface_residues, ligand_surface_residues, properties):
+def find_interface_residues(pose_path: str, ligand_surface_residues: list, Receptor_Neighbor_Search: PDB.NeighborSearch, properties: dict):
     """
-    Find the interface residues between the receptor and ligand proteins.
+    Find the interface residues between the receptor and ligand proteins for a given docking pose.
 
-    Iterate over surface residues of the receptor and find the ones that are close any ligand surface residue.
-    Iterate over surface residues of the ligand and find the ones that are close any receptor surface residue.
+    Iterates over the ligand surface residues and finds the receptor surface residues that are within a given distance threshold.
+    
+    Inputs
+    ------
+
+        pose_path                               (str): path to docking pose with receptor and ligand
+        ligand_surface_residues                (list): list of Bio.PDB.Residue objects, with surface residues of the ligand protein
+        Receptor_Neighbor_Search (PDB.NeighborSearch): class with the receptor surface atoms to search for neighbors
+        properties                             (dict): dictionary with step properties
+
+    Returns
+    -------
+
+        interface_residues (list): list with interface residues of the pose (Bio.PDB.Residue objects)
+    """
+    # Global log
+    global_log = properties["global_log"]
+
+    # Debug
+    global_log.info("Finding interface residues...")
+    global_log.info(f"Pose: {pose_path}")
+
+    # Load the docking pose using bioPython
+    parser = PDB.PDBParser(QUIET=True)
+    pose_structure = parser.get_structure("pose", pose_path)
+
+    # Find the ligand chain
+    ligand_chain = find_chain(pose_structure, properties["ligand_chain"])
+
+    # Find the ligand surface residues IDs
+    ligand_surface_residues_ids = [residue.get_id() for residue in ligand_surface_residues]
+    
+    receptor_interface_residues = []
+    receptor_interface_residues_ids = []
+    ligand_interface_residues = []
+
+    # Iterate over all ligand residues
+    for ligand_residue in ligand_chain.get_residues():
+
+        # ID of the ligand residue
+        ligand_residue_id = ligand_residue.get_id()
+
+        # Check if the ligand residue is a surface residue
+        if ligand_residue_id in ligand_surface_residues_ids:
+
+            # Debug 
+            global_log.info(f"For ligand surface residue: {ligand_residue}")
+
+            # Get the ligand residue atoms
+            ligand_residue_atoms = [atom for atom in ligand_residue.get_atoms()]
+
+            # Get the COM of the ligand residue
+            ligand_residue_com = np.mean([atom.get_coord() for atom in ligand_residue_atoms], axis=0)
+
+            # Find the receptor surface residues within a given distance threshold from the ligand surface residue
+            receptor_neighbors = Receptor_Neighbor_Search.search(ligand_residue_com, properties["distance_threshold"], level="R")
+
+            # Check if any receptor surface residue was found
+            if len(receptor_neighbors) > 0:
+
+                # Debug
+                global_log.info(f"Found {len(receptor_neighbors)} receptor surface residues within {properties['distance_threshold']} Å from ligand surface residue {ligand_residue}")
+                global_log.info(f"Receptor surface residues: {receptor_neighbors}")
+
+                # Add non-repeated receptor surface residues to the list
+                for receptor_residue in receptor_neighbors:
+                    if receptor_residue.get_id() not in receptor_interface_residues_ids:
+                        receptor_interface_residues.append(receptor_residue)
+                        receptor_interface_residues_ids.append(receptor_residue.get_id())
+
+                # Add the ligand surface residue to the interface residues
+                ligand_interface_residues.append(ligand_residue)
+    
+    # Join the receptor and ligand interface residues
+    interface_residues = receptor_interface_residues + ligand_interface_residues
+
+    # Check if any interface residue was found
+    if len(interface_residues) == 0:
+        global_log.error("WARNING: No interface residues were found! Check the distance threshold and the ligand chain!")
+    
+    return interface_residues
+
+def compute_pir_cop(interface_residues: list, oda_threshold: float):
+    """
+    Compute the "PIR COP" (Percentage of Interface Residues Covered by ODA Patches) for a given list of
+    interface residues given as a list of Bio.PDB.Residue objects. In which the beta factor
+    column is the ODA value.
 
     Inputs
     ------
 
-        pose_path                  (str): path to docking pose with receptor and ligand
-        receptor_surface_residues (list): list with surface residues id of the receptor protein
-        ligand_surface_residues   (list): list with surface residues id of the ligand protein
-        properties                (dict): dictionary with step properties
+        interface_residues (list): list with interface residues (Bio.PDB.Residue objects)
+        oda_threshold     (float): ODA threshold to consider a residue covered by ODA patches
+    
+    Returns
+    -------
+
+        pir_cop           (float): Percentage of Interface Residues Covered by ODA Patches
     """
 
-    # Load the docking pose using bioPython
-    pose = PDB.PDBParser(QUIET=True).get_structure("pdb", pose_path)
+    # Get the number of interface residues
+    n_interface_residues = len(interface_residues)
 
-    # Iterate over surface residues
-    interface_residues = []
+    # Iterate over the interface residues and count the number of residues covered by ODA patches
+    n_interface_residues_covered = 0
+    for residue in interface_residues:
 
+        # Get the atoms of the residue
+        atoms = [atom for atom in residue.get_atoms()]
+
+        # Get the ODA value of the residue
+        oda_value = atoms[0].bfactor
+
+        # Check if the residue is covered by ODA patches
+        if oda_value <= oda_threshold:
+            n_interface_residues_covered += 1
+
+    # Compute the "PIR COP" (Percentage of Interface Residues Covered by ODA Patches)
+    pir_cop = n_interface_residues_covered / n_interface_residues
+
+    return pir_cop
 
 # DEPRECATED
 
@@ -707,7 +822,7 @@ def rmsd_clustering_mda(input_zip_path: str, output_zip_path: str, properties: d
 # Main #
 ########
 
-def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path, previous_output_path, skip_until):
+def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_output_path, skip_until, output_path):
     '''
     Main protein-protein docking workflow. Can be used to sample protein-protein docking poses,
     rank them according to pyDock score and cluster them based on RMSD. The best scoring pose from each cluster 
@@ -719,9 +834,9 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path,
         configuration_path   (str): path to input.yml
         receptor_pdb_path    (str): path to receptor pdb file
         ligand_pdb_path      (str): path to ligand pdb file
-        output_path          (str): path to output folder
         previous_output_path (str): path to previous output folder. Used if you want to re-use some steps of a previous run
-        skip_until           (str): skip everything until this step. Options: makePDB, clustering, oda_filtering 
+        skip_until           (str): skip everything until this step. Options: dockrst, makePDB, clustering, oda_filtering 
+        output_path          (str): path to output folder
 
     Outputs
     -------
@@ -796,48 +911,48 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, output_path,
     # Read csv with ranking of docking poses (pydock score)
     ranking_df = pd.read_csv(global_paths["step5_dockser"]["output_ene_path"], sep='\s+', skiprows=[1], header=0)
 
-    # Skip step if requested
+    # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "makePDB"
     if run_remaining_steps:
 
-        # STEP 6: Generate PDB files for top scoring docking poses
-        global_log.info("step6_makePDB: generate PDB files for top scoring docking poses")
-        makePDB(**global_paths["step6_makePDB"], properties=global_prop["step6_makePDB"])
+        # STEP 7: Generate PDB files for top scoring docking poses
+        global_log.info("step7_makePDB: generate PDB files for top scoring docking poses")
+        makePDB(**global_paths["step7_makePDB"], properties=global_prop["step7_makePDB"])
     
     else:
 
-        # Link Step 6 folder in previous output path to output path
-        link_previous_steps(global_log, ["step6_makePDB"], output_path, previous_output_path)
+        # Link step folder in previous output path to output path
+        link_previous_steps(global_log, ["step7_makePDB"], output_path, previous_output_path)
 
     # Keep only top scoring docking poses in the ranking data frame
-    rank1 = global_prop["step6_makePDB"]["rank1"]
-    rank2 = global_prop["step6_makePDB"]["rank2"]
+    rank1 = global_prop["step7_makePDB"]["rank1"]
+    rank2 = global_prop["step7_makePDB"]["rank2"]
     top_ranking_df = ranking_df[(ranking_df["RANK"] >= rank1) & (ranking_df["RANK"] <= rank2)] 
 
-    # Skip step if requested
+    # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "clustering"
     if run_remaining_steps:
        
         # Add docking name and ligand chain to clustering step properties
-        global_prop["step7_clustering"]["docking_name"] = global_prop["step6_makePDB"]["docking_name"]
-        global_prop["step7_clustering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
+        global_prop["step8_clustering"]["docking_name"] = global_prop["step7_makePDB"]["docking_name"]
+        global_prop["step8_clustering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
 
-        # STEP 7: Clustering with RMSD
-        global_log.info("step7_clustering: clustering with RMSD")
-        rmsd_clustering(**global_paths["step7_clustering"], properties=global_prop["step7_clustering"], ranking_df=top_ranking_df) 
+        # STEP 8: Clustering with RMSD
+        global_log.info("step8_clustering: clustering with RMSD")
+        rmsd_clustering(**global_paths["step8_clustering"], properties=global_prop["step8_clustering"], ranking_df=top_ranking_df) 
 
     else:
 
-        # Link Step 7 folder in previous output path to output path
-        link_previous_steps(global_log, ["step7_clustering"], output_path, previous_output_path)
+        # Link step folder in previous output path to output path
+        link_previous_steps(global_log, ["step8_clustering"], output_path, previous_output_path)
 
     # Add receptor and ligand chains to oda_filtering step properties
-    global_prop["step8_oda_filtering"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["newmol"]
-    global_prop["step8_oda_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
+    global_prop["step9_oda_filtering"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["newmol"]
+    global_prop["step9_oda_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
 
-    # STEP 8: Filtering with ODA patches
-    global_log.info("step8_oda_filtering: filtering with ODA patches")
-    oda_filtering(**global_paths["step8_oda_filtering"], properties=global_prop["step8_oda_filtering"])
+    # STEP 9: Filtering with ODA patches
+    global_log.info("step9_oda_filtering: filtering with ODA patches")
+    oda_filtering(**global_paths["step9_oda_filtering"], properties=global_prop["step9_oda_filtering"])
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -875,9 +990,9 @@ if __name__ == "__main__":
     
     # To skip all steps until a certain step. Options: makePDB, clustering, oda_filtering
     parser.add_argument('--skip_until', dest='skip_until',
-                        help="Skip everything until this step. Options: makePDB, clustering, oda_filtering",
+                        help="Skip everything until this step (use together with previous_output to re-use previous results). Options: makePDB, clustering, oda_filtering",
                         required=False)
-
+    
     # Output                        
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
@@ -888,6 +1003,6 @@ if __name__ == "__main__":
     main_wf(configuration_path=args.config_path,
             receptor_pdb_path=args.receptor_pdb_path,
             ligand_pdb_path=args.ligand_pdb_path,
-            output_path=args.output_path,
             previous_output_path=args.previous_output_path,
-            skip_until=args.skip_until)
+            skip_until=args.skip_until,
+            output_path=args.output_path)
