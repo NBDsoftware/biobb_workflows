@@ -127,7 +127,7 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
     
     # Debug
     elapsed_time = time.time() - start_time
-    global_log.info(f"Elapsed time: {elapsed_time / 60} min")
+    global_log.info(f"  RMSD matrix computation time: {elapsed_time / 60} min")
 
     # Convert the RMSD matrix into a condensed distance matrix
     rmsd_matrix = squareform(rmsd_matrix)
@@ -625,10 +625,7 @@ def find_interface_residues(pose_path: str, ligand_surface_residues: list, Recep
     """
     # Global log
     global_log = properties["global_log"]
-
-    # Debug
-    global_log.info("Finding interface residues...")
-    global_log.info(f"Pose: {pose_path}")
+    global_log.info("   Finding interface residues...")
 
     # Load the docking pose using bioPython
     parser = PDB.PDBParser(QUIET=True)
@@ -653,9 +650,6 @@ def find_interface_residues(pose_path: str, ligand_surface_residues: list, Recep
         # Check if the ligand residue is a surface residue
         if ligand_residue_id in ligand_surface_residues_ids:
 
-            # Debug 
-            global_log.info(f"For ligand surface residue: {ligand_residue}")
-
             # Get the ligand residue atoms
             ligand_residue_atoms = [atom for atom in ligand_residue.get_atoms()]
 
@@ -667,10 +661,6 @@ def find_interface_residues(pose_path: str, ligand_surface_residues: list, Recep
 
             # Check if any receptor surface residue was found
             if len(receptor_neighbors) > 0:
-
-                # Debug
-                global_log.info(f"Found {len(receptor_neighbors)} receptor surface residues within {properties['distance_threshold']} Å from ligand surface residue {ligand_residue}")
-                global_log.info(f"Receptor surface residues: {receptor_neighbors}")
 
                 # Add non-repeated receptor surface residues to the list
                 for receptor_residue in receptor_neighbors:
