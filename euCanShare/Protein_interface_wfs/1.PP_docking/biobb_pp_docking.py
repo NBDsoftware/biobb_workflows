@@ -114,29 +114,77 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
         ranking_df     (pd.Dataframe): dataframe with ranking of docking poses
     """
 
+    # Prepare clustering step folder 
+    poses_ranked_paths, paths_ranking = prepare_clustering_step(input_zip_path, ranking_df, properties)
+
+    # Debug
+    global_log = properties["global_log"]
+    # Start timer
+    start_time = time.time()
+
+    # Calculate the RMSD matrix between all poses
+    rmsd_matrix = compute_RMSD_matrix(poses_ranked_paths, properties["ligand_chain"])
+    
+    # Debug
+    elapsed_time = time.time() - start_time
+    global_log.info(f"Elapsed time: {elapsed_time / 60} min")
+
+    # Convert the RMSD matrix into a condensed distance matrix
+    rmsd_matrix = squareform(rmsd_matrix)
+
+    # Calculate the linkage matrix
+    Z = linkage(rmsd_matrix, method = "average")
+
+    # Get the cluster labels from the linkage matrix
+    cluster_labels = fcluster(Z, t = properties["rmsd_threshold"], criterion = "distance")
+
+    plot_dendogram(Z, paths_ranking, properties["rmsd_threshold"], properties["path"])
+
+    # Find the best ranking pose path for each cluster
+    top_distinct_poses_paths = []
+    for cluster in range(1, max(cluster_labels) + 1):
+
+        # Get the ranking of the poses in the cluster
+        cluster_ranking = [paths_ranking[i] for i in np.where(cluster_labels == cluster)[0]]
+
+        # Get the paths of the poses in the cluster
+        cluster_paths = [poses_ranked_paths[i] for i in np.where(cluster_labels == cluster)[0]]
+
+        # Find the path of the pose with the best ranking in the cluster
+        best_pose_path = cluster_paths[cluster_ranking.index(min(cluster_ranking))]
+        top_distinct_poses_paths.append(best_pose_path)
+
+    # Zip the best ranking pose paths into a zip file
+    fu.zip_list(zip_file = output_zip_path, file_list = top_distinct_poses_paths)
+
+def compute_RMSD_matrix(poses_ranked_paths: list, ligand_chain: str):
+    """
+    Computes an uncondensed RMSD matrix between all poses using only the CA atoms of the ligand (as the receptor didn't move during docking).
+
+    Inputs
+    ------
+
+        poses_ranked_paths (list): list with paths to docking poses
+        ligand_chain        (str): chain of the ligand protein
+    
+    Returns
+    -------
+
+        rmsd_matrix (np.array): uncondensed RMSD matrix between all poses 
+    """
+
     # Max number of CA atoms to use for RMSD calculation 
     # (enough to describe the rigid ligand orientation)
     max_ca_atoms = 20
 
-    # Prepare clustering step folder 
-    poses_ranked_paths, paths_ranking = prepare_clustering_step(input_zip_path, ranking_df, properties)
-
     # Create a PDB parser 
     parser = PDB.PDBParser(QUIET=True)
-
-    # Get the ligand chain from the properties
-    ligand_chain = properties["ligand_chain"]
 
     # Get the number of poses
     n_poses = len(poses_ranked_paths)
 
     # Initialize the empty RMSD matrix (n_poses x n_poses)
     rmsd_matrix = np.zeros((n_poses, n_poses))
-
-    # Debug
-    global_log = properties["global_log"]
-    # Start timer
-    start_time = time.time()
 
     # Get the serials of some CA atoms of the ligand chain from the first pose
     ca_serials = sample_ca_atoms(poses_ranked_paths[0], ligand_chain, max_ca_atoms)
@@ -171,37 +219,7 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
             rmsd_matrix[i, j] = rmsd
             rmsd_matrix[j, i] = rmsd
     
-    # Debug
-    elapsed_time = time.time() - start_time
-    global_log.info(f"Elapsed time: {elapsed_time / 60} min")
-
-    # Convert the RMSD matrix into a condensed distance matrix
-    rmsd_matrix = squareform(rmsd_matrix)
-
-    # Calculate the linkage matrix
-    Z = linkage(rmsd_matrix, method = "average")
-
-    # Get the cluster labels from the linkage matrix
-    cluster_labels = fcluster(Z, t = properties["rmsd_threshold"], criterion = "distance")
-
-    plot_dendogram(Z, paths_ranking, properties["rmsd_threshold"], properties["path"])
-
-    # Find the best ranking pose path for each cluster
-    top_distinct_poses_paths = []
-    for cluster in range(1, max(cluster_labels) + 1):
-
-        # Get the ranking of the poses in the cluster
-        cluster_ranking = [paths_ranking[i] for i in np.where(cluster_labels == cluster)[0]]
-
-        # Get the paths of the poses in the cluster
-        cluster_paths = [poses_ranked_paths[i] for i in np.where(cluster_labels == cluster)[0]]
-
-        # Find the path of the pose with the best ranking in the cluster
-        best_pose_path = cluster_paths[cluster_ranking.index(min(cluster_ranking))]
-        top_distinct_poses_paths.append(best_pose_path)
-
-    # Zip the best ranking pose paths into a zip file
-    fu.zip_list(zip_file = output_zip_path, file_list = top_distinct_poses_paths)
+    return rmsd_matrix
 
 def sample_ca_atoms(pdb_path, ligand_chain, max_ca_atoms):
     """
