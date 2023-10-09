@@ -12,6 +12,10 @@ from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from scipy.spatial.distance import squareform
 from Bio import PDB
 
+import MDAnalysis as mda
+from MDAnalysis.analysis.encore.confdistmatrix import conformational_distance_matrix
+from MDAnalysis.analysis.encore.confdistmatrix import set_rmsd_matrix_elements
+
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 from biobb_pydock.pydock.setup import setup
@@ -129,7 +133,7 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
     elapsed_time = time.time() - start_time
     global_log.info(f"  RMSD matrix computation time: {elapsed_time / 60} min")
 
-    # Convert the RMSD matrix into a condensed distance matrix
+    # Convert the uncondensed RMSD matrix into a condensed distance matrix
     rmsd_matrix = squareform(rmsd_matrix)
 
     # Calculate the linkage matrix
@@ -173,99 +177,53 @@ def compute_RMSD_matrix(poses_ranked_paths: list, ligand_chain: str):
         rmsd_matrix (np.array): uncondensed RMSD matrix between all poses 
     """
 
+    # Find the number of cores to use for parallelization (thread-based parallelization with shared memory, see conformational_distance_matrix source code)
+    if os.getenv('SLURM_CPUS_PER_TASK') is None:
+        # Running in local environment, use all available cores
+        num_threads = os.cpu_count()
+    else:
+        # Running on HPC environment, use SLURM's allocated CPUs
+        num_threads = int(os.getenv('SLURM_CPUS_PER_TASK'))
+
     # Max number of CA atoms to use for RMSD calculation 
     # (enough to describe the rigid ligand orientation)
     max_ca_atoms = 20
 
-    # Create a PDB parser 
-    parser = PDB.PDBParser(QUIET=True)
+    # Create a universe with all poses, use the first pose as the topology
+    poses_universe = mda.Universe(poses_ranked_paths[0])
 
-    # Get the number of poses
-    n_poses = len(poses_ranked_paths)
+    # Read coordinates of all poses into the universe
+    poses_universe.load_new(poses_ranked_paths)
 
-    # Initialize the empty RMSD matrix (n_poses x n_poses)
-    rmsd_matrix = np.zeros((n_poses, n_poses))
+    # Select the CA atoms of the ligand
+    ligand_ca_atoms = poses_universe.select_atoms(f"protein and chainID {ligand_chain} and name CA")
 
-    # Get the serials of some CA atoms of the ligand chain from the first pose
-    ca_serials = sample_ca_atoms(poses_ranked_paths[0], ligand_chain, max_ca_atoms)
+    # Find the total number of CA atoms in the ligand
+    n_ligand_ca_atoms = len(ligand_ca_atoms)
 
-    # Iterate over pairs of poses without repetition
-    for i in range(n_poses):
+    # If the number of CA atoms in the ligand is greater than the maximum number of CA atoms to use for RMSD calculation
+    if n_ligand_ca_atoms > max_ca_atoms:
 
-        # Get the ligand chain of the reference pose
-        ref_path = poses_ranked_paths[i]
-        ref_structure = parser.get_structure("reference", ref_path)
-        ligand_ref = find_chain(ref_structure, ligand_chain)
+        # Create a list with max_ca_atoms indices uniformly spaced from 0 to n_ligand_ca_atoms
+        indices = np.linspace(0, n_ligand_ca_atoms - 1, max_ca_atoms, dtype = int)
 
-        # Get the selected CA atom coordinates of the reference pose
-        ref_atoms = [atom for atom in ligand_ref.get_atoms() if atom.get_serial_number() in ca_serials]
-        ref_coords = np.array([atom.get_coord() for atom in ref_atoms])
+        # Select the CA atoms to use for RMSD calculation from the ligand_ca_atoms AtomGroup
+        ligand_ca_atoms = ligand_ca_atoms[indices]
 
-        for j in range(i + 1, n_poses):
-            
-            # Get the target chain of the target pose
-            target_path = poses_ranked_paths[j]
-            target_structure = parser.get_structure("target", target_path)
-            ligand_target = find_chain(target_structure, ligand_chain)
-            
-            # Get the selected CA atom coordinates of the target pose
-            target_atoms = [atom for atom in ligand_target.get_atoms() if atom.get_serial_number() in ca_serials]
-            target_coords = np.array([atom.get_coord() for atom in target_atoms])
+    # Transform the ligand_ca_atoms AtomGroup into a selection string
+    rmsd_selection = "index " + " or index ".join([str(atom.index) for atom in ligand_ca_atoms])
 
-            # Calculate RMSD between reference and target
-            rmsd = np.sqrt(np.sum((ref_coords - target_coords) ** 2) / len(ref_coords))
-        
-            # Add RMSD to the matrix (symmetric)
-            rmsd_matrix[i, j] = rmsd
-            rmsd_matrix[j, i] = rmsd
-    
-    return rmsd_matrix
+    # Compute the RMSD matrix between all poses using only the CA atoms of the ligand
+    rmsd_triangular_matrix = conformational_distance_matrix(poses_universe, 
+                                                 conf_dist_function=set_rmsd_matrix_elements,
+                                                 select = rmsd_selection,
+                                                 pairwise_align = False,
+                                                 metadata = False,
+                                                 n_jobs = num_threads)
 
-def sample_ca_atoms(pdb_path, ligand_chain, max_ca_atoms):
-    """
-    Sample CA atoms of the ligand chain uniformly.
+    print(rmsd_triangular_matrix.as_array())
 
-    Inputs
-    ------
-
-        pdb_path       (str): path to pdb file
-        ligand_chain   (str): chain of the ligand protein
-        max_ca_atoms   (int): maximum number of CA atoms to keep
-    
-    Returns
-    -------
-
-        ca_serial     (list): list with the serial numbers of the sampled CA atoms
-    """
-    
-    # Create a PDB parser 
-    parser = PDB.PDBParser(QUIET=True)
-
-    # Get the structure of the first pose
-    pose_structure = parser.get_structure("first_pose", pdb_path)
-
-    # Find ligand chain
-    ligand_chain = find_chain(pose_structure, ligand_chain)
-    
-    # Get the CA atoms of the ligand chain
-    ligand_ca_atoms = [atom for atom in ligand_chain.get_atoms() if atom.get_id() == "CA"]
-
-    # Get the number of CA atoms of the ligand chain
-    total_ca_atoms = len(ligand_ca_atoms)
-
-    # Sample the CA atoms of the ligand chain uniformly
-    if total_ca_atoms > max_ca_atoms:
-
-        # Get the indices of the CA atoms to keep
-        indices = np.linspace(0, total_ca_atoms - 1, max_ca_atoms, dtype=int)
-
-        # Get the CA atoms to keep
-        ligand_ca_atoms = [ligand_ca_atoms[i] for i in indices]
-
-    # Get the serial numbers of the CA atoms to keep
-    ca_serial = [atom.get_serial_number() for atom in ligand_ca_atoms]
-
-    return ca_serial
+    return rmsd_triangular_matrix.as_array()
 
 def find_chain(structure, chain_id):
     """
@@ -421,7 +379,7 @@ def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_pa
     for residue in receptor_surface_residues:
         receptor_surface_atoms.extend(residue.get_atoms())
 
-    # Create the Neighbour Search object for the receptor surface atoms
+    # Create the Neighbor Search object for the receptor surface atoms
     Receptor_Neighbor_Search = PDB.NeighborSearch(receptor_surface_atoms)
 
     # For each pose
