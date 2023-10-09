@@ -133,6 +133,11 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
     elapsed_time = time.time() - start_time
     global_log.info(f"  RMSD matrix computation time: {elapsed_time / 60} min")
 
+    # Save RMSD matrix as npy file
+    if properties["save_rmsd_matrix"]:
+        np.save(str(Path(properties["path"]).joinpath("rmsd_matrix.npy")), rmsd_matrix)
+
+
     # Convert the uncondensed RMSD matrix into a condensed distance matrix
     rmsd_matrix = squareform(rmsd_matrix)
 
@@ -220,8 +225,6 @@ def compute_RMSD_matrix(poses_ranked_paths: list, ligand_chain: str):
                                                  pairwise_align = False,
                                                  metadata = False,
                                                  n_jobs = num_threads)
-
-    print(rmsd_triangular_matrix.as_array())
 
     return rmsd_triangular_matrix.as_array()
 
