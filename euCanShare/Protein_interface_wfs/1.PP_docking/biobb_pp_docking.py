@@ -129,6 +129,10 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
     elapsed_time = time.time() - start_time
     global_log.info(f"  RMSD matrix computation time: {elapsed_time / 60} min")
 
+    # Save RMSD matrix as npy file
+    if properties["save_rmsd_matrix"]:
+        np.save(str(Path(properties["path"]).joinpath("rmsd_matrix.npy")), rmsd_matrix)
+        
     # Convert the RMSD matrix into a condensed distance matrix
     rmsd_matrix = squareform(rmsd_matrix)
 
