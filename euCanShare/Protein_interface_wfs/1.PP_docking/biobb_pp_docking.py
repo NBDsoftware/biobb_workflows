@@ -625,7 +625,6 @@ def find_interface_residues(pose_path: str, ligand_surface_residues: list, Recep
     """
     # Global log
     global_log = properties["global_log"]
-    global_log.info("   Finding interface residues...")
 
     # Load the docking pose using bioPython
     parser = PDB.PDBParser(QUIET=True)
