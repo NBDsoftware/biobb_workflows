@@ -188,7 +188,7 @@ def compute_RMSD_matrix(poses_ranked_paths: list, ligand_chain: str):
     n_poses = len(poses_ranked_paths)
 
     # Initialize the empty RMSD matrix (n_poses x n_poses)
-    rmsd_matrix = np.zeros((n_poses, n_poses))
+    rmsd_matrix = np.zeros((n_poses, n_poses), dtype=np.float32)
 
     # Get the serials of some CA atoms of the ligand chain from the first pose
     ca_serials = sample_ca_atoms(poses_ranked_paths[0], ligand_chain, max_ca_atoms)
