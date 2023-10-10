@@ -121,22 +121,8 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
     # Prepare clustering step folder 
     poses_ranked_paths, paths_ranking = prepare_clustering_step(input_zip_path, ranking_df, properties)
 
-    # Debug
-    global_log = properties["global_log"]
-    # Start timer
-    start_time = time.time()
-
     # Calculate the RMSD matrix between all poses
-    rmsd_matrix = compute_RMSD_matrix(poses_ranked_paths, properties["ligand_chain"])
-    
-    # Debug
-    elapsed_time = time.time() - start_time
-    global_log.info(f"  RMSD matrix computation time: {elapsed_time / 60} min")
-
-    # Save RMSD matrix as npy file
-    if properties["save_rmsd_matrix"]:
-        np.save(str(Path(properties["path"]).joinpath("rmsd_matrix.npy")), rmsd_matrix)
-
+    rmsd_matrix = compute_rmsd_matrix(poses_ranked_paths, properties["ligand_chain"])
 
     # Convert the uncondensed RMSD matrix into a condensed distance matrix
     rmsd_matrix = squareform(rmsd_matrix)
@@ -166,7 +152,7 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
     # Zip the best ranking pose paths into a zip file
     fu.zip_list(zip_file = output_zip_path, file_list = top_distinct_poses_paths)
 
-def compute_RMSD_matrix(poses_ranked_paths: list, ligand_chain: str):
+def compute_rmsd_matrix(poses_ranked_paths: list, ligand_chain: str):
     """
     Computes an uncondensed RMSD matrix between all poses using only the CA atoms of the ligand (as the receptor didn't move during docking).
 
