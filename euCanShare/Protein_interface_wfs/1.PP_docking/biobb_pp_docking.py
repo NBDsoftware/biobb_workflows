@@ -2,17 +2,21 @@
 
 # Importing all the needed libraries
 import os
+import re
 import time
+import shutil
 import argparse
 import numpy as np
+from Bio import PDB
 import pandas as pd
 from pathlib import Path
+from functools import partial
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from scipy.spatial.distance import squareform
-from Bio import PDB
 
 import MDAnalysis as mda
+from MDAnalysis.analysis.distances import distance_array
 from MDAnalysis.analysis.encore.confdistmatrix import conformational_distance_matrix
 from MDAnalysis.analysis.encore.confdistmatrix import set_rmsd_matrix_elements
 
@@ -27,6 +31,49 @@ from biobb_pydock.pydock.oda import oda
 #############
 # Functions #
 #############
+
+def launch_step_full(global_log, global_paths, output_path, previous_output_path, tool, step_name, description, global_prop, run_remaining_steps):
+    """
+    Function used to run one step of the workflow. It will check if the step is requested by the user and if it is, it will run it.
+
+    Constant arguments (same for all steps):
+    ----------------------------------------
+
+        global_log            (Logger): logger object
+        global_paths            (dict): dictionary with all the paths used in the workflow
+        output_path              (str): path to output folder
+        previous_output_path     (str): path to previous output folder
+    
+    Variable arguments (different for each step):
+    --------------------------------------------
+
+        tool                     (str): tool name
+        step_name                (str): step name
+        description              (str): step description
+        global_prop             (dict): dictionary with all the properties used in the workflow
+        run_remaining_steps     (bool): flag to run remaining steps
+    
+    Returns
+    -------
+
+        elapsed_step_time (float): elapsed time for the step
+    """
+
+    # Start time
+    start_step_time = time.time()
+
+    if run_remaining_steps:
+        # Run step
+        global_log.info(f"{step_name}: {description}")
+        tool(**global_paths[step_name], properties=global_prop[step_name])
+    else:
+        # Link step folder in previous output path to output path
+        link_previous_step(global_log, step_name, output_path, previous_output_path)
+
+    # End time
+    elapsed_step_time = time.time() - start_step_time
+
+    return elapsed_step_time
 
 def check_arguments(global_log, receptor_pdb_path, ligand_pdb_path, output_path, previous_output_path, skip_until):
     """
@@ -64,14 +111,14 @@ def check_arguments(global_log, receptor_pdb_path, ligand_pdb_path, output_path,
         if output_path == previous_output_path:
             global_log.error("ERROR: The output path and the previous output path are the same!")
 
-def link_previous_steps(global_log, step_folders, output_path, previous_output_path):
+def link_previous_step(global_log, step_name, output_path, previous_output_path):
     """
     Link step folders in previous output path to output path
 
     Inputs
     ------
 
-        step_folders          (list): list of step folders to link
+        step_name              (str): step name to link
         output_path            (str): path to output folder
         previous_output_path   (str): path to previous output folder
     """
@@ -80,26 +127,51 @@ def link_previous_steps(global_log, step_folders, output_path, previous_output_p
     if previous_output_path is None:
         return
 
-    # For each step folder, check if it exists in previous output path and link it to output path
-    for step in step_folders:
-
-        # Check if step folder exists in previous output path
-        if not os.path.exists(str(Path(previous_output_path).joinpath(step))):
-            global_log.warning(f"WARNING: The step folder {step} does not exist in the previous output path provided!")
-            continue
-
-        # Check if step folder exists in output path
-        if os.path.exists(str(Path(output_path).joinpath(step))):
-            global_log.warning(f"WARNING: The step folder {step} already exists in the output path provided!")
-            continue
-
-        # Link step folder in previous output path to output path
-        os.symlink(str(Path(previous_output_path).joinpath(step)), str(Path(output_path).joinpath(step)))
+    # Check if step folder exists in previous output path
+    if not os.path.exists(str(Path(previous_output_path).joinpath(step_name))):
+        global_log.warning(f"WARNING: The step folder {step_name} does not exist in the previous output path provided!")
+        return
+    
+    # Check if step folder exists in output path
+    if os.path.exists(str(Path(output_path).joinpath(step_name))):
+        global_log.warning(f"WARNING: The step folder {step_name} already exists in the output path provided!")
+        return
+    
+    # Link step folder in previous output path to output path
+    os.symlink(str(Path(previous_output_path).joinpath(step_name)), str(Path(output_path).joinpath(step_name)))
     
     return
 
+def prepare_step(input_zip_path: str, prop: dict):
+    """
+    1. Create step folder
+    2. Create docking poses subfolder and unzip docking poses into it
 
-def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict, ranking_df: pd.DataFrame):
+    Inputs
+    ------
+
+        input_zip_path          (str): path to zip file with docking poses
+        prop                   (dict): dictionary with oda_filtering step properties
+    
+    Returns
+    -------
+
+        poses_paths (list): list with paths to extracted docking poses
+    """
+
+    # Create oda filtering folder
+    fu.create_dir(prop["path"])
+
+    # Create subfolder for poses
+    poses_folder_path = fu.create_dir(str(Path(prop["path"]).joinpath("poses")))
+
+    # Extract the file with the docking poses into the subfolder
+    poses_paths = fu.unzip_list(zip_file = input_zip_path, dest_dir = poses_folder_path)
+
+    return poses_paths
+
+
+def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict):
 
     """ 
     Cluster the docking poses based on RMSD and save the best ranking pose from each cluster into a zip file.
@@ -115,11 +187,26 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
         input_zip_path          (str): path to zip file with docking poses
         output_zip_path         (str): path to output zip file with best ranking docking poses
         properties             (dict): dictionary with clustering step properties
-        ranking_df     (pd.Dataframe): dataframe with ranking of docking poses
     """
 
+    if properties["run_step"] is False:
+
+        # Create step folder
+        fu.create_dir(properties["path"])
+        
+        # Copy input zip file to output zip file
+        shutil.copy(input_zip_path, output_zip_path)
+
+        return
+    
     # Prepare clustering step folder 
-    poses_ranked_paths, paths_ranking = prepare_clustering_step(input_zip_path, ranking_df, properties)
+    poses_paths = prepare_step(input_zip_path, properties)
+
+    # Load the ranking dataframe
+    ranking_df = properties["ranking_df"]
+
+    # Rename docking poses with rank and create a list with the corresponding rank for each file
+    poses_ranked_paths, paths_ranking = rename_with_rank(poses_paths, ranking_df)
 
     # Calculate the RMSD matrix between all poses
     rmsd_matrix = compute_rmsd_matrix(poses_ranked_paths, properties["ligand_chain"])
@@ -151,6 +238,9 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict,
 
     # Zip the best ranking pose paths into a zip file
     fu.zip_list(zip_file = output_zip_path, file_list = top_distinct_poses_paths)
+
+    # Remove temporal folder with poses
+    fu.rm(os.path.join(properties["path"], "poses"))
 
 def compute_rmsd_matrix(poses_ranked_paths: list, ligand_chain: str):
     """
@@ -240,41 +330,7 @@ def find_chain(structure, chain_id):
     # If the chain ID does not match any chain ID, raise an error
     raise ValueError(f"Chain {chain_id} not found in structure!")
 
-def prepare_clustering_step(input_zip_path: dict, ranking_df: pd.DataFrame, prop: dict):
-    """ 
-    1. Create clustering folder
-    2. Create docking poses subfolder and unzip docking poses into it
-    3. Rename docking poses with rank and create a list with the corresponding rank for each file
-
-    Inputs
-    ------
-
-        input_zip_path          (str): path to zip file with docking poses
-        ranking_df     (pd.Dataframe): dataframe with ranking of docking poses
-        prop                   (dict): dictionary with clustering step properties
-
-    Returns
-    -------
-
-        poses_ranked_paths     (list): list with paths to docking poses
-        paths_ranking          (list): list with the corresponding rank for each docking pose
-    """
-    
-    # Create clustering folder
-    fu.create_dir(prop["path"])
-
-    # Create subfolder for poses
-    poses_folder_path = fu.create_dir(str(Path(prop["path"]).joinpath("poses")))
-
-    # Extract the file with the docking poses into the subfolder
-    poses_paths = fu.unzip_list(zip_file = input_zip_path, dest_dir = poses_folder_path)
-
-    # Prepare docking poses - change file names from conformation number to rank and create a list with the corresponding rank for each file
-    poses_ranked_paths, paths_ranking = rename_with_rank(poses_paths, ranking_df, prop['docking_name'])
-
-    return poses_ranked_paths, paths_ranking
-
-def rename_with_rank(poses_paths: list, ranking_df: pd.DataFrame, docking_name: str):
+def rename_with_rank(poses_paths: list, ranking_df: pd.DataFrame):
     """ 
     Change pdb poses file names from conformation number to rank.
 
@@ -283,7 +339,6 @@ def rename_with_rank(poses_paths: list, ranking_df: pd.DataFrame, docking_name: 
 
         poses_paths         (list): list with paths to docking poses
         ranking_df  (pd.DataFrame): dataframe with ranking of docking poses
-        docking_name         (str): name of the docking run
 
     Returns
     -------
@@ -301,8 +356,14 @@ def rename_with_rank(poses_paths: list, ranking_df: pd.DataFrame, docking_name: 
     # Change pdb file name for rank and create a list with the ranking
     for pdb_path in poses_paths:
 
-        # Get the conformation number from the file name
-        conformation_number = Path(pdb_path).stem.strip(f"{docking_name}_")
+        # Get the pdb name without the extension
+        pdb_name = Path(pdb_path).stem
+
+        # Look for a number (e.g. 13 or 123) in the pdb name    
+        number_match = re.findall(r"\d+", pdb_name)
+
+        # Get the conformation number from the match
+        conformation_number = number_match[0]
 
         # Get the rank from the ranking Dataframe
         rank = ranking_df[ranking_df["Conf"] == int(conformation_number)]["RANK"].values[0]
@@ -356,8 +417,26 @@ def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_pa
         properties             (dict): dictionary with oda_filtering step properties
     """
 
-    # Decorate the receptor and ligand in all input docking poses with ODA values.
-    oda_poses_paths = prepare_oda_filtering_step(input_receptor_path, input_ligand_path, input_zip_path, properties)
+    if properties["run_step"] is False:
+
+        # Create step folder
+        fu.create_dir(properties["path"])
+        
+        # Copy input zip file to output zip file
+        shutil.copy(input_zip_path, output_zip_path)
+
+        return
+    
+    # Prepare step folder and unzip docking poses into it
+    poses_paths = prepare_step(input_zip_path, properties)
+
+    # Decorate the receptor and the ligand proteins of each pose with the corresponding ODA values
+    oda_poses_folder_path = fu.create_dir(str(Path(properties["path"]).joinpath("oda_poses")))
+    oda_poses_paths = []
+    for pose_path in poses_paths:
+        # Decorate the receptor and the ligand proteins of the pose with the corresponding ODA values
+        decorated_pose_path = decorate_with_oda_values(pose_path, input_receptor_path, input_ligand_path, oda_poses_folder_path, properties["receptor_chain"], properties["ligand_chain"])
+        oda_poses_paths.append(decorated_pose_path)
 
     # Find all residues pertaining to the surface of the receptor and ligand proteins (through their SASA values).
     receptor_surface_residues = find_surface_residues(input_receptor_path, properties["path"])
@@ -388,47 +467,9 @@ def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_pa
     # Zip the filtered docking pose paths into a zip file
     fu.zip_list(zip_file = output_zip_path, file_list = filtered_poses_paths)
 
-def prepare_oda_filtering_step(input_receptor_path: str, input_ligand_path: str, input_zip_path: str, prop: dict):
-    """
-    1. Create oda_filtering folder
-    2. Create docking poses subfolder and unzip docking poses into it
-    3. Decorate the receptor and the ligand proteins of each pose with the corresponding ODA values
-
-    Inputs
-    ------
-
-        input_receptor_path     (str): path to receptor pdb file with ODA values
-        input_ligand_path       (str): path to ligand pdb file with ODA values
-        input_zip_path          (str): path to zip file with docking poses
-        prop                   (dict): dictionary with oda_filtering step properties
-    
-    Returns
-    -------
-
-        poses_paths            (list): list with paths to docking poses
-    """
-
-    # Create oda filtering folder
-    fu.create_dir(prop["path"])
-
-    # Create subfolder for poses
-    poses_folder_path = fu.create_dir(str(Path(prop["path"]).joinpath("poses")))
-
-    # Extract the file with the docking poses into the subfolder
-    poses_paths = fu.unzip_list(zip_file = input_zip_path, dest_dir = poses_folder_path)
-
-    # Create subfolder for poses with ODA values
-    oda_poses_folder_path = fu.create_dir(str(Path(prop["path"]).joinpath("oda_poses")))
-
-    # Iterate over the docking poses
-    decorated_poses_paths = []
-    for pose_path in poses_paths:
-
-        # Decorate the receptor and the ligand proteins of the pose with the corresponding ODA values
-        decorated_pose_path = decorate_with_oda_values(pose_path, input_receptor_path, input_ligand_path, oda_poses_folder_path, prop["receptor_chain"], prop["ligand_chain"])
-        decorated_poses_paths.append(decorated_pose_path)
-
-    return decorated_poses_paths
+    # Remove temporal folders with poses and decorated poses
+    fu.rm(os.path.join(properties["path"], "poses"))
+    fu.rm(os.path.join(properties["path"], "oda_poses"))
 
 def decorate_with_oda_values(pose_path, input_receptor_path, input_ligand_path, oda_poses_folder_path, receptor_chain, ligand_chain):
     """
@@ -479,13 +520,10 @@ def decorate_with_oda_values(pose_path, input_receptor_path, input_ligand_path, 
         receptor_atom.set_bfactor(receptor_oda_atom.bfactor)
 
     # Find the name of the docking pose file
-    pose_name = pose_path.split("/")[-1]
-
-    # Create new file name for the decorated docking pose
-    decorated_pose_name = f"oda_{pose_name}"
+    pose_name = Path(pose_path).name
 
     # Create new path for the decorated docking pose
-    decorated_pose_path = f"{oda_poses_folder_path}/{decorated_pose_name}"
+    decorated_pose_path = os.path.join(oda_poses_folder_path, pose_name)
 
     # Save the decorated docking pose
     io = PDB.PDBIO()
@@ -666,6 +704,96 @@ def compute_pir_cop(interface_residues: list, oda_threshold: float):
 
     return pir_cop
 
+def distance_filtering(input_zip_path: str, output_zip_path: str, properties: dict):
+    """
+    Function that filters docking poses according to the distance between pairs of residues 
+    (one from the receptor and one from the ligand) and saves the filtered poses into a zip file 
+    in PDB format.
+
+    1. Find the distance between pairs of residues (one from the receptor and one from the ligand)
+    2. Keep only the poses with a distance between pairs of residues below a given threshold.
+
+    Inputs
+    ------
+    
+        input_zip_path          (str): path to zip file with docking poses
+        output_zip_path         (str): path to output zip file with filtered docking poses
+        properties             (dict): dictionary with distance_filtering step properties
+    """
+
+    if properties["run_step"] is False:
+
+        # Create step folder
+        fu.create_dir(properties["path"])
+        
+        # Copy input zip file to output zip file
+        shutil.copy(input_zip_path, output_zip_path)
+
+        return
+
+    # Prepare step folder and unzip docking poses into it
+    poses_paths = prepare_step(input_zip_path, properties)
+    
+    # For each pose in chunk
+    filtered_poses_paths = []
+    for pose_path in poses_paths:
+
+        # Find the distance between pairs of residues (one from the receptor and one from the ligand)
+        accept_pose = calculate_distances(pose_path, properties)
+
+        # Keep only the poses with a distance between pairs of residues below a given threshold.
+        if accept_pose:
+            filtered_poses_paths.append(pose_path)
+
+    # Save the filtered poses paths into a zip file
+    fu.zip_list(zip_file = output_zip_path, file_list = filtered_poses_paths)
+
+    # Remove temporal folder with poses
+    fu.rm(os.path.join(properties["path"], "poses"))
+
+def calculate_distances(pose_path: str, properties: dict):
+    """
+    Compute distances between pairs of residues defined in properties and check
+    they are below a given threshold. If all distances are below the threshold,
+    return True. Otherwise return False.
+
+    Inputs
+    ------
+
+        pose_path (str): path to docking pose
+        properties (dict): dictionary with step properties
+    
+    Return
+    ------
+
+        accept_pose (bool): True if all distances are below the threshold, False otherwise
+    """
+
+    # Read the docking pose
+    pose_universe = mda.Universe(pose_path)
+
+    # Get the receptor and ligand chains 
+    receptor_chain = properties["receptor_chain"]
+    ligand_chain = properties["ligand_chain"]
+
+    # For each distance in the properties
+    for distance in properties["distances"]:
+
+        # Get the receptor residue CA atom
+        receptor_residue = pose_universe.select_atoms(f"protein and chainID {receptor_chain} and {distance['receptor_residue_selection']} and name CA")
+
+        # Get the ligand residue CA atom
+        ligand_residue = pose_universe.select_atoms(f"protein and chainID {ligand_chain} and {distance['ligand_residue_selection']} and name CA")
+
+        # Get the distance between the receptor and ligand CA atoms
+        distance_value = distance_array(receptor_residue.positions, ligand_residue.positions)[0][0]
+
+        # Check if the distance is below the threshold
+        if distance_value > distance["threshold"]:
+            return False
+    
+    return True
+
 ########
 # Main #
 ########
@@ -695,6 +823,7 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
 
     '''
 
+    # Start timer
     start_time = time.time()
     
     # Receiving the input configuration file (YAML)
@@ -726,92 +855,68 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
         global_paths["step1_setup"]["input_lig_pdb_path"] = ligand_pdb_path
         global_paths["step3_oda_ligand"]["input_structure_path"] = ligand_pdb_path
 
+    # Add receptor and ligand chains to oda_filtering and distance_filtering step properties
+    global_prop["step8_oda_filtering"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["newmol"]
+    global_prop["step8_oda_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
+    global_prop["step9_distance_filtering"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["newmol"]
+    global_prop["step9_distance_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
+    # Add docking name and ligand chain to clustering step properties
+    global_prop["step10_clustering"]["docking_name"] = global_prop["step7_makePDB"]["docking_name"]
+    global_prop["step10_clustering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
+    
+    # Initialize minimal launcher to avoid repeating constant arguments
+    launch_step = partial(launch_step_full, global_log, global_paths, output_path, previous_output_path)
+
     # Skip steps only if requested
     run_remaining_steps = skip_until is None
-    if run_remaining_steps:
+    setup_time   = launch_step(setup,   "step1_setup", "setup receptor and ligand proteins for pyDock", global_prop, run_remaining_steps)
+    oda_time     = launch_step(oda,     "step2_oda_receptor", "optimal docking area (ODA) analysis for the receptor",  global_prop, run_remaining_steps)
+    oda_time    += launch_step(oda,     "step3_oda_ligand", "optimal docking area (ODA) analysis for the ligand",  global_prop, run_remaining_steps)
+    ftdock_time  = launch_step(ftdock,  "step4_ftdock", "sample docking poses using ftdock (FFT-based algorithm)",  global_prop, run_remaining_steps)
+    scoring_time =launch_step(dockser, "step5_dockser", "score docking poses using pyDock",  global_prop, run_remaining_steps)
 
-        # STEP 1: Prepare receptor and ligand proteins for pyDock
-        global_log.info("step1_setup: setup receptor and ligand proteins for pyDock")
-        setup(**global_paths["step1_setup"], properties=global_prop["step1_setup"])
-    
-        # STEP 2: Optimal Docking Area (ODA) analysis for the receptor
-        global_log.info("step2_oda_receptor: optimal docking area (ODA) analysis for the receptor")
-        oda(**global_paths["step2_oda_receptor"], properties=global_prop["step2_oda_receptor"])
-    
-        # STEP 3: Optimal Docking Area (ODA) analysis for the ligand
-        global_log.info("step3_oda_ligand: optimal docking area (ODA) analysis for the ligand")
-        oda(**global_paths["step3_oda_ligand"], properties=global_prop["step3_oda_ligand"])
-
-        # STEP 4: Sample docking poses using ftdock (FFT-based algorithm)
-        global_log.info("step4_ftdock: sample docking poses using ftdock (FFT-based algorithm)")
-        ftdock(**global_paths["step4_ftdock"], properties=global_prop["step4_ftdock"])
-
-        # STEP 5: Score docking poses using pyDock
-        global_log.info("step5_dockser: score docking poses using pyDock")
-        dockser(**global_paths["step5_dockser"], properties=global_prop["step5_dockser"])
-
-    else:
-
-        # Link Steps 1-5 folders in previous output path to output path
-        steps_to_link = ["step1_setup", "step2_oda_receptor", "step3_oda_ligand", "step4_ftdock", "step5_dockser"]
-        link_previous_steps(global_log, steps_to_link, output_path, previous_output_path)
-
-    # Read csv with ranking of docking poses (pydock score)
+    # Save the (pyDock score) ranking for later use 
+    rank1 = global_prop["step7_makePDB"]["rank1"]
+    rank2 = global_prop["step7_makePDB"]["rank2"]
     ranking_df = pd.read_csv(global_paths["step5_dockser"]["output_ene_path"], sep='\s+', skiprows=[1], header=0)
+    top_ranking_df = ranking_df[(ranking_df["RANK"] >= rank1) & (ranking_df["RANK"] <= rank2)] 
+    global_prop["step10_clustering"]["ranking_df"] = top_ranking_df
 
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "makePDB"
-    if run_remaining_steps:
+    makepdb_time = launch_step(makePDB, "step7_makePDB", "generate PDB files for top scoring docking poses",  global_prop, run_remaining_steps)
 
-        # STEP 7: Generate PDB files for top scoring docking poses
-        global_log.info("step7_makePDB: generate PDB files for top scoring docking poses")
-        makePDB(**global_paths["step7_makePDB"], properties=global_prop["step7_makePDB"])
-    
-    else:
+    # Run step or link previous run
+    run_remaining_steps = run_remaining_steps or skip_until == "oda_filtering"
+    oda_filter_time = launch_step(oda_filtering,      "step8_oda_filtering", "filtering with ODA patches",  global_prop, run_remaining_steps)
 
-        # Link step folder in previous output path to output path
-        link_previous_steps(global_log, ["step7_makePDB"], output_path, previous_output_path)
-
-    # Keep only top scoring docking poses in the ranking data frame
-    rank1 = global_prop["step7_makePDB"]["rank1"]
-    rank2 = global_prop["step7_makePDB"]["rank2"]
-    top_ranking_df = ranking_df[(ranking_df["RANK"] >= rank1) & (ranking_df["RANK"] <= rank2)] 
+    # Run step or link previous run
+    run_remaining_steps = run_remaining_steps or skip_until == "distance_filtering"
+    dis_filter_time = launch_step(distance_filtering, "step9_distance_filtering", "filtering with distance between residues",  global_prop, run_remaining_steps)
 
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "clustering"
-    if run_remaining_steps:
-       
-        # Add docking name and ligand chain to clustering step properties
-        global_prop["step8_clustering"]["docking_name"] = global_prop["step7_makePDB"]["docking_name"]
-        global_prop["step8_clustering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
-
-        # STEP 8: Clustering with RMSD
-        global_log.info("step8_clustering: clustering with RMSD")
-        rmsd_clustering(**global_paths["step8_clustering"], properties=global_prop["step8_clustering"], ranking_df=top_ranking_df) 
-
-    else:
-
-        # Link step folder in previous output path to output path
-        link_previous_steps(global_log, ["step8_clustering"], output_path, previous_output_path)
-
-    # Add receptor and ligand chains to oda_filtering step properties
-    global_prop["step9_oda_filtering"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["newmol"]
-    global_prop["step9_oda_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
-
-    # STEP 9: Filtering with ODA patches
-    global_log.info("step9_oda_filtering: filtering with ODA patches")
-    oda_filtering(**global_paths["step9_oda_filtering"], properties=global_prop["step9_oda_filtering"])
+    clu_filter_time = launch_step(rmsd_clustering,    "step10_clustering", "clustering with RMSD",  global_prop, run_remaining_steps)
 
     # Print timing information to log file
-    elapsed_time = time.time() - start_time
+    total_elapsed_time = time.time() - start_time
     global_log.info('')
     global_log.info('')
     global_log.info('Execution successful: ')
     global_log.info('  Workflow_path: %s' % output_path)
     global_log.info('  Config File: %s' % configuration_path)
     global_log.info('')
-    global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
+    global_log.info('Total elapsed time: %.2f minutes' % (total_elapsed_time/60))
     global_log.info('')
+    global_log.info('Time per step:')
+    global_log.info('  setup: %.2f minutes' % (setup_time/60))
+    global_log.info('  oda (both): %.2f minutes' % (oda_time/60))
+    global_log.info('  ftdock: %.2f minutes' % (ftdock_time/60))
+    global_log.info('  dockser: %.2f minutes' % (scoring_time/60))
+    global_log.info('  makePDB: %.2f minutes' % (makepdb_time/60))
+    global_log.info('  oda_filtering: %.2f minutes' % (oda_filter_time/60))
+    global_log.info('  distance_filtering: %.2f minutes' % (dis_filter_time/60))
+    global_log.info('  clustering: %.2f minutes' % (clu_filter_time/60))
 
     return global_paths, global_prop
 
@@ -838,7 +943,7 @@ if __name__ == "__main__":
     
     # To skip all steps until a certain step. Options: makePDB, clustering, oda_filtering
     parser.add_argument('--skip_until', dest='skip_until',
-                        help="Skip everything until this step (use together with previous_output to re-use previous results). Options: makePDB, clustering, oda_filtering",
+                        help="Skip everything until this step (use together with previous_output to re-use previous results). Options: makePDB, oda_filtering, clustering, distance_filtering",
                         required=False)
     
     # Output                        
