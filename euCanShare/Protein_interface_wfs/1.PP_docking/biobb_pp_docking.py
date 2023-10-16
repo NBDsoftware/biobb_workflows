@@ -92,10 +92,10 @@ def check_arguments(global_log, receptor_pdb_path, ligand_pdb_path, output_path,
     if (skip_until is None) and (previous_output_path is not None):
         global_log.error("ERROR: You provided --previous_output but not --skip_until. Please provide a step to skip until!")
 
-    # If skip_until is provided, check if it is a valid option (makePDB, clustering, oda_filtering)
+    # If skip_until is provided, check if it is a valid option
     if skip_until is not None:
-        if skip_until not in ["makePDB", "clustering", "oda_filtering"]:
-            global_log.error("ERROR: --skip_until must be one of the following options: makePDB, clustering, oda_filtering!")
+        if skip_until not in ["makePDB", "oda_filtering", "distance_filtering", "clustering"]:
+            global_log.error("ERROR: --skip_until must be one of the following options: makePDB, oda_filtering, distance_filtering, clustering!")
 
     if previous_output_path is not None:
 
@@ -924,7 +924,7 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
     oda_time     = launch_step(oda,     "step2_oda_receptor", "optimal docking area (ODA) analysis for the receptor",  global_prop, run_remaining_steps)
     oda_time    += launch_step(oda,     "step3_oda_ligand", "optimal docking area (ODA) analysis for the ligand",  global_prop, run_remaining_steps)
     ftdock_time  = launch_step(ftdock,  "step4_ftdock", "sample docking poses using ftdock (FFT-based algorithm)",  global_prop, run_remaining_steps)
-    scoring_time =launch_step(dockser, "step5_dockser", "score docking poses using pyDock",  global_prop, run_remaining_steps)
+    scoring_time = launch_step(dockser, "step5_dockser", "score docking poses using pyDock",  global_prop, run_remaining_steps)
 
     # Save the (pyDock score) ranking for later use 
     rank1 = global_prop["step7_makePDB"]["rank1"]
