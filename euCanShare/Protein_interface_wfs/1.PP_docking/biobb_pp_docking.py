@@ -1000,9 +1000,9 @@ if __name__ == "__main__":
                         help="Path to previous output folder. Used if you want to re-use some steps of a previous run (default: None)",
                         required=False)
     
-    # To skip all steps until a certain step. Options: makePDB, clustering, oda_filtering
+    # To skip all steps until a certain step.
     parser.add_argument('--skip_until', dest='skip_until',
-                        help="Skip everything until this step (use together with previous_output to re-use previous results). Options: makePDB, oda_filtering, clustering, distance_filtering",
+                        help="Skip everything until this step (use together with previous_output to re-use previous results). Options: makePDB, oda_filtering, distance_filtering, clustering",
                         required=False)
     
     # Output                        
