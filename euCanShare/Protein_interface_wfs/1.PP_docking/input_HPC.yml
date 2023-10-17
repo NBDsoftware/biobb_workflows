@@ -117,20 +117,34 @@ step7_makePDB:
     container_working_dir: /
     container_generic_command: exec
 
-step8_clustering:
-  paths: 
-    input_zip_path: dependency/step7_makePDB/output_zip_path
-    output_zip_path: top_distinct_poses.zip
-  properties:
-    rmsd_threshold: 80.0
-
-step9_oda_filtering:
+step8_oda_filtering:
   paths: 
     input_receptor_path: dependency/step2_oda_receptor/output_oda_path
     input_ligand_path: dependency/step3_oda_ligand/output_oda_path
-    input_zip_path: dependency/step8_clustering/output_zip_path
-    output_zip_path: top_distinct_filtered_poses.zip
+    input_zip_path: dependency/step7_makePDB/output_zip_path
+    output_zip_path: top_filtered_poses.zip
   properties:
-    oda_threshold: -15                    # ODA score threshold for a residue to be considered as part of a hydrophobic patch 
-    distance_threshold: 10.0              # Distance threshold for two residues to be considered as neighbors
-    pir_cop_threshold: 0.1                # PIR COP (Percentage of Interface Residues Covered by ODA Patches) threshold
+    oda_threshold: -2                     # ODA score threshold for a residue to be considered as part of a hydrophobic patch (oda patch)
+    distance_threshold: 8.0               # Distance threshold in A for two residues to be considered as neighbors
+    pir_cop_threshold: 0.1                # PIR COP (Percentage of Interface Residues Covered by ODA Patches) threshold -> measures overlap between interface and oda patches
+    overlap_threshold: 0.1                # (0 to ignore - faster) Percentage of neighboring interface residues covered by oda patches between receptor and ligand -> measures overlap of ligand and receptor oda patches inside the interface
+    run_step: True                        # Run this step
+
+step9_distance_filtering:
+  paths: 
+    input_zip_path: dependency/step8_oda_filtering/output_zip_path
+    output_zip_path: top_filtered_poses.zip
+  properties:
+    distances:
+      - receptor_residue_selection: "resnum 336 and resname GLN"
+        ligand_residue_selection: "resnum 93 and resname THR"
+        threshold: 12.0
+    run_step: True
+
+step10_clustering:
+  paths: 
+    input_zip_path: dependency/step9_distance_filtering/output_zip_path
+    output_zip_path: top_filtered_poses.zip
+  properties:
+    rmsd_threshold: 5.0
+    run_step: True
