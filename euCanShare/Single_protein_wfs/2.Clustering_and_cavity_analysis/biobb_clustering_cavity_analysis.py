@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/shared/work/BiobbWorkflows/envs/biobb_sp_cavity_analysis/bin/python
 
 # Conversion of the BioExcel building blocks Python tutorials
 # to a command line workflow with two files: Python Script and YAML input configuration file
