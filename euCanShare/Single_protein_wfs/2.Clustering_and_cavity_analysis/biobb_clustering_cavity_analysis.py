@@ -219,7 +219,7 @@ def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filte
     ------
 
         input_pockets_zip         (str): path to input pockets zip file
-        input_pdb_path            (str): path to input pdb with the pocket model 
+        input_pdb_path            (str): path to input pdb with the pocket model (pdb of the receptor)
         output_filter_pockets_zip (str): path to filtered pockets zip file
         properties               (dict): dictionary with properties for this step
         global_log                (log): global log object
@@ -229,7 +229,6 @@ def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filte
 
         filtered_pocket_IDs (list(str)): list with pocket IDs that passed the filter
     """
-
 
     # To return and use to create the summary file
     filtered_pocket_IDs = []
@@ -247,7 +246,7 @@ def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filte
 
     # If no pockets are found, return
     if len(pocket_paths) == 0:
-        global_log.warning("No pockets found after filtering")
+        global_log.warning("No pockets found after filtering in previous step")
         return filtered_pocket_IDs
     
     # Load input pdb
@@ -264,7 +263,6 @@ def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filte
     
     # For each pocket
     for pocket_path in pocket_paths:
-
         # If path is a pqr file, append to list
         if pocket_path.endswith('.pqr'):
             pockets_pqr_paths.append(pocket_path)
@@ -386,8 +384,62 @@ def highest_score(model: dict):
 
     return highest_score
 
+def get_pockets_IDs(input_pockets_zip: str, properties: dict, global_log):
+    """
+    Function that retrieves all the pocket IDs from the pockets zip file.
 
-def main_wf(configuration_path, traj_path, top_path, clustering_path, output_path, output_summary_path):
+    Inputs
+    ------
+
+        input_pockets_zip (str): path to input pockets zip file
+        properties       (dict): dictionary with properties for this step
+        global_log        (log): global log object
+    
+    Output
+    ------
+
+        filtered_pocket_IDs (list(str)): list with all pocket IDs found in the pockets zip file
+    """
+
+    # To return and use to create the summary file
+    filtered_pocket_IDs = []
+
+    # Check if input pockets zip file exists
+    if not os.path.exists(input_pockets_zip):
+        global_log.warning("Input pockets zip file not found, last step didn't find any pockets or failed")
+        return filtered_pocket_IDs
+
+    # Extract all pockets in step folder
+    pocket_paths = fu.unzip_list(zip_file=input_pockets_zip, dest_dir=properties['path'])
+
+    # If no pockets are found, return
+    if len(pocket_paths) == 0:
+        global_log.warning("No pockets found after filtering in last step")
+        return filtered_pocket_IDs 
+    
+    # Save paths to pqr files in another list
+    pockets_pqr_paths = []
+
+    # For each pocket
+    for pocket_path in pocket_paths:
+        # If path is a pqr file, append to list
+        if pocket_path.endswith('.pqr'):
+            pockets_pqr_paths.append(pocket_path)
+    
+    # Iterate over all pqr files
+    for pocket_pqr_path in pockets_pqr_paths:
+
+        # Find pocket ID as file name without "_vert.pqr"
+        pocket_ID = Path(pocket_pqr_path).stem.replace("_vert", "")
+        filtered_pocket_IDs.append(pocket_ID)
+    
+    # Erase all the pockets remaining in the step folder
+    fu.rm_file_list(file_list=pocket_paths)
+
+    return filtered_pocket_IDs
+
+
+def main_wf(configuration_path, traj_path, top_path, clustering_path, com_filter, output_path, output_summary_path):
     '''
     Main clustering and cavity analysis workflow. This workflow clusters a given trajectory and analyzes the cavities of the most representative
     structures. Then filters the cavities according to a pre-defined criteria and outputs the pockets that passed the filter.
@@ -399,6 +451,7 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
         traj_path           (str): (Optional) path to trajectory file
         top_path            (str): (Optional) path to topology file
         clustering_path     (str): (Optional) path to the folder with the most representative structures in pdb format from an external clustering 
+        com_filter          (str): (Optional) filter pockets by distance to center of mass of a group of residues (default: False)
         output_path         (str): (Optional) path to output folder
         output_summary_path (str): (Optional) path to output summary file
 
@@ -519,9 +572,14 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
         global_log.info("step4_filter_cavities: Filter found cavities")
         fpocket_filter(**cluster_paths['step4_filter_cavities'], properties=cluster_prop["step4_filter_cavities"])
 
-        # STEP 5: Filter by pocket center of mass 
-        global_log.info("step5_filter_residue_com: Filter cavities by center of mass distance to a group of residues") 
-        filtered_pockets_IDs = filter_residue_com(**cluster_paths['step5_filter_residue_com'], properties=cluster_prop["step5_filter_residue_com"], global_log=global_log)
+        if com_filter:
+            # STEP 5: Filter by pocket center of mass 
+            global_log.info("step5_filter_residue_com: Filter cavities by center of mass distance to a group of residues") 
+            filtered_pockets_IDs = filter_residue_com(**cluster_paths['step5_filter_residue_com'], properties=cluster_prop["step5_filter_residue_com"], global_log=global_log)
+        else:
+            # Get filtered pockets IDs from step 4
+            global_log.info("    Get filtered pockets IDs")
+            filtered_pockets_IDs = get_pockets_IDs(cluster_paths['step4_filter_cavities']['output_filter_pockets_zip'], properties=cluster_prop["step4_filter_cavities"], global_log=global_log)
 
         # Update dictionary with filtered pockets
         cluster_filtered_pockets.update({cluster_name : filtered_pockets_IDs})
@@ -562,6 +620,10 @@ if __name__ == '__main__':
     parser.add_argument('--clustering_path', dest='clustering_path',
                         help="Input path to representative structures (folder with pdb files)", 
                         required=False)
+    
+    parser.add_argument('--com_filter', dest='com_filter', action='store_true',
+                        help="Filter pockets by distance to center of mass of a group of residues (default: False)",
+                        required=False)
 
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
@@ -577,5 +639,6 @@ if __name__ == '__main__':
             traj_path = args.traj_path,
             top_path = args.top_path,
             clustering_path = args.clustering_path,
+            com_filter = args.com_filter,
             output_path = args.output_path,
             output_summary_path = args.output_summary_path)
