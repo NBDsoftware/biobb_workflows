@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/shared/work/BiobbWorkflows/envs/biobb_sp_virtual_screening/bin/python
 
 # Importing all the needed libraries
 import os
