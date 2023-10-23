@@ -1,4 +1,4 @@
-#!/shared/work/BiobbWorkflows/envs/biobb_pp_docking_mda/bin/python
+#!/shared/work/BiobbWorkflows/envs/biobb_pp_docking
 
 # Importing all the needed libraries
 import os
