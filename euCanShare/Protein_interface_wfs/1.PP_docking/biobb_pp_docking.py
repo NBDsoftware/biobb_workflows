@@ -240,10 +240,10 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict)
     poses_paths = prepare_step(input_zip_path, properties)
 
     # Load the ranking dataframe
-    ranking_df = properties["ranking_df"]
+    poses_table = properties["poses_table"]
 
     # Rename docking poses with rank and create a list with the corresponding rank for each file
-    poses_ranking = get_poses_ranking(poses_paths, ranking_df)
+    poses_ranking = get_poses_ranking(poses_paths, poses_table)
 
     # Calculate the RMSD matrix between all poses
     rmsd_matrix = compute_rmsd_matrix(poses_paths, properties["ligand_chain"])
@@ -343,7 +343,7 @@ def compute_rmsd_matrix(poses_paths: list, ligand_chain: str):
 
     return rmsd_triangular_matrix.as_array()
 
-def get_poses_ranking(poses_paths: list, ranking_df: pd.DataFrame):
+def get_poses_ranking(poses_paths: list, poses_table: pd.DataFrame):
     """ 
     Get ranking of the poses in the input paths from the ranking dataframe
 
@@ -351,7 +351,7 @@ def get_poses_ranking(poses_paths: list, ranking_df: pd.DataFrame):
     ------
 
         poses_paths         (list): list with paths to docking poses
-        ranking_df  (pd.DataFrame): dataframe with ranking of docking poses
+        poses_table  (pd.DataFrame): dataframe with ranking of docking poses
 
     Returns
     -------
@@ -375,7 +375,7 @@ def get_poses_ranking(poses_paths: list, ranking_df: pd.DataFrame):
         conformation_number = number_match[0]
 
         # Get the rank from the ranking Dataframe using the conformation number
-        rank = ranking_df[ranking_df["Conf"] == int(conformation_number)]["RANK"].values[0]
+        rank = poses_table[poses_table["Conf"] == int(conformation_number)]["RANK"].values[0]
         poses_ranking.append(int(rank))
     
     return poses_ranking
@@ -654,9 +654,9 @@ def filter_pose_interface(receptor_interface_atoms, ligand_interface_atoms, rece
     """
     Filter the pose according to the ODA patches and the specific interface. Two main criteria:
 
-        1. PIR COP above threshold (compulsory)
+        1. ODA coverage above threshold (compulsory)
             
-            Compute the "PIR COP" (Percentage of Interface Residues Covered by ODA Patches) for a given interface.
+            Compute the ODA coverage (ratio of interface residues covered by ODA patches) for a given pose.
             This measures the overlap between the interface and the ODA patches. If the overlap is above a given threshold,
             the pose is accepted.
         
@@ -681,52 +681,85 @@ def filter_pose_interface(receptor_interface_atoms, ligand_interface_atoms, rece
     """
 
     # Get the total number of interface residues
-    n_interface_residues = len(receptor_interface_atoms) + len(ligand_interface_atoms)
+    num_interface_residues = len(receptor_interface_atoms) + len(ligand_interface_atoms)
 
     # Count the number of residues in the interface covered by ODA patches
-    n_interface_residues_covered = 0
+    num_covered_residues = 0
 
-    # Count the number of residues in the interface covered by ODA patches and overlapping between receptor and ligand
-    n_overlapping_residues = 0
+    # Count the number of residues in the interface covered by ODA patches with at least one neighboring residue (from the other protein) covered by an ODA patch as well 
+    num_overlap_residues = 0
 
+    # Create Neighbor Search objects for the interface surface atoms 
     if properties["overlap_threshold"] > 0:
-
-        # Create the Neighbor Search for the receptor interface surface atoms 
         Receptor_Neighbor_Search = PDB.NeighborSearch(list(receptor_interface_atoms.values())) # NOTE: optimize bucket size?
-
-        # Create the Neighbor Search for the ligand interface surface atoms
         Ligand_Neighbor_Search = PDB.NeighborSearch(list(ligand_interface_atoms.values())) # NOTE: optimize bucket size?
 
-    # Get the ODA threshold
-    oda_threshold = properties["oda_threshold"]
-
-    # Iterate over the receptor interface residues
+    # Find covered and overlapping residues in the receptor interface
     for residue_id, residue_ca_atom in receptor_interface_atoms.items():
 
         # Get the ODA value of the residue
         residue_oda = receptor_surface_oda[residue_id]
 
         # Check if the residue is covered by an ODA patch
-        if residue_oda >= oda_threshold:
-            n_interface_residues_covered += 1
+        if residue_oda >= properties["oda_threshold"]:
+            num_covered_residues += 1
 
-    # Iterate over the ligand interface residues
+            if properties["overlap_threshold"] > 0:
+
+                # Find the neighboring ligand interface residues
+                ligand_neighbors = Ligand_Neighbor_Search.search(residue_ca_atom.get_coord(), properties["distance_threshold"], level="R")
+
+                # If any neighboring residues are found
+                if len(ligand_neighbors) > 0:
+
+                    # Check if any of them are covered by an ODA patch as well
+                    for ligand_residue in ligand_neighbors:
+                        if ligand_surface_oda[ligand_residue.get_id()] >= properties["oda_threshold"]:
+                            num_overlap_residues += 1
+                            break
+
+    # Find covered and overlapping residues in the ligand interface
     for residue_id in ligand_interface_atoms.keys():
+
         # Get the ODA value of the residue
         residue_oda = ligand_surface_oda[residue_id]
 
         # Check if the residue is covered by an ODA patch
-        if residue_oda >= oda_threshold:
-            n_interface_residues_covered += 1
+        if residue_oda >= properties["oda_threshold"]:
+            num_covered_residues += 1
 
-    # Compute the "PIR COP" (Percentage of Interface Residues Covered by ODA Patches)
-    pir_cop = n_interface_residues_covered / n_interface_residues
+            if properties["overlap_threshold"] > 0:
 
-    # Check if the PIR COP is above the threshold
-    if pir_cop < properties["pir_cop_threshold"]:
+                # Find the neighboring receptor interface residues
+                receptor_neighbors = Receptor_Neighbor_Search.search(residue_ca_atom.get_coord(), properties["distance_threshold"], level="R")
+
+                # If any neighboring residues are found
+                if len(receptor_neighbors) > 0:
+
+                    # Check if any of them are covered by an ODA patch as well
+                    for receptor_residue in receptor_neighbors:
+                        if receptor_surface_oda[receptor_residue.get_id()] >= properties["oda_threshold"]:
+                            num_overlap_residues += 1
+                            break
+
+    # Compute the oda coverage: ratio of interface residues covered by ODA patches
+    oda_coverage = num_covered_residues / num_interface_residues
+
+    # Check if the oda coverage is above the threshold
+    if oda_coverage < properties["oda_coverage"]:
         return False
     
-    # Get the number of neighboring interface residues
+    # If the overlap threshold is 0, return True
+    if properties["overlap_threshold"] == 0:
+        return True
+    
+    # Compute the oda overlap: ratio of interface residues covered by ODA patches with at least one neighboring residue (from the other protein) covered by an ODA patch as well
+    oda_overlap = num_overlap_residues / num_interface_residues
+
+    # Check if the oda overlap is above the threshold
+    if oda_overlap < properties["overlap_threshold"]:
+        return False
+    
     return True
 
 def debug_find_surface(pdb_path: str, sasa_threshold: float, output_path: str):
@@ -945,9 +978,9 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
     # Save the (pyDock score) ranking for later use 
     rank1 = global_prop["step6_makePDB"]["rank1"]
     rank2 = global_prop["step6_makePDB"]["rank2"]
-    ranking_df = pd.read_csv(global_paths["step5_dockser"]["output_ene_path"], sep='\s+', skiprows=[1], header=0)
-    top_ranking_df = ranking_df[(ranking_df["RANK"] >= rank1) & (ranking_df["RANK"] <= rank2)] 
-    global_prop["step9_rmsd_filtering"]["ranking_df"] = top_ranking_df
+    poses_table = pd.read_csv(global_paths["step5_dockser"]["output_ene_path"], sep='\s+', skiprows=[1], header=0)
+    top_poses_table = poses_table[(poses_table["RANK"] >= rank1) & (poses_table["RANK"] <= rank2)] 
+    global_prop["step9_rmsd_filtering"]["poses_table"] = top_poses_table
 
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "makePDB"

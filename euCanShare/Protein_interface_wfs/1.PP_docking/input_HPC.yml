@@ -126,8 +126,8 @@ step7_oda_filtering:
   properties:
     oda_threshold: -2                     # ODA score threshold for a residue to be considered as part of a hydrophobic patch (oda patch)
     distance_threshold: 8.0               # Distance threshold in A for two residues to be considered as neighbors
-    pir_cop_threshold: 0.1                # PIR COP (Percentage of Interface Residues Covered by ODA Patches) threshold -> measures overlap between interface and oda patches
-    overlap_threshold: 0.1                # (0 to ignore - faster) Percentage of neighboring interface residues covered by oda patches between receptor and ligand -> measures overlap of ligand and receptor oda patches inside the interface
+    oda_coverage: 0.1                     # Minimum ratio of interface residues covered by ODA Patches -> measures overlap between interface and oda patches
+    oda_overlap: 0.1                      # Minimum ratio of neighboring interface residues covered by oda patches (between receptor and ligand) -> measures overlap of ligand and receptor oda patches inside the interface (0 to ignore) 
     run_step: True                        # Run this step
 
 step8_distance_filtering:
