@@ -144,14 +144,16 @@ def link_previous_step(global_log, step_name, output_path, previous_output_path)
 
 def prepare_step(input_zip_path: str, prop: dict):
     """
-    1. Create step folder
-    2. Create docking poses subfolder and unzip docking poses into it
+    Prepares a given step by:
+    
+    1. Creating a step folder
+    2. Creating a docking poses subfolder and unzipping input docking poses into it
 
     Inputs
     ------
 
-        input_zip_path          (str): path to zip file with docking poses
-        prop                   (dict): dictionary with oda_filtering step properties
+        input_zip_path          (str): path to zip file with input docking poses
+        prop                   (dict): dictionary with step properties
     
     Returns
     -------
