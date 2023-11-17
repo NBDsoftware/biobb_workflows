@@ -95,7 +95,7 @@ step5_dockser:
     container_working_dir: /
     container_generic_command: exec
 
-step7_makePDB:
+step6_makePDB:
   tool: makePDB
   paths:
     input_rec_path: dependency/step1_setup/output_rec_path
@@ -117,11 +117,11 @@ step7_makePDB:
     container_working_dir: /
     container_generic_command: exec
 
-step8_oda_filtering:
+step7_oda_filtering:
   paths: 
     input_receptor_path: dependency/step2_oda_receptor/output_oda_path
     input_ligand_path: dependency/step3_oda_ligand/output_oda_path
-    input_zip_path: dependency/step7_makePDB/output_zip_path
+    input_zip_path: dependency/step6_makePDB/output_zip_path
     output_zip_path: top_filtered_poses.zip
   properties:
     oda_threshold: -2                     # ODA score threshold for a residue to be considered as part of a hydrophobic patch (oda patch)
@@ -130,9 +130,9 @@ step8_oda_filtering:
     overlap_threshold: 0.1                # (0 to ignore - faster) Percentage of neighboring interface residues covered by oda patches between receptor and ligand -> measures overlap of ligand and receptor oda patches inside the interface
     run_step: True                        # Run this step
 
-step9_distance_filtering:
+step8_distance_filtering:
   paths: 
-    input_zip_path: dependency/step8_oda_filtering/output_zip_path
+    input_zip_path: dependency/step7_oda_filtering/output_zip_path
     output_zip_path: top_filtered_poses.zip
   properties:
     distances:
@@ -141,9 +141,9 @@ step9_distance_filtering:
         threshold: 12.0
     run_step: True
 
-step10_clustering:
+step9_clustering:
   paths: 
-    input_zip_path: dependency/step9_distance_filtering/output_zip_path
+    input_zip_path: dependency/step8_distance_filtering/output_zip_path
     output_zip_path: top_filtered_poses.zip
   properties:
     rmsd_threshold: 5.0

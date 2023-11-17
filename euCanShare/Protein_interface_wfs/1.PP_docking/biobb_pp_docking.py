@@ -907,13 +907,13 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
         global_paths["step3_oda_ligand"]["input_structure_path"] = ligand_pdb_path
 
     # Add receptor and ligand chains to oda_filtering and distance_filtering step properties
-    global_prop["step8_oda_filtering"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["newmol"]
-    global_prop["step8_oda_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
-    global_prop["step9_distance_filtering"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["newmol"]
-    global_prop["step9_distance_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
+    global_prop["step7_oda_filtering"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["newmol"]
+    global_prop["step7_oda_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
+    global_prop["step8_distance_filtering"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["newmol"]
+    global_prop["step8_distance_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
     # Add docking name and ligand chain to clustering step properties
-    global_prop["step10_clustering"]["docking_name"] = global_prop["step7_makePDB"]["docking_name"]
-    global_prop["step10_clustering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
+    global_prop["step9_clustering"]["docking_name"] = global_prop["step6_makePDB"]["docking_name"]
+    global_prop["step9_clustering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
     
     # Initialize minimal launcher to avoid repeating constant arguments
     launch_step = partial(launch_step_full, global_log, global_paths, output_path, previous_output_path)
@@ -927,27 +927,27 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
     scoring_time = launch_step(dockser, "step5_dockser", "score docking poses using pyDock",  global_prop, run_remaining_steps)
 
     # Save the (pyDock score) ranking for later use 
-    rank1 = global_prop["step7_makePDB"]["rank1"]
-    rank2 = global_prop["step7_makePDB"]["rank2"]
+    rank1 = global_prop["step6_makePDB"]["rank1"]
+    rank2 = global_prop["step6_makePDB"]["rank2"]
     ranking_df = pd.read_csv(global_paths["step5_dockser"]["output_ene_path"], sep='\s+', skiprows=[1], header=0)
     top_ranking_df = ranking_df[(ranking_df["RANK"] >= rank1) & (ranking_df["RANK"] <= rank2)] 
-    global_prop["step10_clustering"]["ranking_df"] = top_ranking_df
+    global_prop["step9_clustering"]["ranking_df"] = top_ranking_df
 
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "makePDB"
-    makepdb_time = launch_step(makePDB, "step7_makePDB", "generate PDB files for top scoring docking poses",  global_prop, run_remaining_steps)
+    makepdb_time = launch_step(makePDB, "step6_makePDB", "generate PDB files for top scoring docking poses",  global_prop, run_remaining_steps)
 
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "oda_filtering"
-    oda_filter_time = launch_step(oda_filtering,      "step8_oda_filtering", "filtering with ODA patches",  global_prop, run_remaining_steps)
+    oda_filter_time = launch_step(oda_filtering,      "step7_oda_filtering", "filtering with ODA patches",  global_prop, run_remaining_steps)
 
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "distance_filtering"
-    dis_filter_time = launch_step(distance_filtering, "step9_distance_filtering", "filtering with distance between residues",  global_prop, run_remaining_steps)
+    dis_filter_time = launch_step(distance_filtering, "step8_distance_filtering", "filtering with distance between residues",  global_prop, run_remaining_steps)
 
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "clustering"
-    clu_filter_time = launch_step(rmsd_clustering,    "step10_clustering", "clustering with RMSD",  global_prop, run_remaining_steps)
+    clu_filter_time = launch_step(rmsd_clustering,    "step9_clustering", "clustering with RMSD",  global_prop, run_remaining_steps)
 
     # NOTE: Decorate the receptor and the ligand proteins of each pose with the corresponding ODA values
     # oda_poses_folder_path = fu.create_dir(str(Path(properties["path"]).joinpath("oda_poses")))
