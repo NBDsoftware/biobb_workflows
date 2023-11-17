@@ -65,10 +65,14 @@ def launch_step_full(global_log, global_paths, output_path, previous_output_path
     if run_remaining_steps:
         # Run step
         global_log.info(f"{step_name}: {description}")
-        tool(**global_paths[step_name], properties=global_prop[step_name])
+        num_filtered_poses = tool(**global_paths[step_name], properties=global_prop[step_name])
+
+        if 'filtering' in step_name:
+            global_log.info(f"  Number of filtered poses: {num_filtered_poses}")
     else:
         # Link step folder in previous output path to output path
         link_previous_step(global_log, step_name, output_path, previous_output_path)
+
 
     # End time
     elapsed_step_time = time.time() - start_step_time
@@ -215,6 +219,11 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict)
         input_zip_path          (str): path to zip file with docking poses
         output_zip_path         (str): path to output zip file with best ranking docking poses
         properties             (dict): dictionary with clustering step properties
+    
+    Outputs
+    -------
+
+        num_filtered_poses        (int): number of filtered poses
     """
 
     if properties["run_step"] is False:
@@ -225,7 +234,7 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict)
         # Copy input zip file to output zip file
         shutil.copy(input_zip_path, output_zip_path)
 
-        return
+        return 0
     
     # Prepare clustering step folder 
     poses_paths = prepare_step(input_zip_path, properties)
@@ -234,10 +243,10 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict)
     ranking_df = properties["ranking_df"]
 
     # Rename docking poses with rank and create a list with the corresponding rank for each file
-    poses_ranked_paths, paths_ranking = rename_with_rank(poses_paths, ranking_df)
+    poses_ranking = get_poses_ranking(poses_paths, ranking_df)
 
     # Calculate the RMSD matrix between all poses
-    rmsd_matrix = compute_rmsd_matrix(poses_ranked_paths, properties["ligand_chain"])
+    rmsd_matrix = compute_rmsd_matrix(poses_paths, properties["ligand_chain"])
 
     # Convert the uncondensed RMSD matrix into a condensed distance matrix
     rmsd_matrix = squareform(rmsd_matrix)
@@ -248,36 +257,38 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict)
     # Get the cluster labels from the linkage matrix
     cluster_labels = fcluster(Z, t = properties["rmsd_threshold"], criterion = "distance")
 
-    plot_dendogram(Z, paths_ranking, properties["rmsd_threshold"], properties["path"])
+    plot_dendogram(Z, poses_ranking, properties["rmsd_threshold"], properties["path"])
 
     # Find the best ranking pose path for each cluster
-    top_distinct_poses_paths = []
+    filtered_poses_paths = []
     for cluster in range(1, max(cluster_labels) + 1):
 
         # Get the ranking of the poses in the cluster
-        cluster_ranking = [paths_ranking[i] for i in np.where(cluster_labels == cluster)[0]]
+        cluster_ranking = [poses_ranking[i] for i in np.where(cluster_labels == cluster)[0]]
 
         # Get the paths of the poses in the cluster
-        cluster_paths = [poses_ranked_paths[i] for i in np.where(cluster_labels == cluster)[0]]
+        cluster_paths = [poses_paths[i] for i in np.where(cluster_labels == cluster)[0]]
 
         # Find the path of the pose with the best ranking in the cluster
         best_pose_path = cluster_paths[cluster_ranking.index(min(cluster_ranking))]
-        top_distinct_poses_paths.append(best_pose_path)
+        filtered_poses_paths.append(best_pose_path)
 
     # Zip the best ranking pose paths into a zip file
-    fu.zip_list(zip_file = output_zip_path, file_list = top_distinct_poses_paths)
+    fu.zip_list(zip_file = output_zip_path, file_list = filtered_poses_paths)
 
     # Remove temporal folder with poses
     fu.rm(os.path.join(properties["path"], "poses"))
 
-def compute_rmsd_matrix(poses_ranked_paths: list, ligand_chain: str):
+    return len(poses_paths)-len(filtered_poses_paths)
+
+def compute_rmsd_matrix(poses_paths: list, ligand_chain: str):
     """
     Computes an uncondensed RMSD matrix between all poses using only the CA atoms of the ligand (as the receptor didn't move during docking).
 
     Inputs
     ------
 
-        poses_ranked_paths (list): list with paths to docking poses
+        poses_paths        (list): list with paths to docking poses
         ligand_chain        (str): chain of the ligand protein
     
     Returns
@@ -299,10 +310,10 @@ def compute_rmsd_matrix(poses_ranked_paths: list, ligand_chain: str):
     max_ca_atoms = 20
 
     # Create a universe with all poses, use the first pose as the topology
-    poses_universe = mda.Universe(poses_ranked_paths[0])
+    poses_universe = mda.Universe(poses_paths[0])
 
     # Read coordinates of all poses into the universe
-    poses_universe.load_new(poses_ranked_paths)
+    poses_universe.load_new(poses_paths)
 
     # Select the CA atoms of the ligand
     ligand_ca_atoms = poses_universe.select_atoms(f"protein and chainID {ligand_chain} and name CA")
@@ -332,9 +343,9 @@ def compute_rmsd_matrix(poses_ranked_paths: list, ligand_chain: str):
 
     return rmsd_triangular_matrix.as_array()
 
-def rename_with_rank(poses_paths: list, ranking_df: pd.DataFrame):
+def get_poses_ranking(poses_paths: list, ranking_df: pd.DataFrame):
     """ 
-    Change pdb poses file names from conformation number to rank.
+    Get ranking of the poses in the input paths from the ranking dataframe
 
     Inputs
     ------
@@ -345,17 +356,13 @@ def rename_with_rank(poses_paths: list, ranking_df: pd.DataFrame):
     Returns
     -------
 
-        poses_ranked_paths (list): list with paths to docking poses with ranked file names
-        paths_ranking      (list): list with the corresponding rank for each docking pose
+        poses_ranking      (list): list with the corresponding rank for each docking pose
     
     """
-    paths_ranking = []
-    poses_ranked_paths = []
+    # Create a list with the corresponding rank for each docking pose
+    poses_ranking = []
 
-    # Find the parent path to the poses
-    poses_parent_path = str(Path(poses_paths[0]).parent)
-
-    # Change pdb file name for rank and create a list with the ranking
+    # Iterate over all poses
     for pdb_path in poses_paths:
 
         # Get the pdb name without the extension
@@ -367,18 +374,11 @@ def rename_with_rank(poses_paths: list, ranking_df: pd.DataFrame):
         # Get the conformation number from the match
         conformation_number = number_match[0]
 
-        # Get the rank from the ranking Dataframe
+        # Get the rank from the ranking Dataframe using the conformation number
         rank = ranking_df[ranking_df["Conf"] == int(conformation_number)]["RANK"].values[0]
-        paths_ranking.append(int(rank))
-
-        # Rename the file with the ranking
-        new_pdb_path = str(Path(poses_parent_path).joinpath(f"rank_{rank}.pdb"))
-        os.rename(pdb_path, new_pdb_path)
-
-        # Add the new file path to the list
-        poses_ranked_paths.append(new_pdb_path)
+        poses_ranking.append(int(rank))
     
-    return poses_ranked_paths, paths_ranking
+    return poses_ranking
 
 def plot_dendogram(linkage_matrix, labels, rmsd_threshold, output_path):
     """ Plot the dendogram and save it as a png file """
@@ -416,6 +416,11 @@ def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_pa
         input_zip_path          (str): path to zip file with docking poses
         output_zip_path         (str): path to output zip file with filtered docking poses
         properties             (dict): dictionary with oda_filtering step properties
+    
+    Outputs
+    -------
+
+        num_filtered_poses        (int): number of filtered poses
     """
 
     if properties["run_step"] is False:
@@ -426,7 +431,7 @@ def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_pa
         # Copy input zip file to output zip file
         shutil.copy(input_zip_path, output_zip_path)
 
-        return
+        return 0
     
     # Prepare step folder and unzip docking poses into it
     poses_paths = prepare_step(input_zip_path, properties)
@@ -457,6 +462,8 @@ def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_pa
 
     # Remove temporal folders with poses and decorated poses
     fu.rm(os.path.join(properties["path"], "poses"))
+
+    return len(poses_paths)-len(filtered_poses_paths)
 
 def decorate_with_oda_values(pose_path, input_receptor_path, input_ligand_path, oda_poses_folder_path, receptor_chain, ligand_chain):
     """
@@ -772,6 +779,11 @@ def distance_filtering(input_zip_path: str, output_zip_path: str, properties: di
         input_zip_path          (str): path to zip file with docking poses
         output_zip_path         (str): path to output zip file with filtered docking poses
         properties             (dict): dictionary with distance_filtering step properties
+
+    Outputs
+    -------
+
+        num_filtered_poses         (int): number of filtered poses
     """
 
     if properties["run_step"] is False:
@@ -782,7 +794,7 @@ def distance_filtering(input_zip_path: str, output_zip_path: str, properties: di
         # Copy input zip file to output zip file
         shutil.copy(input_zip_path, output_zip_path)
 
-        return
+        return 0
 
     # Prepare step folder and unzip docking poses into it
     poses_paths = prepare_step(input_zip_path, properties)
@@ -803,6 +815,8 @@ def distance_filtering(input_zip_path: str, output_zip_path: str, properties: di
 
     # Remove temporal folder with poses
     fu.rm(os.path.join(properties["path"], "poses"))
+
+    return len(poses_paths)-len(filtered_poses_paths)
 
 def calculate_distances(pose_path: str, properties: dict):
     """
@@ -914,8 +928,8 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
     global_prop["step8_distance_filtering"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["newmol"]
     global_prop["step8_distance_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
     # Add docking name and ligand chain to clustering step properties
-    global_prop["step9_clustering"]["docking_name"] = global_prop["step6_makePDB"]["docking_name"]
-    global_prop["step9_clustering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
+    global_prop["step9_rmsd_filtering"]["docking_name"] = global_prop["step6_makePDB"]["docking_name"]
+    global_prop["step9_rmsd_filtering"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["newmol"]
     
     # Initialize minimal launcher to avoid repeating constant arguments
     launch_step = partial(launch_step_full, global_log, global_paths, output_path, previous_output_path)
@@ -933,7 +947,7 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
     rank2 = global_prop["step6_makePDB"]["rank2"]
     ranking_df = pd.read_csv(global_paths["step5_dockser"]["output_ene_path"], sep='\s+', skiprows=[1], header=0)
     top_ranking_df = ranking_df[(ranking_df["RANK"] >= rank1) & (ranking_df["RANK"] <= rank2)] 
-    global_prop["step9_clustering"]["ranking_df"] = top_ranking_df
+    global_prop["step9_rmsd_filtering"]["ranking_df"] = top_ranking_df
 
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "makePDB"
@@ -949,7 +963,7 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
 
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "clustering"
-    clu_filter_time = launch_step(rmsd_clustering,    "step9_clustering", "clustering with RMSD",  global_prop, run_remaining_steps)
+    clu_filter_time = launch_step(rmsd_clustering,    "step9_rmsd_filtering", "clustering with RMSD",  global_prop, run_remaining_steps)
 
     # NOTE: Decorate the receptor and the ligand proteins of each pose with the corresponding ODA values
     # oda_poses_folder_path = fu.create_dir(str(Path(properties["path"]).joinpath("oda_poses")))
