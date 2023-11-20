@@ -239,7 +239,7 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict)
     # Prepare clustering step folder 
     poses_paths = prepare_step(input_zip_path, properties)
 
-    # Load the ranking dataframe
+    # Load the poses table
     poses_table = properties["poses_table"]
 
     # Rename docking poses with rank and create a list with the corresponding rank for each file
@@ -269,9 +269,28 @@ def rmsd_clustering(input_zip_path: str, output_zip_path: str, properties: dict)
         # Get the paths of the poses in the cluster
         cluster_paths = [poses_paths[i] for i in np.where(cluster_labels == cluster)[0]]
 
-        # Find the path of the pose with the best ranking in the cluster
-        best_pose_path = cluster_paths[cluster_ranking.index(min(cluster_ranking))]
-        filtered_poses_paths.append(best_pose_path)
+        if properties["keep_all"]:
+            # Add all poses in the cluster
+            filtered_poses_paths.extend(cluster_paths)
+            
+            # For each pose, add the cluster label
+            for pose_path in cluster_paths:
+
+                # Get the conformation number from the pdb name
+                conformation_number = get_conf_num(pose_path)
+
+                # Add cluster label to this pose in the poses table
+                poses_table.loc[poses_table["Conf"] == int(conformation_number), "cluster"] = cluster
+        else:
+            # Add the pose with the best ranking in the cluster
+            best_pose_path = cluster_paths[cluster_ranking.index(min(cluster_ranking))]
+            filtered_poses_paths.append(best_pose_path)
+
+            # Get the conformation number from the pdb name
+            conformation_number = get_conf_num(best_pose_path)
+
+            # Add cluster label to this pose in the poses table
+            poses_table.loc[poses_table["Conf"] == int(conformation_number), "cluster"] = cluster
 
     # Zip the best ranking pose paths into a zip file
     fu.zip_list(zip_file = output_zip_path, file_list = filtered_poses_paths)
@@ -351,7 +370,7 @@ def get_poses_ranking(poses_paths: list, poses_table: pd.DataFrame):
     ------
 
         poses_paths         (list): list with paths to docking poses
-        poses_table  (pd.DataFrame): dataframe with ranking of docking poses
+        poses_table (pd.DataFrame): dataframe with ranking of docking poses
 
     Returns
     -------
@@ -365,14 +384,8 @@ def get_poses_ranking(poses_paths: list, poses_table: pd.DataFrame):
     # Iterate over all poses
     for pdb_path in poses_paths:
 
-        # Get the pdb name without the extension
-        pdb_name = Path(pdb_path).stem
-
-        # Look for a number (e.g. 13 or 123) in the pdb name    
-        number_match = re.findall(r"\d+", pdb_name)
-
-        # Get the conformation number from the match
-        conformation_number = number_match[0]
+        # Get the conformation number from the pdb name
+        conformation_number = get_conf_num(pdb_path)
 
         # Get the rank from the ranking Dataframe using the conformation number
         rank = poses_table[poses_table["Conf"] == int(conformation_number)]["RANK"].values[0]
@@ -397,6 +410,32 @@ def plot_dendogram(linkage_matrix, labels, rmsd_threshold, output_path):
         )
     plt.savefig(str(Path(output_path).joinpath("dendrogram.png")))
     plt.close() 
+
+def get_conf_num(pdb_path: str):
+    """
+    Get the conformation number from the pdb name.
+
+    Inputs
+    ------
+
+        pdb_path (str): path to pdb file
+    
+    Returns
+    -------
+
+        conformation_number (str): conformation number
+    """
+
+    # Get the pdb name without the extension
+    pdb_name = Path(pdb_path).stem
+
+    # Look for a number (e.g. 13 or 123) in the pdb name    
+    number_match = re.findall(r"\d+", pdb_name)
+
+    # Get the conformation number from the match
+    conformation_number = number_match[0]
+
+    return conformation_number
 
 
 def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_path: str, output_zip_path: str, properties: dict):
@@ -447,12 +486,15 @@ def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_pa
     filtered_poses_paths = []
     for pose_path in poses_paths:
 
+        # Get the conformation number from the pdb name
+        conformation_number = get_conf_num(pose_path)
+
         # Identify interface residues for the pose
         receptor_interface_atoms, ligand_interface_atoms = find_interface_residues(pose_path, ligand_surface_oda.keys(), Receptor_Neighbor_Search, properties)
 
         # Filter the pose 
-        accept = filter_pose_interface(receptor_interface_atoms, ligand_interface_atoms, 
-                                  receptor_surface_oda, ligand_surface_oda, properties)
+        accept = filter_pose_interface(conformation_number, receptor_interface_atoms, ligand_interface_atoms, 
+                                       receptor_surface_oda, ligand_surface_oda, properties)
 
         if accept:
             filtered_poses_paths.append(pose_path)
@@ -650,7 +692,7 @@ def find_interface_residues(pose_path: str, ligand_surface_ids: list, Receptor_N
     
     return receptor_interface_atoms, ligand_interface_atoms
 
-def filter_pose_interface(receptor_interface_atoms, ligand_interface_atoms, receptor_surface_oda, ligand_surface_oda, properties: dict):
+def filter_pose_interface(conformation_number, receptor_interface_atoms, ligand_interface_atoms, receptor_surface_oda, ligand_surface_oda, properties: dict):
     """
     Filter the pose according to the ODA patches and the specific interface. Two main criteria:
 
@@ -665,9 +707,12 @@ def filter_pose_interface(receptor_interface_atoms, ligand_interface_atoms, rece
             This measures overlap of ligand and receptor oda patches inside the interface. If the overlap is above a given threshold,
             the pose is accepted. This is optional and can be turned off by setting the threshold to 0 for faster filtering.
 
+    It will also update the poses table in the properties dictionary with the ODA coverage and overlap values for this pose.
+
     Inputs
     ------
 
+        conformation_number       (int): conformation number of the pose
         receptor_interface_atoms (dict): dictionary with residue IDs of receptor interface residues as keys and their CA atoms (Bio.PDB.Atom.Atom objects) as values
         ligand_interface_atoms   (dict): dictionary with residue IDs of ligand interface residues as keys and their CA atoms (Bio.PDB.Atom.Atom objects) as values
         receptor_surface_oda     (dict): dictionary with residue IDs of receptor surface residues as keys and their ODA values as values
@@ -680,6 +725,9 @@ def filter_pose_interface(receptor_interface_atoms, ligand_interface_atoms, rece
         accept                   (bool): True if the pose is accepted, False otherwise
     """
 
+    # Get the poses table 
+    poses_table = properties["poses_table"]
+
     # Get the total number of interface residues
     num_interface_residues = len(receptor_interface_atoms) + len(ligand_interface_atoms)
 
@@ -690,7 +738,7 @@ def filter_pose_interface(receptor_interface_atoms, ligand_interface_atoms, rece
     num_overlap_residues = 0
 
     # Create Neighbor Search objects for the interface surface atoms 
-    if properties["overlap_threshold"] > 0:
+    if properties["oda_overlap"] > 0:
         Receptor_Neighbor_Search = PDB.NeighborSearch(list(receptor_interface_atoms.values())) # NOTE: optimize bucket size?
         Ligand_Neighbor_Search = PDB.NeighborSearch(list(ligand_interface_atoms.values())) # NOTE: optimize bucket size?
 
@@ -704,7 +752,7 @@ def filter_pose_interface(receptor_interface_atoms, ligand_interface_atoms, rece
         if residue_oda >= properties["oda_threshold"]:
             num_covered_residues += 1
 
-            if properties["overlap_threshold"] > 0:
+            if properties["oda_overlap"] > 0:
 
                 # Find the neighboring ligand interface residues
                 ligand_neighbors = Ligand_Neighbor_Search.search(residue_ca_atom.get_coord(), properties["distance_threshold"], level="R")
@@ -728,7 +776,7 @@ def filter_pose_interface(receptor_interface_atoms, ligand_interface_atoms, rece
         if residue_oda >= properties["oda_threshold"]:
             num_covered_residues += 1
 
-            if properties["overlap_threshold"] > 0:
+            if properties["oda_overlap"] > 0:
 
                 # Find the neighboring receptor interface residues
                 receptor_neighbors = Receptor_Neighbor_Search.search(residue_ca_atom.get_coord(), properties["distance_threshold"], level="R")
@@ -745,19 +793,25 @@ def filter_pose_interface(receptor_interface_atoms, ligand_interface_atoms, rece
     # Compute the oda coverage: ratio of interface residues covered by ODA patches
     oda_coverage = num_covered_residues / num_interface_residues
 
+    # Update "oda_coverage" column of this conformation number in the poses table
+    poses_table.loc[poses_table["Conf"] == int(conformation_number), "oda_coverage"] = oda_coverage 
+
     # Check if the oda coverage is above the threshold
     if oda_coverage < properties["oda_coverage"]:
         return False
     
     # If the overlap threshold is 0, return True
-    if properties["overlap_threshold"] == 0:
+    if properties["oda_overlap"] == 0:
         return True
     
     # Compute the oda overlap: ratio of interface residues covered by ODA patches with at least one neighboring residue (from the other protein) covered by an ODA patch as well
     oda_overlap = num_overlap_residues / num_interface_residues
 
+    # Update "oda_overlap" column of this conformation number in the poses table
+    poses_table.loc[poses_table["Conf"] == int(conformation_number), "oda_overlap"] = oda_overlap
+
     # Check if the oda overlap is above the threshold
-    if oda_overlap < properties["overlap_threshold"]:
+    if oda_overlap < properties["oda_overlap"]:
         return False
     
     return True
@@ -869,6 +923,12 @@ def calculate_distances(pose_path: str, properties: dict):
         accept_pose (bool): True if all distances are below the threshold, False otherwise
     """
 
+    # Get the conformation number from the pdb name
+    conformation_number = get_conf_num(pose_path)
+
+    # Get the poses table
+    poses_table = properties["poses_table"]
+
     # Read the docking pose
     pose_universe = mda.Universe(pose_path)
 
@@ -888,11 +948,81 @@ def calculate_distances(pose_path: str, properties: dict):
         # Get the distance between the receptor and ligand CA atoms
         distance_value = distance_array(receptor_residue.positions, ligand_residue.positions)[0][0]
 
+        # Update the poses table with the distance value
+        poses_table.loc[poses_table["Conf"] == int(conformation_number), distance["name"]] = distance_value
+
         # Check if the distance is below the threshold
         if distance_value > distance["threshold"]:
             return False
     
     return True
+
+
+def create_poses_table(global_prop: dict, global_paths: dict):
+    """
+    Create a dataframe with the ranking of the docking poses and their pydock energy score. Add the
+    oda_coverage, oda_overlap, cluster and distance constraint columns with a default value of None. 
+    Add the dataframe to the properties of the next step.
+
+    Inputs
+    ------
+
+        global_prop (dict): dictionary with global properties
+        global_paths (dict): dictionary with global paths
+    """
+
+    # Find the range of poses that have been extracted as pdb files
+    rank1 = global_prop["step6_makePDB"]["rank1"]
+    rank2 = global_prop["step6_makePDB"]["rank2"]
+
+    # Read the whole .ene file with the pydock energy scores and ranking
+    poses_table = pd.read_csv(global_paths["step5_dockser"]["output_ene_path"], sep='\s+', skiprows=[1], header=0)
+    
+    # Keep only the rows with the poses that have been extracted as pdb files
+    top_poses_table = poses_table[(poses_table["RANK"] >= rank1) & (poses_table["RANK"] <= rank2)]
+    
+    # Add the oda_coverage, oda_overlap and cluster columns with None
+    top_poses_table["oda_coverage"] = None
+    top_poses_table["oda_overlap"] = None
+    top_poses_table["cluster"] = None 
+
+    # Add a column for each distance 
+    for distance in global_prop["step8_distance_filtering"]["distances"]:
+
+        top_poses_table[distance["name"]] = None
+    
+    # Add the dataframe to the properties of the next step
+    global_prop["step7_oda_filtering"]["poses_table"] = top_poses_table
+
+def clean_poses_table(global_prop: dict):
+    """
+    Clean the poses table:
+        
+        - Remove any column with only None values. Corresponds to filtering steps that have not been run.
+        - Remove any row that contains a None value. Corresponds to poses that have been filtered and didn't reach that step.
+    
+    Inputs
+    ------
+
+        global_prop (dict): dictionary with global properties
+    
+    Returns
+    -------
+
+        poses_table (pd.DataFrame): cleaned poses table
+    """
+
+    # Get the poses table from the last step
+    poses_table = global_prop["step9_rmsd_filtering"]["poses_table"]
+
+    # Remove any column that only contains None values
+    poses_table = poses_table.dropna(axis=1, how='all')
+
+    # Remove any row that contains a None value
+    poses_table = poses_table.dropna(axis=0, how='any')
+
+    return poses_table
+
 
 ########
 # Main #
@@ -975,29 +1105,33 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
     ftdock_time  = launch_step(ftdock,  "step4_ftdock", "sample docking poses using ftdock (FFT-based algorithm)",  global_prop, run_remaining_steps)
     scoring_time = launch_step(dockser, "step5_dockser", "score docking poses using pyDock",  global_prop, run_remaining_steps)
 
-    # Save the (pyDock score) ranking for later use 
-    rank1 = global_prop["step6_makePDB"]["rank1"]
-    rank2 = global_prop["step6_makePDB"]["rank2"]
-    poses_table = pd.read_csv(global_paths["step5_dockser"]["output_ene_path"], sep='\s+', skiprows=[1], header=0)
-    top_poses_table = poses_table[(poses_table["RANK"] >= rank1) & (poses_table["RANK"] <= rank2)] 
-    global_prop["step9_rmsd_filtering"]["poses_table"] = top_poses_table
-
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "makePDB"
     makepdb_time = launch_step(makePDB, "step6_makePDB", "generate PDB files for top scoring docking poses",  global_prop, run_remaining_steps)
+
+    # Read the pydock score ranking and create poses table
+    create_poses_table(global_prop, global_paths)
 
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "oda_filtering"
     oda_filter_time = launch_step(oda_filtering,      "step7_oda_filtering", "filtering with ODA patches",  global_prop, run_remaining_steps)
 
+    # Pass the poses table to the next step
+    global_prop["step8_distance_filtering"]["poses_table"] = global_prop["step7_oda_filtering"]["poses_table"]
+
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "distance_filtering"
     dis_filter_time = launch_step(distance_filtering, "step8_distance_filtering", "filtering with distance between residues",  global_prop, run_remaining_steps)
+
+    # Pass the poses table to the next step
+    global_prop["step9_rmsd_filtering"]["poses_table"] = global_prop["step8_distance_filtering"]["poses_table"]
 
     # Run step or link previous run
     run_remaining_steps = run_remaining_steps or skip_until == "clustering"
     clu_filter_time = launch_step(rmsd_clustering,    "step9_rmsd_filtering", "clustering with RMSD",  global_prop, run_remaining_steps)
 
+    poses_table = clean_poses_table(global_prop)
+    
     # NOTE: Decorate the receptor and the ligand proteins of each pose with the corresponding ODA values
     # oda_poses_folder_path = fu.create_dir(str(Path(properties["path"]).joinpath("oda_poses")))
     # oda_poses_paths = []

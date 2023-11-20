@@ -127,7 +127,7 @@ step7_oda_filtering:
     oda_threshold: -2                     # ODA score threshold for a residue to be considered as part of a hydrophobic patch (oda patch)
     distance_threshold: 8.0               # Distance threshold in A for two residues to be considered as neighbors
     oda_coverage: 0.1                     # Minimum ratio of interface residues covered by ODA Patches -> measures overlap between interface and oda patches
-    oda_overlap: 0.1                      # Minimum ratio of neighboring interface residues covered by oda patches (between receptor and ligand) -> measures overlap of ligand and receptor oda patches inside the interface (0 to ignore) 
+    oda_overlap: 0.05                     # Minimum ratio of neighboring interface residues covered by oda patches (between receptor and ligand) -> measures overlap of ligand and receptor oda patches inside the interface (0 to ignore) 
     run_step: True                        # Run this step
 
 step8_distance_filtering:
@@ -136,7 +136,8 @@ step8_distance_filtering:
     output_zip_path: top_filtered_poses.zip
   properties:
     distances:
-      - receptor_residue_selection: "resnum 336 and resname GLN"
+      - name: "dummy_constraint"
+        receptor_residue_selection: "resnum 336 and resname GLN"
         ligand_residue_selection: "resnum 93 and resname THR"
         threshold: 12.0
     run_step: True
@@ -146,5 +147,6 @@ step9_rmsd_filtering:
     input_zip_path: dependency/step8_distance_filtering/output_zip_path
     output_zip_path: top_filtered_poses.zip
   properties:
-    rmsd_threshold: 5.0
+    rmsd_threshold: 5.0          # RMSD threshold for the hierarchical clustering
+    keep_all: True               # Keep all poses in the output zip file or just the best ranking one from each cluster
     run_step: True
