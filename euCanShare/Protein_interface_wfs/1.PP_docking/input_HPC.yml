@@ -150,3 +150,10 @@ step9_rmsd_filtering:
     rmsd_threshold: 5.0          # RMSD threshold for the hierarchical clustering
     keep_all: True               # Keep all poses in the output zip file or just the best ranking one from each cluster
     run_step: True
+
+step10_oda_decoration:
+  paths:
+    input_zip_path: dependency/step9_rmsd_filtering/output_zip_path
+    input_receptor_path: dependency/step2_oda_receptor/output_oda_path
+    input_ligand_path: dependency/step3_oda_ligand/output_oda_path
+    output_zip_path: top_filtered_poses.zip

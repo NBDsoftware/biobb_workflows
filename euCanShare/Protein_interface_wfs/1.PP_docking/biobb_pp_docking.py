@@ -146,19 +146,21 @@ def link_previous_step(global_log, step_name, output_path, previous_output_path)
     
     return
 
-def prepare_step(input_zip_path: str, prop: dict):
+def prepare_step(input_zip_path: str, prop: dict, additional_subfolder: str = None):
     """
     Prepares a given step by:
     
     1. Creating a step folder
     2. Creating a docking poses subfolder and unzipping input docking poses into it
+    3. Creating an additional sub-folder if needed
 
     Inputs
     ------
 
         input_zip_path          (str): path to zip file with input docking poses
         prop                   (dict): dictionary with step properties
-    
+        additional_subfolder    (str): additional subfolder to create inside the step folder
+
     Returns
     -------
 
@@ -174,6 +176,10 @@ def prepare_step(input_zip_path: str, prop: dict):
     # Extract the file with the docking poses into the subfolder
     poses_paths = fu.unzip_list(zip_file = input_zip_path, dest_dir = poses_folder_path)
 
+    # If required, create an additional subfolder
+    if additional_subfolder is not None:
+        fu.create_dir(str(Path(prop["path"]).joinpath(additional_subfolder)))
+        
     return poses_paths
 
 def find_chain(structure, chain_id):
@@ -506,67 +512,6 @@ def oda_filtering(input_receptor_path: str, input_ligand_path: str, input_zip_pa
     fu.rm(os.path.join(properties["path"], "poses"))
 
     return len(poses_paths)-len(filtered_poses_paths)
-
-def decorate_with_oda_values(pose_path, input_receptor_path, input_ligand_path, oda_poses_folder_path, receptor_chain, ligand_chain):
-    """
-    Takes a docking pose and decorates the receptor and ligand proteins with the corresponding ODA values.
-
-    Inputs
-    ------
-
-        pose_path               (str): path to docking pose (contains receptor and ligand)
-        input_receptor_path     (str): path to receptor pdb file with ODA values in the B-factor column
-        input_ligand_path       (str): path to ligand pdb file with ODA values in the B-factor column
-        oda_poses_folder_path   (str): path to folder where the decorated docking pose will be saved
-        receptor_chain          (str): chain of the receptor protein
-        ligand_chain            (str): chain of the ligand protein
-    """
-
-    # Create a PDB parser
-    parser = PDB.PDBParser(QUIET=True)
-
-    # Load the docking pose
-    pose_structure = parser.get_structure("pose", pose_path)
-
-    # Select the receptor and ligand atoms from the docking pose
-    receptor_atoms = []
-    ligand_atoms = []
-
-    for model in pose_structure:
-        for chain in model:
-            if chain.id == receptor_chain:
-                receptor_atoms.extend(chain.get_atoms())
-            elif chain.id == ligand_chain:
-                ligand_atoms.extend(chain.get_atoms())
-
-    # Load the receptor and ligand with the ODA values
-    receptor_structure = parser.get_structure("receptor_oda", input_receptor_path)
-    ligand_structure = parser.get_structure("ligand_oda", input_ligand_path)
-
-    # Get the atoms with ODA values from the receptor and ligand structures
-    receptor_atoms_oda = [atom for atom in receptor_structure.get_atoms() if atom.bfactor is not None]
-    ligand_atoms_oda = [atom for atom in ligand_structure.get_atoms() if atom.bfactor is not None]
-
-    # Iterate over all ligand atoms and decorate them with the corresponding ODA value
-    for ligand_atom, ligand_oda_atom in zip(ligand_atoms, ligand_atoms_oda):
-        ligand_atom.set_bfactor(ligand_oda_atom.bfactor)
-
-    # Iterate over all receptor atoms and decorate them with the corresponding ODA value
-    for receptor_atom, receptor_oda_atom in zip(receptor_atoms, receptor_atoms_oda):
-        receptor_atom.set_bfactor(receptor_oda_atom.bfactor)
-
-    # Find the name of the docking pose file
-    pose_name = Path(pose_path).name
-
-    # Create new path for the decorated docking pose
-    decorated_pose_path = os.path.join(oda_poses_folder_path, pose_name)
-
-    # Save the decorated docking pose
-    io = PDB.PDBIO()
-    io.set_structure(pose_structure)
-    io.save(decorated_pose_path)
-
-    return decorated_pose_path
 
 def find_surface(pdb_path: str, output_path: str):
     """
@@ -958,6 +903,119 @@ def calculate_distances(pose_path: str, properties: dict):
     return True
 
 
+def decorate_with_oda(input_zip_path: str, input_receptor_path: str, input_ligand_path: str, output_zip_path: str, properties: dict):
+    """
+    Decorate all input docking poses with the ODA values of the receptor and ligand proteins and save them into a zip file. The decoration is
+    done writing the ODA values in the B-factor column of each pdb file.
+
+    Inputs
+    ------
+
+        input_zip_path          (str): path to input zip file with docking poses
+        input_receptor_path     (str): path to receptor pdb file with ODA values
+        input_ligand_path       (str): path to ligand pdb file with ODA values
+        output_zip_path         (str): path to output zip file with decorated docking poses
+        properties             (dict): dictionary with decorate_with_oda step properties
+    """
+
+    # Prepare step folder and unzip docking poses into it
+    poses_paths = prepare_step(input_zip_path, properties, additional_subfolder="decorated_poses")
+
+    # Create a PDB parser
+    parser = PDB.PDBParser(QUIET=True)
+
+    # Load the receptor and ligand with the ODA values
+    receptor_structure = parser.get_structure("receptor_oda", input_receptor_path)
+    ligand_structure = parser.get_structure("ligand_oda", input_ligand_path)
+
+    receptor_atoms_oda = []
+    ligand_atoms_oda = []
+
+    # Get the atoms with ODA values from the receptor and ligand structures
+    for model in receptor_structure:
+        for chain in model:
+            if chain.id == properties["receptor_chain"]:
+                for atom in chain.get_atoms():
+                    if atom.bfactor is not None:
+                        receptor_atoms_oda.append(atom)
+    for model in ligand_structure:
+        for chain in model:
+            if chain.id == properties["ligand_chain"]:
+                for atom in chain.get_atoms():
+                    if atom.bfactor is not None:
+                        ligand_atoms_oda.append(atom)
+
+    # Iterate over all poses
+    decorated_poses_paths = []
+    for pose_path in poses_paths:
+
+        # Decorate the pose with the ODA values
+        decorated_pose_path = decorate_pose_with_oda(pose_path, receptor_atoms_oda, ligand_atoms_oda, properties)
+        decorated_poses_paths.append(decorated_pose_path)
+
+    # Zip the decorated docking pose paths into a zip file
+    fu.zip_list(zip_file = output_zip_path, file_list = decorated_poses_paths)
+
+    # Remove temporal folders with poses
+    fu.rm(os.path.join(properties["path"], "poses"))
+    fu.rm(os.path.join(properties["path"], "decorated_poses"))
+
+def decorate_pose_with_oda(pose_path, receptor_atoms_oda, ligand_atoms_oda, properties):
+    """
+    Takes a docking pose and decorates the receptor and ligand proteins with the corresponding ODA values.
+
+    Inputs
+    ------
+
+        pose_path               (str): path to docking pose (contains receptor and ligand)
+        receptor_atoms_oda     (list): list with Bio.PDB.Atom.Atom objects with the ODA values of the receptor protein
+        ligand_atoms_oda       (list): list with Bio.PDB.Atom.Atom objects with the ODA values of the ligand protein
+        properties             (dict): dictionary with decorate_with_oda step properties
+    
+    Outputs
+    -------
+
+        decorated_pose_path     (str): path to decorated docking pose
+    """
+
+    # Create a PDB parser
+    parser = PDB.PDBParser(QUIET=True)
+
+    # Load the docking pose
+    pose_structure = parser.get_structure("pose", pose_path)
+
+    # Select the receptor and ligand atoms from the docking pose
+    receptor_atoms = []
+    ligand_atoms = []
+
+    for model in pose_structure:
+        for chain in model:
+            if chain.id == properties["receptor_chain"]:
+                receptor_atoms.extend(chain.get_atoms())
+            elif chain.id == properties["ligand_chain"]:
+                ligand_atoms.extend(chain.get_atoms())
+
+    # Iterate over all ligand atoms and decorate them with the corresponding ODA value
+    for ligand_atom, ligand_oda_atom in zip(ligand_atoms, ligand_atoms_oda):
+        ligand_atom.set_bfactor(ligand_oda_atom.bfactor)
+
+    # Iterate over all receptor atoms and decorate them with the corresponding ODA value
+    for receptor_atom, receptor_oda_atom in zip(receptor_atoms, receptor_atoms_oda):
+        receptor_atom.set_bfactor(receptor_oda_atom.bfactor)
+
+    # Create new path for the decorated docking pose
+    pose_name = Path(pose_path).name
+    decorated_poses_path = str(Path(properties["path"]).joinpath("decorated_poses"))
+    decorated_pose_path = os.path.join(decorated_poses_path, pose_name)
+
+    # Save the decorated docking pose
+    io = PDB.PDBIO()
+    io.set_structure(pose_structure)
+    io.save(decorated_pose_path)
+
+    return decorated_pose_path
+
+
 def create_poses_table(global_prop: dict, global_paths: dict):
     """
     Create a dataframe with the ranking of the docking poses and their pydock energy score. Add the
@@ -1000,7 +1058,8 @@ def clean_poses_table(global_prop: dict):
         
         - Remove any column with only None values. Corresponds to filtering steps that have not been run.
         - Remove any row that contains a None value. Corresponds to poses that have been filtered and didn't reach that step.
-    
+        - Change some column names for clarity.
+
     Inputs
     ------
 
@@ -1012,6 +1071,10 @@ def clean_poses_table(global_prop: dict):
         poses_table (pd.DataFrame): cleaned poses table
     """
 
+    # Columns to rename
+    original_names = ['Conf',         'Ele',           'Desolv',      'VDW',           'Total', 'RANK', 'oda_coverage', 'oda_overlap', 'cluster']
+    new_names =      ['Conformation', 'Electrostatic', 'Desolvation', 'Van Der Waals', 'Total', 'Rank', 'ODA coverage', 'ODA overlap', 'Cluster']
+
     # Get the poses table from the last step
     poses_table = global_prop["step9_rmsd_filtering"]["poses_table"]
 
@@ -1020,6 +1083,9 @@ def clean_poses_table(global_prop: dict):
 
     # Remove any row that contains a None value
     poses_table = poses_table.dropna(axis=0, how='any')
+
+    # Rename some columns for clarity
+    poses_table = poses_table.rename(columns=dict(zip(original_names, new_names)))
 
     return poses_table
 
@@ -1130,15 +1196,18 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
     run_remaining_steps = run_remaining_steps or skip_until == "clustering"
     clu_filter_time = launch_step(rmsd_clustering,    "step9_rmsd_filtering", "clustering with RMSD",  global_prop, run_remaining_steps)
 
+    # Clean the poses table
     poses_table = clean_poses_table(global_prop)
-    
-    # NOTE: Decorate the receptor and the ligand proteins of each pose with the corresponding ODA values
-    # oda_poses_folder_path = fu.create_dir(str(Path(properties["path"]).joinpath("oda_poses")))
-    # oda_poses_paths = []
-    # for pose_path in poses_paths:
-         # Decorate the receptor and the ligand proteins of the pose with the corresponding ODA values
-    #    decorated_pose_path = decorate_with_oda_values(pose_path, input_receptor_path, input_ligand_path, oda_poses_folder_path, properties["receptor_chain"], properties["ligand_chain"])
-    #    oda_poses_paths.append(decorated_pose_path)
+
+    # Save the poses table to a csv file
+    poses_table.to_csv(os.path.join(output_path, "poses_table.csv"), index=False)
+
+    # Pass the input ligand and receptor chains to next step
+    global_prop["step10_oda_decoration"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["mol"]
+    global_prop["step10_oda_decoration"]["ligand_chain"] = global_prop["step1_setup"]["ligand"]["mol"]
+
+    # Decorate the receptor and the ligand proteins of each pose with the corresponding ODA values
+    decoration_time = launch_step(decorate_with_oda, "step10_oda_decoration", "decorate receptor and ligand proteins of each pose with the corresponding ODA values", global_prop, True)
 
     # Print timing information to log file
     total_elapsed_time = time.time() - start_time
@@ -1158,7 +1227,8 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
     global_log.info('  makePDB: %.2f minutes' % (makepdb_time/60))
     global_log.info('  oda_filtering: %.2f minutes' % (oda_filter_time/60))
     global_log.info('  distance_filtering: %.2f minutes' % (dis_filter_time/60))
-    global_log.info('  clustering: %.2f minutes' % (clu_filter_time/60))
+    global_log.info('  rmsd_filtering: %.2f minutes' % (clu_filter_time/60))
+    global_log.info('  oda_decoration: %.2f minutes' % (decoration_time/60))
 
     return global_paths, global_prop
 
