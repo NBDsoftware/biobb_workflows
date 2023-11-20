@@ -146,20 +146,18 @@ def link_previous_step(global_log, step_name, output_path, previous_output_path)
     
     return
 
-def prepare_step(input_zip_path: str, prop: dict, additional_subfolder: str = None):
+def prepare_step(input_zip_path: str, prop: dict):
     """
     Prepares a given step by:
     
     1. Creating a step folder
     2. Creating a docking poses subfolder and unzipping input docking poses into it
-    3. Creating an additional sub-folder if needed
 
     Inputs
     ------
 
         input_zip_path          (str): path to zip file with input docking poses
         prop                   (dict): dictionary with step properties
-        additional_subfolder    (str): additional subfolder to create inside the step folder
 
     Returns
     -------
@@ -175,10 +173,6 @@ def prepare_step(input_zip_path: str, prop: dict, additional_subfolder: str = No
 
     # Extract the file with the docking poses into the subfolder
     poses_paths = fu.unzip_list(zip_file = input_zip_path, dest_dir = poses_folder_path)
-
-    # If required, create an additional subfolder
-    if additional_subfolder is not None:
-        fu.create_dir(str(Path(prop["path"]).joinpath(additional_subfolder)))
         
     return poses_paths
 
@@ -919,7 +913,10 @@ def decorate_with_oda(input_zip_path: str, input_receptor_path: str, input_ligan
     """
 
     # Prepare step folder and unzip docking poses into it
-    poses_paths = prepare_step(input_zip_path, properties, additional_subfolder="decorated_poses")
+    poses_paths = prepare_step(input_zip_path, properties)
+
+    # Load the poses table
+    poses_table = properties["poses_table"]
 
     # Create a PDB parser
     parser = PDB.PDBParser(QUIET=True)
@@ -946,19 +943,19 @@ def decorate_with_oda(input_zip_path: str, input_receptor_path: str, input_ligan
                         ligand_atoms_oda.append(atom)
 
     # Iterate over all poses
-    decorated_poses_paths = []
     for pose_path in poses_paths:
+
+        # Get the conformation number from the pdb name
+        conformation_number = get_conf_num(pose_path)
 
         # Decorate the pose with the ODA values
         decorated_pose_path = decorate_pose_with_oda(pose_path, receptor_atoms_oda, ligand_atoms_oda, properties)
-        decorated_poses_paths.append(decorated_pose_path)
 
-    # Zip the decorated docking pose paths into a zip file
-    fu.zip_list(zip_file = output_zip_path, file_list = decorated_poses_paths)
+        # Update the poses table with the decorated pose path
+        poses_table.loc[poses_table["Conf"] == int(conformation_number), "path"] = decorated_pose_path
 
     # Remove temporal folders with poses
     fu.rm(os.path.join(properties["path"], "poses"))
-    fu.rm(os.path.join(properties["path"], "decorated_poses"))
 
 def decorate_pose_with_oda(pose_path, receptor_atoms_oda, ligand_atoms_oda, properties):
     """
@@ -1005,8 +1002,7 @@ def decorate_pose_with_oda(pose_path, receptor_atoms_oda, ligand_atoms_oda, prop
 
     # Create new path for the decorated docking pose
     pose_name = Path(pose_path).name
-    decorated_poses_path = str(Path(properties["path"]).joinpath("decorated_poses"))
-    decorated_pose_path = os.path.join(decorated_poses_path, pose_name)
+    decorated_pose_path = os.path.join(properties["path"], pose_name)
 
     # Save the decorated docking pose
     io = PDB.PDBIO()
@@ -1049,10 +1045,13 @@ def create_poses_table(global_prop: dict, global_paths: dict):
 
         top_poses_table[distance["name"]] = None
     
+    # Add the path column with the path to the pdb file (empty for now)
+    top_poses_table["path"] = ""
+    
     # Add the dataframe to the properties of the next step
     global_prop["step7_oda_filtering"]["poses_table"] = top_poses_table
 
-def clean_poses_table(global_prop: dict):
+def clean_poses_table(poses_table):
     """
     Clean the poses table:
         
@@ -1063,7 +1062,7 @@ def clean_poses_table(global_prop: dict):
     Inputs
     ------
 
-        global_prop (dict): dictionary with global properties
+        poses_table (pd.DataFrame): poses table with ranking and pydock energy scores
     
     Returns
     -------
@@ -1074,9 +1073,6 @@ def clean_poses_table(global_prop: dict):
     # Columns to rename
     original_names = ['Conf',         'Ele',           'Desolv',      'VDW',           'Total', 'RANK', 'oda_coverage', 'oda_overlap', 'cluster']
     new_names =      ['Conformation', 'Electrostatic', 'Desolvation', 'Van Der Waals', 'Total', 'Rank', 'ODA coverage', 'ODA overlap', 'Cluster']
-
-    # Get the poses table from the last step
-    poses_table = global_prop["step9_rmsd_filtering"]["poses_table"]
 
     # Remove any column that only contains None values
     poses_table = poses_table.dropna(axis=1, how='all')
@@ -1196,11 +1192,8 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
     run_remaining_steps = run_remaining_steps or skip_until == "clustering"
     clu_filter_time = launch_step(rmsd_clustering,    "step9_rmsd_filtering", "clustering with RMSD",  global_prop, run_remaining_steps)
 
-    # Clean the poses table
-    poses_table = clean_poses_table(global_prop)
-
-    # Save the poses table to a csv file
-    poses_table.to_csv(os.path.join(output_path, "poses_table.csv"), index=False)
+    # Pass the poses table to the next step
+    global_prop["step10_oda_decoration"]["poses_table"] = global_prop["step9_rmsd_filtering"]["poses_table"]
 
     # Pass the input ligand and receptor chains to next step
     global_prop["step10_oda_decoration"]["receptor_chain"] = global_prop["step1_setup"]["receptor"]["mol"]
@@ -1208,6 +1201,10 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
 
     # Decorate the receptor and the ligand proteins of each pose with the corresponding ODA values
     decoration_time = launch_step(decorate_with_oda, "step10_oda_decoration", "decorate receptor and ligand proteins of each pose with the corresponding ODA values", global_prop, True)
+
+    # Save the poses table to a csv file
+    final_poses_table = clean_poses_table(global_prop["step10_oda_decoration"]["poses_table"])
+    final_poses_table.to_csv(os.path.join(output_path, "poses_table.csv"), index=False)
 
     # Print timing information to log file
     total_elapsed_time = time.time() - start_time
