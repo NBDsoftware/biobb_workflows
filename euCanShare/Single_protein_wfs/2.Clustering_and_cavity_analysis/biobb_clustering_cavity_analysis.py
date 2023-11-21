@@ -593,7 +593,7 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, com_filter
     global_log.info('')
     global_log.info('')
     global_log.info('Execution successful: ')
-    global_log.info('  Workflow name:  Cavity analysis')
+    global_log.info('  Workflow name: Cavity analysis')
     global_log.info('  Output path: %s' % output_path)
     global_log.info('  Config File: %s' % configuration_path)
     global_log.info('')
