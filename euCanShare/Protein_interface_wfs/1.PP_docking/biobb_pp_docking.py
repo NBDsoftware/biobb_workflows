@@ -1204,14 +1204,14 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
 
     # Save the poses table to a csv file
     final_poses_table = clean_poses_table(global_prop["step10_oda_decoration"]["poses_table"])
-    final_poses_table.to_csv(os.path.join(output_path, "poses_table.csv"), index=False)
+    final_poses_table.to_csv(os.path.join(output_path, "summary.csv"), index=False)
 
     # Print timing information to log file
     total_elapsed_time = time.time() - start_time
     global_log.info('')
     global_log.info('')
     global_log.info('Execution successful: ')
-    global_log.info('  Workflow name: Protein-protein docking')
+    global_log.info('  Workflow name: Protein protein docking')
     global_log.info('  Output path: %s' % output_path)
     global_log.info('  Config File: %s' % configuration_path)
     global_log.info('')
