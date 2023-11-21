@@ -115,7 +115,7 @@ def get_clusters_population(log_path: str, output_path: str, global_log) -> list
     # Return list with cluster population and id sorted by population
     return clusters_population
 
-def create_summary(cluster_names, cluster_populations, cluster_filtered_pockets, global_paths, output_path, output_summary_path = None):
+def create_summary(cluster_names, cluster_populations, cluster_filtered_pockets, global_paths, output_path):
     '''
     Creates 3 sorted summary files with information for each pocket found and filtered for each model. 
     The summary file is a YAML file.
@@ -129,7 +129,6 @@ def create_summary(cluster_names, cluster_populations, cluster_filtered_pockets,
         cluster_filtered_pockets (dict): Dictionary with filtered pocket's IDs for each cluster
         global_paths             (dict): global paths dictionary
         output_path               (str): path to output folder
-        output_summary_path       (str): path to output summary file
     
     Output
     ------
@@ -186,16 +185,9 @@ def create_summary(cluster_names, cluster_populations, cluster_filtered_pockets,
     sorted_pockets_by_volume, sorted_pockets_by_drug_score, sorted_pockets_by_score = sort_summary(global_summary)
     
     # Create file names for sorted summary files
-    if output_summary_path is None:
-        volume_summary_path = os.path.join(output_path, f"pocket_analysis_by_volume.yml")
-        drug_score_summary_path = os.path.join(output_path, f"pocket_analysis_by_drug_score.yml")
-        score_summary_path = os.path.join(output_path, f"pocket_analysis_by_score.yml")
-    else:
-        parent_path = Path(output_summary_path).parent
-        stem_name = Path(output_summary_path).stem
-        volume_summary_path = os.path.join(parent_path, f"{stem_name}_by_volume.yml")
-        drug_score_summary_path = os.path.join(parent_path, f"{stem_name}_by_drug_score.yml")
-        score_summary_path = os.path.join(parent_path, f"{stem_name}_by_score.yml")
+    volume_summary_path = os.path.join(output_path, f"pocket_analysis_by_volume.yml")
+    drug_score_summary_path = os.path.join(output_path, f"pocket_analysis_by_drug_score.yml")
+    score_summary_path = os.path.join(output_path, f"pocket_analysis_by_score.yml")
 
     # Write the sorted pockets by volume to a YAML file
     with open(volume_summary_path, 'w') as f:
@@ -241,6 +233,20 @@ def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filte
         global_log.warning("Input pockets zip file not found, previous step didn't find any pockets or failed")
         return filtered_pocket_IDs
 
+    # Check if step should run
+    if not properties['run_step']:
+        
+        # Copy input pockets zip file to output filtered pockets zip file
+        fu.copy_file(input_pockets_zip, output_filter_pockets_zip)
+
+        # Find list of filtered pocket IDs 
+        filtered_pocket_IDs = get_pockets_IDs(output_filter_pockets_zip, properties, global_log)
+
+        # Log warning
+        global_log.warning("    Skipping step because run_step = False")
+
+        return filtered_pocket_IDs
+    
     # Extract all pockets in step folder
     pocket_paths = fu.unzip_list(zip_file=input_pockets_zip, dest_dir=properties['path'])
 
@@ -297,9 +303,13 @@ def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filte
 
     # If no pockets are found, return
     if len(filtered_pocket_paths) == 0:
-        global_log.warning("No pockets found after filtering")
+        
         # Erase all the pockets remaining in the step folder
         fu.rm_file_list(file_list=pocket_paths)
+
+        # Log warning
+        global_log.warning("No pockets found after filtering")
+
         return filtered_pocket_IDs
     
     # Zip filtered pockets
@@ -439,7 +449,7 @@ def get_pockets_IDs(input_pockets_zip: str, properties: dict, global_log):
     return filtered_pocket_IDs
 
 
-def main_wf(configuration_path, traj_path, top_path, clustering_path, com_filter, output_path, output_summary_path):
+def main_wf(configuration_path, traj_path, top_path, clustering_path, output_path):
     '''
     Main clustering and cavity analysis workflow. This workflow clusters a given trajectory and analyzes the cavities of the most representative
     structures. Then filters the cavities according to a pre-defined criteria and outputs the pockets that passed the filter.
@@ -451,9 +461,7 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, com_filter
         traj_path           (str): (Optional) path to trajectory file
         top_path            (str): (Optional) path to topology file
         clustering_path     (str): (Optional) path to the folder with the most representative structures in pdb format from an external clustering 
-        com_filter          (str): (Optional) filter pockets by distance to center of mass of a group of residues (default: False)
         output_path         (str): (Optional) path to output folder
-        output_summary_path (str): (Optional) path to output summary file
 
     Outputs
     -------
@@ -572,21 +580,16 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, com_filter
         global_log.info("step4_filter_cavities: Filter found cavities")
         fpocket_filter(**cluster_paths['step4_filter_cavities'], properties=cluster_prop["step4_filter_cavities"])
 
-        if com_filter:
-            # STEP 5: Filter by pocket center of mass 
-            global_log.info("step5_filter_residue_com: Filter cavities by center of mass distance to a group of residues") 
-            filtered_pockets_IDs = filter_residue_com(**cluster_paths['step5_filter_residue_com'], properties=cluster_prop["step5_filter_residue_com"], global_log=global_log)
-        else:
-            # Get filtered pockets IDs from step 4
-            global_log.info("    Get filtered pockets IDs")
-            filtered_pockets_IDs = get_pockets_IDs(cluster_paths['step4_filter_cavities']['output_filter_pockets_zip'], properties=cluster_prop["step4_filter_cavities"], global_log=global_log)
+        # STEP 5: Filter by pocket center of mass 
+        global_log.info("step5_filter_residue_com: Filter cavities by center of mass distance to a group of residues") 
+        filtered_pockets_IDs = filter_residue_com(**cluster_paths['step5_filter_residue_com'], properties=cluster_prop["step5_filter_residue_com"], global_log=global_log)
 
         # Update dictionary with filtered pockets
         cluster_filtered_pockets.update({cluster_name : filtered_pockets_IDs})
 
     # Create summary with available pockets per cluster 
     global_log.info("    Creating YAML summary file...")
-    create_summary(cluster_names, cluster_populations, cluster_filtered_pockets, global_paths, output_path, output_summary_path)
+    create_summary(cluster_names, cluster_populations, cluster_filtered_pockets, global_paths, output_path)
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -621,17 +624,9 @@ if __name__ == '__main__':
     parser.add_argument('--clustering_path', dest='clustering_path',
                         help="Input path to representative structures (folder with pdb files)", 
                         required=False)
-    
-    parser.add_argument('--com_filter', dest='com_filter', action='store_true',
-                        help="Filter pockets by distance to center of mass of a group of residues (default: False)",
-                        required=False)
 
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
-                        required=False)
-    
-    parser.add_argument('--output_summary', dest='output_summary_path',
-                        help="Output summary path (default: /output_path/summary.yml)",
                         required=False)
     
     args = parser.parse_args()
@@ -640,6 +635,4 @@ if __name__ == '__main__':
             traj_path = args.traj_path,
             top_path = args.top_path,
             clustering_path = args.clustering_path,
-            com_filter = args.com_filter,
-            output_path = args.output_path,
-            output_summary_path = args.output_summary_path)
+            output_path = args.output_path)
