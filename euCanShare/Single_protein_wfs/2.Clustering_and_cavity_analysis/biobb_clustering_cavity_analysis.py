@@ -5,13 +5,13 @@
 
 # Importing all the needed libraries
 import os
-import re
 import time
 import glob
 import argparse
 import csv
 import yaml
 import json
+import shutil
 import numpy as np
 from pathlib import Path
 
@@ -185,9 +185,9 @@ def create_summary(cluster_names, cluster_populations, cluster_filtered_pockets,
     sorted_pockets_by_volume, sorted_pockets_by_drug_score, sorted_pockets_by_score = sort_summary(global_summary)
     
     # Create file names for sorted summary files
-    volume_summary_path = os.path.join(output_path, f"pocket_analysis_by_volume.yml")
-    drug_score_summary_path = os.path.join(output_path, f"pocket_analysis_by_drug_score.yml")
-    score_summary_path = os.path.join(output_path, f"pocket_analysis_by_score.yml")
+    volume_summary_path = os.path.join(output_path, f"summary_by_volume.yml")
+    drug_score_summary_path = os.path.join(output_path, f"summary_by_drug_score.yml")
+    score_summary_path = os.path.join(output_path, f"summary_by_score.yml")
 
     # Write the sorted pockets by volume to a YAML file
     with open(volume_summary_path, 'w') as f:
@@ -235,9 +235,9 @@ def filter_residue_com(input_pockets_zip: str, input_pdb_path: str, output_filte
 
     # Check if step should run
     if not properties['run_step']:
-        
+
         # Copy input pockets zip file to output filtered pockets zip file
-        fu.copy_file(input_pockets_zip, output_filter_pockets_zip)
+        shutil.copyfile(input_pockets_zip, output_filter_pockets_zip) 
 
         # Find list of filtered pocket IDs 
         filtered_pocket_IDs = get_pockets_IDs(output_filter_pockets_zip, properties, global_log)
@@ -448,6 +448,47 @@ def get_pockets_IDs(input_pockets_zip: str, properties: dict, global_log):
 
     return filtered_pocket_IDs
 
+def check_arguments(global_log, traj_path, top_path, clustering_path):
+    """
+    Check the arguments provided by the user
+    """
+
+    # If the user doesn't provide traj_path and top_path or clustering_path -> exit
+    if (None in [traj_path, top_path]) and clustering_path is None:
+        global_log.error("ERROR: Either clustering_path or both traj_path and top_path must be provided")
+        raise SystemExit
+
+    # If the user provides traj_path and top_path and clustering_path -> exit
+    if (None not in [traj_path, top_path]) and clustering_path is not None:
+        global_log.error("ERROR: Both traj_path and top_path and clustering_path are provided, clustering_path will be used")
+        raise SystemExit
+
+    # If the user provides traj_path and not top_path -> exit
+    if traj_path is not None and top_path is None:
+        global_log.error("ERROR: top_path must be provided if traj_path is provided")
+        raise SystemExit
+    
+    # If the user provides top_path and not traj_path -> exit
+    if top_path is not None and traj_path is None:
+        global_log.error("ERROR: traj_path must be provided if top_path is provided")
+        raise SystemExit
+    
+    # If the user provides traj_path and it doesn't exist -> exit
+    if traj_path is not None and not os.path.exists(traj_path):
+        global_log.error("ERROR: traj_path doesn't exist")
+        raise SystemExit
+
+    # If the user provides top_path and it doesn't exist -> exit
+    if top_path is not None and not os.path.exists(top_path):
+        global_log.error("ERROR: top_path doesn't exist")
+        raise SystemExit
+    
+    # If the user provides clustering_path and it doesn't exist -> exit
+    if clustering_path is not None and not os.path.exists(clustering_path):
+        global_log.error("ERROR: clustering_path doesn't exist")
+        raise SystemExit
+
+
 
 def main_wf(configuration_path, traj_path, top_path, clustering_path, output_path):
     '''
@@ -491,6 +532,9 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
     # Dividing it in global properties and global paths
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
+
+    # Check arguments
+    check_arguments(global_log, traj_path, top_path, clustering_path)
 
     # If clustering is not given externally -> cluster the input trajectory and return cluster path
     if clustering_path is None:
@@ -552,8 +596,10 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
     # Dictionary to save the filtered pocket IDs for each model
     cluster_filtered_pockets = {}
 
+    # For each model of the receptor
     for cluster_index, cluster_name in enumerate(cluster_names):
 
+        # Create sub folder for the model
         cluster_prop = conf.get_prop_dic(prefix=cluster_name)
         cluster_paths = conf.get_paths_dic(prefix=cluster_name)
 
@@ -586,6 +632,10 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
 
         # Update dictionary with filtered pockets
         cluster_filtered_pockets.update({cluster_name : filtered_pockets_IDs})
+
+        # Save model pdb file in sub folder
+        model_subfolder = os.path.join(output_path, cluster_name)
+        shutil.copyfile(cluster_paths['step3_cavity_analysis']['input_pdb_path'], os.path.join(model_subfolder, 'model.pdb'))
 
     # Create summary with available pockets per cluster 
     global_log.info("    Creating YAML summary file...")
