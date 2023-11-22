@@ -64,9 +64,7 @@ step5_autodock_vina_run:
   properties:
     cpu: 1
 
-step6_show_top_ligands:
-  paths:
-    output_csv_path: top_ligands.csv 
+step6_top_ligands:
   properties:
     num_top_ligands: 50
 
