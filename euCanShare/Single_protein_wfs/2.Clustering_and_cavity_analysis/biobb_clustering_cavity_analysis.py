@@ -448,15 +448,30 @@ def get_pockets_IDs(input_pockets_zip: str, properties: dict, global_log):
 
     return filtered_pocket_IDs
 
-def check_arguments(global_log, traj_path, top_path, clustering_path):
+def check_arguments(global_log, global_paths, traj_path, top_path, clustering_path):
     """
     Check the arguments provided by the user
     """
 
-    # If the user doesn't provide traj_path and top_path or clustering_path -> exit
+    # If the user doesn't provide traj_path and top_path or clustering_path 
     if (None in [traj_path, top_path]) and clustering_path is None:
-        global_log.error("ERROR: Either clustering_path or both traj_path and top_path must be provided")
-        raise SystemExit
+
+        # And the traj and topology are not given through the configuration file either -> exit
+        config_traj_path = global_paths['step1_gmx_cluster'].get('input_traj_path', None)
+        config_top_path = global_paths['step0A_make_ndx'].get('input_structure_path', None)
+
+        if (None in [config_traj_path, config_top_path]):
+            global_log.error("ERROR: Either clustering_path or both traj_path and top_path must be provided")
+            raise SystemExit
+        
+        # If the user provides traj_path and top_path through the configuration file -> check if they exist
+        if not os.path.exists(config_traj_path):
+            global_log.error("ERROR: traj_path doesn't exist")
+            raise SystemExit
+
+        if not os.path.exists(config_top_path):
+            global_log.error("ERROR: top_path doesn't exist")
+            raise SystemExit
 
     # If the user provides traj_path and top_path and clustering_path -> exit
     if (None not in [traj_path, top_path]) and clustering_path is not None:
@@ -534,7 +549,7 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
     global_paths = conf.get_paths_dic()
 
     # Check arguments
-    check_arguments(global_log, traj_path, top_path, clustering_path)
+    check_arguments(global_log, global_paths, traj_path, top_path, clustering_path)
 
     # If clustering is not given externally -> cluster the input trajectory and return cluster path
     if clustering_path is None:
