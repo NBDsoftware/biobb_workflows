@@ -28,27 +28,25 @@ from biobb_vs.fpocket.fpocket_filter import fpocket_filter
 
 def get_clusters_population(log_path: str, output_path: str, global_log) -> list:
     '''
-    Reads the centroids' ID and populations from the clustering log, sorts the clusters by 
-    population in descending order and writes the sorted list to a JSON file in the clustering_folder.
+    Reads the centroids' ID and populations from the log, sorts the clusters by population 
+    in descending order and writes the sorted list to a JSON file in the output folder.
 
     Inputs
     -------
 
-        log_path          : log path of clustering step
-        output_path       : path to the output folder where the population of each cluster will be saved in a JSON file
+        log_path          : path to log file of clustering step
+        output_path       : path to the output folder where the JSON file will be saved
         global_log        : global log object
 
     Outputs
     -------
 
-        /json_file  with sorted cluster ids and populations
-
         clusters_population (list<tuple>): list with tuples containing (population, cluster_ID) sorted by population
     '''
 
+    # Open log file if it exists
     if os.path.exists(log_path):
         file = open(log_path)
-    # If not found, return error
     else:
         global_log.error("Clustering log file not found")
         return
@@ -59,10 +57,8 @@ def get_clusters_population(log_path: str, output_path: str, global_log) -> list
     cluster_ids = []
     populations = []
 
-    # Condition to wait until we reach clustering information in file
+    # Parse the log file
     start = False
-
-    # For each row in file
     for row in csv_reader:
 
         # When we have reached clustering information
@@ -502,7 +498,6 @@ def check_arguments(global_log, global_paths, traj_path, top_path, clustering_pa
     if clustering_path is not None and not os.path.exists(clustering_path):
         global_log.error("ERROR: clustering_path doesn't exist")
         raise SystemExit
-
 
 
 def main_wf(configuration_path, traj_path, top_path, clustering_path, output_path):
