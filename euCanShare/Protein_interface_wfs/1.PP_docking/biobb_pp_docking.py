@@ -879,10 +879,10 @@ def calculate_distances(pose_path: str, properties: dict):
     for distance in properties["distances"]:
 
         # Get the receptor residue CA atom
-        receptor_residue = pose_universe.select_atoms(f"protein and chainID {receptor_chain} and {distance['receptor_residue_selection']} and name CA")
+        receptor_residue = pose_universe.select_atoms(f"protein and chainID {receptor_chain} and ({distance['receptor_residue_selection']}) and name CA")
 
         # Get the ligand residue CA atom
-        ligand_residue = pose_universe.select_atoms(f"protein and chainID {ligand_chain} and {distance['ligand_residue_selection']} and name CA")
+        ligand_residue = pose_universe.select_atoms(f"protein and chainID {ligand_chain} and ({distance['ligand_residue_selection']}) and name CA")
 
         # Get the distance between the receptor and ligand CA atoms
         distance_value = distance_array(receptor_residue.positions, ligand_residue.positions)[0][0]
