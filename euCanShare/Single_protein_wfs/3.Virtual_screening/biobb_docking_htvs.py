@@ -28,7 +28,7 @@ def find_matching_str(pattern, filepath):
     
     Output
     ------
-        match_str (str): string matching the pattern or None if no piece matches the pattern
+        match_str (str): string matching the pattern or None if there is no match
     '''
 
     # Open log file
@@ -91,7 +91,10 @@ def create_summary(all_ligands, properties, output_path):
     '''
 
     # Define summary file name
-    summary_path = "top_ligands.csv"
+    summary_filename = "top_ligands.csv"
+
+    # Define summary file path
+    summary_path = os.path.join(output_path, summary_filename)
 
     # Find number of top ligands to save
     ranking_length = min(properties['num_top_ligands'], len(all_ligands)) 
@@ -218,11 +221,6 @@ def write_smiles(smiles, smiles_path):
     ------
         smiles              (str):  SMILES code
         smiles_path         (str):  smiles file path
-    
-    Output
-    ------
-
-        smiles_path (str): path to file containing SMILES code
     '''
 
     # Find step path 
@@ -241,7 +239,7 @@ def get_ranking(ligand_smiles, ligand_names, global_paths, output_path):
 
     """
     Reads autodock log files to find best affinity for each ligand. 
-    Returns a list of tuples (affinity, ligand_name, ligand_smiles) ordered by affinity
+    Returns a list of tuples ordered by affinity: (affinity, ligand_name, ligand_smiles) 
 
     Inputs
     ------
@@ -254,7 +252,7 @@ def get_ranking(ligand_smiles, ligand_names, global_paths, output_path):
     Output
     ------
 
-        all_ligands      (list): list of tuples (affinity, ligand_name, ligand_smiles) ordered by affinity
+        all_ligands      (list): list of tuples ordered by affinity: (affinity, ligand_name, ligand_smiles) 
     """
 
     # AutoDock step name
@@ -294,7 +292,7 @@ def clean_output(ligand_names, output_path):
     
 def check_arguments(global_log, global_paths, global_prop, ligand_lib_path, structure_path, input_pockets_zip, dock_to_residues):
     """
-    Check the arguments provided by the user and values of configuraiton file
+    Check the arguments provided by the user and values of configuration file
     """
 
     # Check the ligand library path exists and it's a file
@@ -325,8 +323,8 @@ def check_arguments(global_log, global_paths, global_prop, ligand_lib_path, stru
 
 def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_zip, pocket, output_path, num_top_ligands, keep_poses, dock_to_residues):
     '''
-    Main HTVS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
-    and a receptor to screen the pocket of the receptor using the ligand library (with AutoDock).
+    Main VS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
+    and a receptor to screen the cavity using the ligand library (with AutoDock).
 
     Inputs
     ------
@@ -471,7 +469,6 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
                 babel_convert(**top_ligand_paths['step7_babel_prepare_pose'], properties=top_ligand_prop["step7_babel_prepare_pose"])
 
                 # Move pose to final location
-
                 # Pose path inside ligand subfolder
                 pose_path = top_ligand_paths['step7_babel_prepare_pose']['output_path']
                 # New pose path in output folder
