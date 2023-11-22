@@ -111,7 +111,7 @@ def create_summary(all_ligands, properties, output_path):
     with open(summary_path, 'w') as file:
 
         # Write header
-        file.write("Rank Affinity Ligand_name SMILES \n")
+        file.write("Rank,Affinity,Ligand_name,SMILES \n")
 
         # For each ligand
         for rank, affinity_tuple in enumerate(top_ligands):
@@ -119,7 +119,7 @@ def create_summary(all_ligands, properties, output_path):
             affinity, ligand_name, ligand_ID = affinity_tuple
 
             # Write line
-            file.write(f"{rank+1}\t{affinity}\t{ligand_name}\t{ligand_ID}\n")
+            file.write(f"{rank+1},{affinity},{ligand_name},{ligand_ID}\n")
 
             # Add ligand name to list
             top_ligand_names.append(ligand_name)
@@ -382,6 +382,8 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     if structure_path is not None:
         global_paths['step1b_extract_residues']['input_structure_path'] = structure_path
         global_paths['step3_str_check_add_hydrogens']['input_structure_path'] = structure_path
+    else:
+        structure_path = global_paths['step3_str_check_add_hydrogens']['input_structure_path']
     
     # Enforce num_top_ligands if specified
     if num_top_ligands is not None:
@@ -481,6 +483,9 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     
     # Clean up the output folder - NOTE: is removing folders from python safe?
     clean_output(ligand_names, output_path)
+
+    # Save structure path in output_path
+    shutil.copy(structure_path, os.path.join(output_path, 'receptor.pdb'))
 
     # Timing information
     elapsed_time = time.time() - start_time
