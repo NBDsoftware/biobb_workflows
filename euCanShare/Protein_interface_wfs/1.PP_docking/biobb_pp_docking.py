@@ -733,7 +733,7 @@ def filter_pose_interface(conformation_number, receptor_interface_atoms, ligand_
     oda_coverage = num_covered_residues / num_interface_residues
 
     # Update "oda_coverage" column of this conformation number in the poses table
-    poses_table.loc[poses_table["Conf"] == int(conformation_number), "oda_coverage"] = oda_coverage 
+    poses_table.loc[poses_table["Conf"] == int(conformation_number), "oda_coverage"] = round(oda_coverage,3)
 
     # Check if the oda coverage is above the threshold
     if oda_coverage < properties["oda_coverage"]:
@@ -747,7 +747,7 @@ def filter_pose_interface(conformation_number, receptor_interface_atoms, ligand_
     oda_overlap = num_overlap_residues / num_interface_residues
 
     # Update "oda_overlap" column of this conformation number in the poses table
-    poses_table.loc[poses_table["Conf"] == int(conformation_number), "oda_overlap"] = oda_overlap
+    poses_table.loc[poses_table["Conf"] == int(conformation_number), "oda_overlap"] = round(oda_overlap,3)
 
     # Check if the oda overlap is above the threshold
     if oda_overlap < properties["oda_overlap"]:
@@ -850,6 +850,8 @@ def calculate_distances(pose_path: str, properties: dict):
     they are below a given threshold. If all distances are below the threshold,
     return True. Otherwise return False.
 
+    It also saves the value of the distance constraints in the poses table in the properties dictionary.
+
     Inputs
     ------
 
@@ -888,7 +890,7 @@ def calculate_distances(pose_path: str, properties: dict):
         distance_value = distance_array(receptor_residue.positions, ligand_residue.positions)[0][0]
 
         # Update the poses table with the distance value
-        poses_table.loc[poses_table["Conf"] == int(conformation_number), distance["name"]] = distance_value
+        poses_table.loc[poses_table["Conf"] == int(conformation_number), distance["name"]] = round(distance_value, 3)
 
         # Check if the distance is below the threshold
         if distance_value > distance["threshold"]:
