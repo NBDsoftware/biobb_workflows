@@ -481,7 +481,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
             except:
                 global_log.info(f"step7_babel_prepare_pose: Open Babel failed to convert pose for ligand {ligand_name} to PDB format")
     
-    # Clean up the output folder - NOTE: is removing folders from python safe?
+    # Clean up the output folder 
     clean_output(ligand_names, output_path)
 
     # Save structure path in output_path

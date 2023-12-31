@@ -32,9 +32,9 @@ The output will be generated in the "working_dir_path" folder selected in the co
 
 This workflow has several steps. The input for the workflow is a zip file containing pockets (from an Fpocket analysis), a pdb structure of the target and a library of ligands in SMILES format. Paths can be provided through the YAML configuration file or through the command line arguments. The YAML configuration file will contain the default settings and paths of the workflow. The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
 
-- **Step 1**: pocket selection from input zip file with all pockets. Make sure the selected pocket exists in the input file.
+- **Step 1**: selection of cavity that will be used to dock the ligands. Autodock will use a box created surrounding either: a pocket from an input zip file (see cavity analysis workflow) or a selection of residues. Make sure the selected pocket or residues exist in the input files. 
 
-- **Step 2**: creation of box surrounding the selected cavity.
+- **Step 2**: creation of box surrounding the selected cavity or residues.
 
 - **Step 3**: addition of H atoms and charges to the target structure (generation of .pdbqt file from .pdb).
 

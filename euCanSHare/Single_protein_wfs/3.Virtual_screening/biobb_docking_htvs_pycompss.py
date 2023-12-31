@@ -415,7 +415,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
         # NOTE: here all processes should wait for the others to finish, but we cannot use files as not all of them will find pockets after filtering - no output file
         compss_barrier()
 
-    # Clean up the output folder - NOTE: is removing folders from python safe?
+    # Clean up the output folder 
     clean_output(ligand_names, output_path)
 
     # Timing information
