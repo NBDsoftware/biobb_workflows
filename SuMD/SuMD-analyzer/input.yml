@@ -1,0 +1,54 @@
+#### set topology and trajectory files. Format should be compatible with MDAnalysis, Barnaba (MDTraj), VMD, NAMD and MMPBSA.py (AMBER)
+top: 'output/dry_structure/dry_structure.gro'    
+trj: 'output/pbc_6_fit/step_fitted.xtc' # Should be imaged and fitted properly!!
+traj_type: 'xtc' # 'dcd' in VMD format
+
+#### if using Amber, itopology e parameters are the same files, used by MMPBSA.py and NAMD
+dry_complex_topology: 'topologies/complex_dry.prmtop' 
+receptor_topology: 'topologies/receptor.prmtop'
+ligand_topology: 'topologies/ligand.prmtop'
+parameters:  'input/sys.top' #'topologies/complex_dry.prmtop'     
+
+#### VMD receptor and ligand selection 
+receptorSel: 'resid 1 to 22'
+ligandSel: 'resid 23'
+
+#### VMD and MDAnalysis resids as strings, ex: '1 2 5' or '1 to 10'
+binding_site_resids: '8 9 13 15' 
+ligand_resids: '23'
+receptor_resids: '1 to 22'
+
+#### MDAnalysis receptor backbone selection string
+receptor_backbone: "nucleicbackbone" 
+
+#### MDAnalysis receptor C-alpha selection string
+receptor_calphas: "name P"
+
+#### MDAnalysis receptor and ligand chain 
+receptor_chain: "A"
+ligand_chain: "B"
+
+#### cutoff distance for receptor-ligand contacts calculation (Angstroms)
+distanceCutoff: 4.5
+
+#### integration timestep for molecular dynamics simulations
+timestep: 2
+
+#### timestep interval between each trajectory frame
+stride: 5000
+
+#### number of receptor/ligand residues to consider for the analysis (the most contacted ones)
+numResidRec: 10
+numResidLig: 1
+
+#### path to NAMD executable
+namdPATH: '/home/pnavarro/software/NAMD_2.13_Source/Linux-x86_64-g++/namd2' # '/home/nbd-pablo/repos/NAMD_Git-2022-07-21_Linux-x86_64-multicore/namd2'
+
+#### number of processors for interaction energy calculations
+n_procs: 5
+
+#### if True, calculate ligand RMSD vs reference structure. If False, calculate dcm binding site to ligand
+ref_bool: False
+
+#### reference pdb structure for RMSD calculation (only necessary if ref_bool: True
+ref_pdb: 'reference/reference_tau2_leap.pdb'
