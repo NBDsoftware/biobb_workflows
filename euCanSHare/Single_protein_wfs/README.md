@@ -1,6 +1,6 @@
 # Single protein workflows
 
-Single protein biobb workflows created for euCanShare. They can be run together or as independent workflows. 
+Single protein biobb workflows created for euCanSHare. They can be run together or as independent workflows. 
 
 ![alt text](../img/Single_protein_scheme.png?raw=true)
 
@@ -19,15 +19,15 @@ Requirements: git, conda
 1. Clone or download this repository:
 
 ```bash
-git clone https://github.com/PabloNA97/biobb_workflows.git
+git clone https://github.com/NBDsoftware/biobb_workflows.git
 ```
 
 2. Go to one of the workflow folders 
 
-3. Use conda to create the corresponding environment. Install Anaconda first. If you are using an HPC environment load the miniconda module if available or install Miniconda (for workflow 1 export KEY_MODELLER variable as well):
+3. Use conda to create the corresponding environment. Install Anaconda first. If you are using an HPC environment load the miniconda module if available or install Miniconda (for the MD workflow export the KEY_MODELLER variable as well):
 
 ```bash
-export KEY_MODELLER="HERE YOUR MODELLER KEY"
+export KEY_MODELLER="HERE YOUR MODELLER KEY" 
 ```
 
 ```bash

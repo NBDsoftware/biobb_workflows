@@ -8,7 +8,7 @@ Go to workflow folder and install conda environment:
 
 ```bash
 conda env create -f environment.yml
-conda activate single_protein_wf2
+conda activate biobb_sp_cavity_analysis
 ```
 
 To install it in an HPC environment, do the same after loading the corresponding Conda or Miniconda module.

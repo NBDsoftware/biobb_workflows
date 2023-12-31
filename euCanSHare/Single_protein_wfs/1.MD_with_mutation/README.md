@@ -9,7 +9,7 @@ Go to workflow folder and install conda environment:
 ```bash
 export KEY_MODELLER="HERE YOUR MODELLER KEY"
 conda env create -f environment.yml
-conda activate single_protein_wf1
+conda activate biobb_sp_md
 ```
 
 To install it in an HPC environment, do the same after loading the corresponding Conda or Miniconda module.
@@ -39,7 +39,7 @@ The output will be generated in the "working_dir_path" folder selected in the co
 
 ## Description
 
-This workflow has several steps. The input for the workflow can be (1) a pdb file to be fixed and prepared in steps 1-3 (given through the YAML configuration file or the command line arguments). Or (2) an already prepared gromacs structure file and .zip topology files ready to be minimized (given through command line arguments). The YAML configuration file will contain the default settings and paths of the workflow. The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
+This workflow has several steps. The **input** for the workflow can be (1) a pdb file to be fixed and prepared in steps 1-3 (given through the YAML configuration file or the command line arguments). Or (2) an already prepared gromacs structure file and .zip topology files ready to be minimized (given through command line arguments). The YAML configuration file will contain the **default settings and paths** of the workflow. The **command line arguments** can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
 
 - **Step 1**: extraction of structure from PDB. Provide the input pdb file and chain to be extracted through the command line arguments of the workflow or through the paths and properties of step 1 section in the YAML configuration file. The workflow will always prioritize the inputs from command line arguments.
 

@@ -22,43 +22,40 @@ module load Miniconda3/4.9.2
 # module load GROMACS/2022.3-intel-2021b-CUDA.11.6.0
 module load GROMACS/2022.3-intel-2021b
 
-# Load SLURM
-module load slurm/slurm/21.08.6 
-
 # Activate previously created conda environment from environment.yml
-source activate /home/pnavarro/.conda/envs/single_protein_wf1
+source activate /path/to/conda/envs/biobb_sp_md
 
-# Launch workflow 1
+# Launch example 1
 # INPUT_PDB=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/input/P38alpha4LOO.pdb
 # python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 2 --input_pdb $INPUT_PDB
 
-# Launch workflow 2
+# Launch example 2
 # INPUT_PDB=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/input/P38alpha4LOO.pdb
 # OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/output2
 # python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --setup_only
 
-# Launch workflow 3
+# Launch example 3
 # INPUT_PDB=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/input/P38alpha4LOO.pdb
 # OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/output3
 # python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --setup_only --fix_ss --fix_backbone
 
-# Launch workflow 4
+# Launch example 4
 # INPUT_GRO=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/output3/step7_genion/genion.gro
 # INPUT_TOP=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/output3/step7_genion/genion_top.zip
 # OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/output4
 # python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1 --input_gro $INPUT_GRO --input_top $INPUT_TOP --output $OUTPUT_PATH 
 
-# Launch workflow 5
+# Launch example 5
 # INPUT_PDB=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/input/P38alpha4LOO.pdb
 # OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/output5
 # python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --setup_only --pdb_chains A B 
 
-# Launch workflow 6
+# Launch example 6
 # INPUT_PDB=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/input/P38alpha4LOO.pdb
 # OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/output6
 # python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --setup_only --pdb_chains A --mutation_list A:Arg5Ala A:Pro6Ala
 
-# Launch workflow 8
+# Launch example 8
 INPUT_PDB=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/input/P38alpha4LOO.pdb
 OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/1.MD_with_mutation/output8
 python biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --pdb_chains A 

@@ -1,6 +1,6 @@
-# euCanShare workflows
+# euCanSHare workflows
 
-Biobb workflows created for euCanShare. They can be run together or as independent workflows.
+Biobb workflows created for euCanSHare. They can be run together or as independent workflows.
 
 ## Protein interface workflows
 
