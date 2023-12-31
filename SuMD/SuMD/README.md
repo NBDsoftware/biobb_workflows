@@ -24,12 +24,9 @@ To run the code:
 
 Limitations of the method:
 
-1. The criteria used by the method to accept or reject new sampling together with the short nature of the MD simulations used makes the study of complex and slow processes difficult with Supervised MD. Imagine a ligand adsorption that requires a large conformational change in the protein. The method will accept short MD that lead to a reduction in the main CV, i.e. distance of the ligand to the center of the pocket for example. But this is completely agnostic to any large conformational change in the protein... In general, any process that involves more than one slow CV will not be suitable to be studied with SuMD. It should work best for simple FE landscapes or if one uses a multiple walker strategy, see next point. 
+The criteria used by the method to accept or reject new sampling together with the short nature of the MD simulations used makes the study of complex and slow processes difficult with Supervised MD. Imagine a ligand adsorption that requires a large conformational change in the protein. The method will accept short MD that lead to a reduction in the main CV, i.e. distance of the ligand to the center of the pocket for example. But this is completely agnostic to any large conformational change in the protein... In general, any process that involves more than one slow CV will not be suitable to be studied with SuMD. It should work best for simple FE landscapes or if one uses a multiple walker strategy, see next point. 
 
 For more complicated processes involving several slow degrees of freedom one has to resort to more refined strategies to identify a good CV from the MD simulation and then try to enhance sampling through the identified CV. Some examples are: spectral gap optimization of parameters (SGOOP), variational approach to conformational dynamics (VAC or VAMPnets), time-structure Independent Component Analysis (tICA), time-lagged Autoencoders (such as the RAVE method)... See works of Tiwary et al. and Frank Noe at al.
 
-Limitations of the implementation:
+Currently we are using a single walker approach. Multiple instances can be launched but this would lead to an independent-multiple walker. A possible work-around is to launch several short SuMD trajectories in an iterative fashion. Where the more advanced trajectory along the CV is used to spawn the subsequent SuMD trajectories in the next iteration.
 
-1. Currently we are using a single walker approach. Multiple instances can be launched but this would yield to independent-multiple walker. A possible work-around is to launch several short SuMD trajectories in an iterative fashion. Where the more advanced trajectory along the CV is used to spawn the subsequent SuMD trajectories in the next iteration.
-
-2. Currently the environment is not working well in the cluster. Ideally every SuMD trajectory should be parallelized.
