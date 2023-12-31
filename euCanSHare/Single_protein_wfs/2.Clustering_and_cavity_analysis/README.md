@@ -59,7 +59,9 @@ This workflow has several steps. The input for the workflow can be either (1) a 
 
 - **Step 3**: Cavity analysis of the centroid structures using Fpocket.
 
-- **Step 4**: Filtering of the cavities found according to the criteria defined in the properties of this step.
+- **Step 4**: Filtering of the cavities found according to the criteria defined in the properties of this step. This includes filtering according to minimum and maximum values for the score, druggability score and volume of the pocket.
+
+- **Step 5**: Filtering of the cavities according to the distance from their centers of mass to the center of mass of a selection defined in the properties of this step. The center of mass of a pocket is computed using the corresponding pqr file from Fpocket.
 
 Note that re-launching the workflow will skip the previously successful steps if restart is True and the output folder is the same. 
 
