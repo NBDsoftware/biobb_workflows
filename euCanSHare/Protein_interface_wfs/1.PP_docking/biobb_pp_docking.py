@@ -1042,10 +1042,12 @@ def create_poses_table(global_prop: dict, global_paths: dict):
     top_poses_table["oda_overlap"] = None
     top_poses_table["cluster"] = None 
 
-    # Add a column for each distance 
-    for distance in global_prop["step8_distance_filtering"]["distances"]:
+    # If there is any distance constraint defined
+    if global_prop["step8_distance_filtering"].get("distances") is not None:
 
-        top_poses_table[distance["name"]] = None
+        # Add the distance constraint columns with None
+        for distance in global_prop["step8_distance_filtering"]["distances"]:
+            top_poses_table[distance["name"]] = None
     
     # Add the path column with the path to the pdb file (empty for now)
     top_poses_table["path"] = ""
