@@ -8,4 +8,5 @@ dependencies:
   - biobb_chemistry>=4.0.0
   - biobb_adapters>=4.0.0
   - biobb_structure_utils>=4.0.0
+  - biopython<=1.81
 prefix: /shared/work/BiobbWorkflows/envs/biobb_sp_virtual_screening

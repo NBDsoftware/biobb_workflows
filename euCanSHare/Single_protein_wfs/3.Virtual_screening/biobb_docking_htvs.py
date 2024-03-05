@@ -548,11 +548,11 @@ if __name__ == '__main__':
                         help="Number of top ligands to be saved (default: corresponding value in YAML config file)",
                         required=False)
 
-    parser.add_argument('--keep_poses', dest='keep_poses', type=bool, action='store_true',
+    parser.add_argument('--keep_poses', dest='keep_poses', action='store_true',
                         help="Save docking poses for top ligands (default: False)",
                         required=False)
 
-    parser.add_argument('--dock_to_residues', dest='dock_to_residues', type=bool, action='store_true',
+    parser.add_argument('--dock_to_residues', dest='dock_to_residues', action='store_true',
                         help="Dock to residues instead of cavity. Define the docking box using a set of residues instead of a pocket. (default: False)",
                         required=False)
     
