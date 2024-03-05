@@ -1,11 +1,12 @@
-name: eucanshare_wf3I
+name: interactive_vs
 channels:
   - conda-forge
   - bioconda
   - anaconda
 dependencies:
+  - python<=3.10
   - biobb_io>=3.8.0
-  - biobb_vs>=3.8.1
+  - biobb_vs<=3.9
   - biobb_chemistry>=3.8.0
   - biobb_structure_utils>=3.8.0
   - ipywidgets==7.6.6

@@ -3,10 +3,12 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
+  - python==3.10
   - biobb_vs>=4.0.0
   - biobb_common>=4.0.0
-  - biobb_structure_utils>=4.0.0
   - biobb_analysis>=4.0.1
   - biobb_gromacs>=4.0.0
+  - biobb_adapters>=4.0.0
+  - biobb_structure_utils>=4.0.0
   - mdanalysis
-  - conda
+prefix: /shared/work/BiobbWorkflows/envs/biobb_sp_cavity_analysis
