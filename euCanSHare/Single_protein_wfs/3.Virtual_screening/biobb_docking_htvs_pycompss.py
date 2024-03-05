@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/shared/work/BiobbWorkflows/envs/biobb_sp_virtual_screening/bin/python
 
 # Importing all the needed libraries
 import os
@@ -11,13 +11,13 @@ from pathlib import Path
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 
-from pycompss.api.api import compss_barrier
 from biobb_adapters.pycompss.biobb_vs.utils.box import box
 from biobb_adapters.pycompss.biobb_vs.fpocket.fpocket_select import fpocket_select
 from biobb_adapters.pycompss.biobb_vs.vina.autodock_vina_run import autodock_vina_run
 from biobb_adapters.pycompss.biobb_chemistry.babelm.babel_convert import babel_convert
 from biobb_adapters.pycompss.biobb_structure_utils.utils.str_check_add_hydrogens import str_check_add_hydrogens
 from biobb_adapters.pycompss.biobb_structure_utils.utils.extract_residues import extract_residues
+from pycompss.api.api import compss_barrier
 
 def find_matching_str(pattern, filepath):
     '''
@@ -30,7 +30,7 @@ def find_matching_str(pattern, filepath):
     
     Output
     ------
-        match_str (str): string matching the pattern or None if no piece matches the pattern
+        match_str (str): string matching the pattern or None if there is no match
     '''
 
     # Open log file
@@ -76,58 +76,57 @@ def get_affinity(log_path):
     
     return affinity
 
-def create_ranking(affinities, global_paths, global_prop, output_path):
+def create_summary(all_ligands, properties, output_path):
     '''
     Create file with ranking of ligands according to affinity
 
     Inputs
     ------
-        affinities      (list): list with tuples -> (affinity, ligand name, smiles) ordered by affinity
-        paths           (dict): dictionary with paths of the step
-        properties      (dict): dictionary with properties of the step
+        all_ligands      (list): list with tuples -> (affinity, ligand name, smiles) ordered by affinity
+        properties       (dict): dictionary with properties of the step
+        output_path       (str): path to output directory
     
     Output  
     ------
 
-        top_affinities  (list): list with tuples -> (affinity, ligand name, smiles) ordered by affinity for the top ligands
+        top_ligand_names  (list): list with names of top ligands
     '''
-    # Step names    
-    ranking_step_name = 'step6_show_top_ligands'
 
-    # Read paths
-    ranking_path = global_paths[ranking_step_name]['output_csv_path']
+    # Define summary file name
+    summary_filename = "top_ligands.csv"
 
-    # Read properties
-    num_top_ligands = global_prop[ranking_step_name]['num_top_ligands']
+    # Define summary file path
+    summary_path = os.path.join(output_path, summary_filename)
 
-    # Find number of ligands to save in ranking
-    ranking_length = min(num_top_ligands, len(affinities)) 
+    # Find number of top ligands to save
+    ranking_length = min(properties['num_top_ligands'], len(all_ligands)) 
 
-    # Exclude the rest
-    top_affinities = affinities[:ranking_length]
+    # Extract top ligands (all_ligands is already sorted)
+    top_ligands = all_ligands[:ranking_length]
+    top_ligand_names = []
 
-    # Find step path
-    step_path = global_prop[ranking_step_name]['path']
-
-    # Create folder if it does not exist
-    if not os.path.exists(step_path):
-        os.makedirs(step_path)
-        
-    # Create ranking 
-    with open(ranking_path, 'w') as file:
+    # Create step folder if it does not exist
+    if not os.path.exists(properties['path']):
+        os.makedirs(properties['path'])
+    
+    # Create summary file with top ligands
+    with open(summary_path, 'w') as file:
 
         # Write header
-        file.write("Rank Affinity Ligand_name SMILES \n")
+        file.write("Rank,Affinity,Ligand_name,SMILES \n")
 
         # For each ligand
-        for rank, affinity_tuple in enumerate(top_affinities):
+        for rank, affinity_tuple in enumerate(top_ligands):
 
             affinity, ligand_name, ligand_ID = affinity_tuple
 
-            # Write ranking line
-            file.write(f"{rank+1}\t{affinity}\t{ligand_name}\t{ligand_ID}\n")
+            # Write line
+            file.write(f"{rank+1},{affinity},{ligand_name},{ligand_ID}\n")
 
-    return top_affinities
+            # Add ligand name to list
+            top_ligand_names.append(ligand_name)
+
+    return top_ligand_names
 
 def read_ligand_lib(ligand_lib_path):
     '''
@@ -195,11 +194,6 @@ def write_smiles(smiles, smiles_path):
     ------
         smiles              (str):  SMILES code
         smiles_path         (str):  smiles file path
-    
-    Output
-    ------
-
-        smiles_path (str): path to file containing SMILES code
     '''
 
     # Find step path 
@@ -214,10 +208,11 @@ def write_smiles(smiles, smiles_path):
     smiles_tmp_file.write(smiles)
     smiles_tmp_file.close()
 
-def get_affinities(ligand_smiles, ligand_names, global_paths, output_path):
+def get_ranking(ligand_smiles, ligand_names, global_paths, output_path):
 
     """
-    Reads autodock log files to find best affinity for each ligand
+    Reads autodock log files to find best affinity for each ligand. 
+    Returns a list of tuples ordered by affinity: (affinity, ligand_name, ligand_smiles) 
 
     Inputs
     ------
@@ -230,7 +225,7 @@ def get_affinities(ligand_smiles, ligand_names, global_paths, output_path):
     Output
     ------
 
-        affinities      (list): list of tuples (affinity, ligand_name, ligand_smiles) ordered by affinity
+        all_ligands      (list): list of tuples ordered by affinity: (affinity, ligand_name, ligand_smiles) 
     """
 
     # AutoDock step name
@@ -240,7 +235,7 @@ def get_affinities(ligand_smiles, ligand_names, global_paths, output_path):
     log_name = Path(global_paths[autodock_step_name]['output_log_path']).name
 
     # List where best affinity for each ligand will be stored
-    affinities = []
+    all_ligands = []
     
     for smiles, name in zip(ligand_smiles, ligand_names):
 
@@ -251,12 +246,12 @@ def get_affinities(ligand_smiles, ligand_names, global_paths, output_path):
         affinity = get_affinity(log_path = log_path)
 
         if affinity:
-            affinities.append((affinity, name, smiles))
+            all_ligands.append((affinity, name, smiles))
 
     # Sort list according to affinity
-    affinities = sorted(affinities)
+    all_ligands = sorted(all_ligands)
 
-    return affinities
+    return all_ligands
 
 def clean_output(ligand_names, output_path):
     """
@@ -268,10 +263,41 @@ def clean_output(ligand_names, output_path):
         ligand_path = os.path.join(output_path, name)
         shutil.rmtree(ligand_path)
     
-def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_zip, pocket, output_path, num_top_ligands, keep_poses, dock_to_residues):
+def check_arguments(global_log, global_paths, global_prop, ligand_lib_path, structure_path, input_pockets_zip, dock_to_residues):
+    """
+    Check the arguments provided by the user and values of configuration file
+    """
+
+    # Check the ligand library path exists and it's a file
+    if not os.path.exists(ligand_lib_path):
+        global_log.error(f"ERROR: Ligand library file {ligand_lib_path} does not exist")
+    elif not os.path.isfile(ligand_lib_path):
+        global_log.error(f"ERROR: Ligand library path {ligand_lib_path} is not a file")
+
+    # Check we have a structure file
+    config_structure_path = global_paths['step3_str_check_add_hydrogens']['input_structure_path']
+    if structure_path is None and not os.path.exists(config_structure_path):
+        global_log.error(f"ERROR: Structure file {config_structure_path} does not exist")
+    elif structure_path is not None and not os.path.exists(structure_path):
+        global_log.error(f"ERROR: Structure file {structure_path} does not exist")
+
+    # Check we have a pockets zip file
+    config_pockets_zip = global_paths['step1_fpocket_select']['input_pockets_zip']
+    if input_pockets_zip is None and not os.path.exists(config_pockets_zip):
+        global_log.error(f"ERROR: Pockets zip file {config_pockets_zip} does not exist")
+    elif input_pockets_zip is not None and not os.path.exists(input_pockets_zip):
+        global_log.error(f"ERROR: Pockets zip file {input_pockets_zip} does not exist")
+
+    # Check size of box
+    if dock_to_residues:
+        if global_prop['step2_box']['offset'] > 5:
+            global_log.warning(f"step2_box: box offset is {global_prop['step2_box']['offset']} angstroms. This may be unnecessarily large when docking to residues surrounding the binding site. Consider using a smaller value to improve performance.")
+
+
+def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_zip, pocket, output_path, num_top_ligands, keep_poses, dock_to_residues, cpus, exhaustiveness):
     '''
-    Main HTVS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
-    and a receptor to screen the pocket of the receptor using the ligand library (with AutoDock).
+    Main VS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
+    and a receptor to screen the cavity using the ligand library (with AutoDock).
 
     Inputs
     ------
@@ -285,6 +311,8 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
         num_top_ligands      (int): number of top ligands to be saved
         keep_poses          (bool): keep poses of top ligands
         dock_to_residues    (bool): dock to residues instead of cavity
+        cpus                 (int): number of cpus to use for each docking
+        exhaustiveness       (int): exhaustiveness of the docking
 
     Outputs
     -------
@@ -314,11 +342,14 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     global_prop  = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
 
+    # Check arguments
+    check_arguments(global_log, global_paths, global_prop, ligand_lib_path, structure_path, input_pockets_zip, dock_to_residues)
+                    
     # Enforce input_pockets_zip if provided
     if input_pockets_zip is not None:
         global_paths['step1_fpocket_select']['input_pockets_zip'] = input_pockets_zip
     
-    # Enforce pocket if provided
+    # Enforce pocket selection if provided
     if pocket is not None:
         global_prop['step1_fpocket_select']['pocket'] = pocket
 
@@ -326,7 +357,21 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     if structure_path is not None:
         global_paths['step1b_extract_residues']['input_structure_path'] = structure_path
         global_paths['step3_str_check_add_hydrogens']['input_structure_path'] = structure_path
+    else:
+        structure_path = global_paths['step3_str_check_add_hydrogens']['input_structure_path']
     
+    # Enforce num_top_ligands if specified
+    if num_top_ligands is not None:
+        global_prop['step6_top_ligands']['num_top_ligands'] = int(num_top_ligands)
+
+    # Enforce cpus if specified
+    if cpus is not None:
+        global_prop['step5_autodock_vina_run']['cpus'] = int(cpus)
+
+    # Enforce exhaustiveness if specified
+    if exhaustiveness is not None:
+        global_prop['step5_autodock_vina_run']['exhaustiveness'] = int(exhaustiveness)
+
     if dock_to_residues:
         # STEP 1: Extract residues from structure
         global_log.info("step1b_extract_residues: Extracting residues from structure")
@@ -334,10 +379,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
 
         # Modify step2_box paths to use residues
         global_paths['step2_box']['input_pdb_path'] = global_paths['step1b_extract_residues']['output_residues_path']
-    
-        # Check size of box
-        if global_prop['step2_box']['offset'] > 5:
-            global_log.warning(f"step2_box: box offset is {global_prop['step2_box']['offset']} angstroms. This may be unnecessarily large when docking to residues surrounding the binding site. Consider using a smaller value to improve performance.")
+
     else:
         # STEP 1: Pocket selection from filtered list 
         global_log.info("step1_fpocket_select: Extract pocket cavity")
@@ -352,6 +394,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     str_check_add_hydrogens(**global_paths["step3_str_check_add_hydrogens"], properties=global_prop["step3_str_check_add_hydrogens"]) 
 
     # STEP 4-5: Prepare ligand, run docking
+    docking_start_time = time.time()
 
     # Load drug list - NOTE: the whole library is loaded into memory
     ligand_smiles, ligand_names = read_ligand_lib(ligand_lib_path)
@@ -381,34 +424,30 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     compss_barrier()
 
     # Find the best affinity for each ligand
-    affinities = get_affinities(ligand_smiles, ligand_names, global_paths, output_path)
-
-    # Enforce num_top_ligands if specified
-    if num_top_ligands is not None:
-        global_prop['step6_show_top_ligands']['num_top_ligands'] = int(num_top_ligands)
+    all_ligands = get_ranking(ligand_smiles, ligand_names, global_paths, output_path)
 
     # STEP 6: Find top ligands 
-    global_log.info("step6_show_top_ligands: create ranking and save poses for top ligands")  
-    top_affinities = create_ranking(affinities, global_paths, global_prop, output_path)
+    global_log.info("step6_top_ligands: create ranking and save poses for top ligands")  
+    top_ligand_names = create_summary(all_ligands, global_prop['step6_top_ligands'], output_path)
 
+    # STEP 7: extract poses for top ligands if requested
     if keep_poses:
 
         # Iterate over top ligands
-        for affinity, name, smiles in top_affinities:
+        for ligand_name in top_ligand_names:
 
             # Add ligand name to properties and paths
-            top_ligand_prop = conf.get_prop_dic(prefix=name)
-            top_ligand_paths = conf.get_paths_dic(prefix=name)
+            top_ligand_prop = conf.get_prop_dic(prefix=ligand_name)
+            top_ligand_paths = conf.get_paths_dic(prefix=ligand_name)
 
             global_log.info("step7_babel_prepare_pose: Converting ligand pose to PDB format")    
             babel_convert(**top_ligand_paths['step7_babel_prepare_pose'], properties=top_ligand_prop["step7_babel_prepare_pose"])
 
-            # Find pose path
+            # Move pose to final location
+            # Pose path inside ligand subfolder
             pose_path = top_ligand_paths['step7_babel_prepare_pose']['output_path']
-
-            # New pose path
-            new_pose_path = os.path.join(global_prop['step6_show_top_ligands']['path'], f"{name}_poses.pdb")
-
+            # New pose path in output folder
+            new_pose_path = os.path.join(global_prop['step6_top_ligands']['path'], f"{ligand_name}_poses.pdb")
             # Move pose to new location 
             shutil.move(pose_path, new_pose_path)
 
@@ -418,16 +457,22 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     # Clean up the output folder 
     clean_output(ligand_names, output_path)
 
+    # Save structure path in output_path
+    shutil.copy(structure_path, os.path.join(output_path, 'receptor.pdb'))
+
     # Timing information
     elapsed_time = time.time() - start_time
+    docking_elapsed_time = time.time() - docking_start_time
     global_log.info('')
     global_log.info('')
     global_log.info('Execution successful: ')
-    global_log.info('  Workflow_path: %s' % conf.get_working_dir_path())
+    global_log.info('  Workflow name: Virtual Screening')
+    global_log.info('  Output path: %s' % output_path)
     global_log.info('  Config File: %s' % configuration_path)
     global_log.info('  Ligand library: %s' % ligand_lib_path)
     global_log.info('')
     global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
+    global_log.info('Docking time: %.1f minutes' % (docking_elapsed_time/60))
     global_log.info('')
 
     return global_paths, global_prop
@@ -436,40 +481,48 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description="Simple High-throughput virtual screening (HTVS) pipeline using BioExcel Building Blocks")
     
-    parser.add_argument('--config', dest='config_path',
+    parser.add_argument('--config', dest='config_path', type=str,
                         help="Configuration file (YAML)",
                         required=True)
 
-    parser.add_argument('--ligand_lib', dest='ligand_lib',
+    parser.add_argument('--ligand_lib', dest='ligand_lib', type=str,
                         help="Path to file with ligand library. The file should contain one ligand identifier (SMILES format) per line.",
                         required=True)
     
-    parser.add_argument('--structure_path', dest='structure_path',
+    parser.add_argument('--structure_path', dest='structure_path', type=str,
                         help="Path to file with target structure (PDB format)",
                         required=False)
     
-    parser.add_argument('--input_pockets_zip', dest='input_pockets_zip',
+    parser.add_argument('--input_pockets_zip', dest='input_pockets_zip', type=str,
                         help="Path to file with pockets in a zip file",
                         required=False)
 
-    parser.add_argument('--pocket', dest='pocket',
+    parser.add_argument('--pocket', dest='pocket', type=int,
                         help="Pocket number to be used (default: 1)",
                         required=False)
 
-    parser.add_argument('--output', dest='output_path',
+    parser.add_argument('--output', dest='output_path', type=str,
                         help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
     
-    parser.add_argument('--num_top_ligands', dest='num_top_ligands',
+    parser.add_argument('--num_top_ligands', dest='num_top_ligands', type=int,
                         help="Number of top ligands to be saved (default: corresponding value in YAML config file)",
                         required=False)
 
-    parser.add_argument('--keep_poses', dest='keep_poses', action='store_true',
+    parser.add_argument('--keep_poses', dest='keep_poses', type=bool, action='store_true',
                         help="Save docking poses for top ligands (default: False)",
                         required=False)
 
-    parser.add_argument('--dock_to_residues', dest='dock_to_residues', action='store_true',
+    parser.add_argument('--dock_to_residues', dest='dock_to_residues', type=bool, action='store_true',
                         help="Dock to residues instead of cavity. Define the docking box using a set of residues instead of a pocket. (default: False)",
+                        required=False)
+    
+    parser.add_argument('--cpus', dest='cpus', type=int, 
+                        help="Number of CPUs to use for each docking (default: 1)",
+                        required=False)
+    
+    parser.add_argument('--exhaustiveness', dest='exhaustiveness', type=int,
+                        help="Exhaustiveness of the docking (default: 8)",
                         required=False)
     
     args = parser.parse_args()
@@ -482,4 +535,6 @@ if __name__ == '__main__':
             output_path = args.output_path,
             num_top_ligands = args.num_top_ligands,
             keep_poses = args.keep_poses,
-            dock_to_residues = args.dock_to_residues)
+            dock_to_residues = args.dock_to_residues,
+            cpus = args.cpus,
+            exhaustiveness = args.exhaustiveness)
