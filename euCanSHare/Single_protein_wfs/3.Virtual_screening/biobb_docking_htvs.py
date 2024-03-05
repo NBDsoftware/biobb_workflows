@@ -10,6 +10,7 @@ from pathlib import Path
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
+
 from biobb_vs.utils.box import box
 from biobb_vs.fpocket.fpocket_select import fpocket_select
 from biobb_vs.vina.autodock_vina_run import autodock_vina_run
@@ -321,7 +322,7 @@ def check_arguments(global_log, global_paths, global_prop, ligand_lib_path, stru
             global_log.warning(f"step2_box: box offset is {global_prop['step2_box']['offset']} angstroms. This may be unnecessarily large when docking to residues surrounding the binding site. Consider using a smaller value to improve performance.")
 
 
-def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_zip, pocket, output_path, num_top_ligands, keep_poses, dock_to_residues):
+def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_zip, pocket, output_path, num_top_ligands, keep_poses, dock_to_residues, cpus, exhaustiveness):
     '''
     Main VS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
     and a receptor to screen the cavity using the ligand library (with AutoDock).
@@ -338,6 +339,8 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
         num_top_ligands      (int): number of top ligands to be saved
         keep_poses          (bool): keep poses of top ligands
         dock_to_residues    (bool): dock to residues instead of cavity
+        cpus                 (int): number of cpus to use for each docking
+        exhaustiveness       (int): exhaustiveness of the docking
 
     Outputs
     -------
@@ -389,6 +392,14 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     if num_top_ligands is not None:
         global_prop['step6_top_ligands']['num_top_ligands'] = int(num_top_ligands)
 
+    # Enforce cpus if specified
+    if cpus is not None:
+        global_prop['step5_autodock_vina_run']['cpus'] = int(cpus)
+
+    # Enforce exhaustiveness if specified
+    if exhaustiveness is not None:
+        global_prop['step5_autodock_vina_run']['exhaustiveness'] = int(exhaustiveness)
+
     if dock_to_residues:
         # STEP 1: Extract residues from structure
         global_log.info("step1b_extract_residues: Extracting residues from structure")
@@ -411,6 +422,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     str_check_add_hydrogens(**global_paths["step3_str_check_add_hydrogens"], properties=global_prop["step3_str_check_add_hydrogens"]) 
 
     # STEP 4-5: Prepare ligand, run docking
+    docking_start_time = time.time()
 
     # Load drug list - NOTE: the whole library is loaded into memory
     ligand_smiles, ligand_names = read_ligand_lib(ligand_lib_path)
@@ -489,6 +501,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
 
     # Timing information
     elapsed_time = time.time() - start_time
+    docking_elapsed_time = time.time() - docking_start_time
     global_log.info('')
     global_log.info('')
     global_log.info('Execution successful: ')
@@ -498,6 +511,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     global_log.info('  Ligand library: %s' % ligand_lib_path)
     global_log.info('')
     global_log.info('Elapsed time: %.1f minutes' % (elapsed_time/60))
+    global_log.info('Docking time: %.1f minutes' % (docking_elapsed_time/60))
     global_log.info('')
 
     return global_paths, global_prop
@@ -506,40 +520,48 @@ if __name__ == '__main__':
     
     parser = argparse.ArgumentParser(description="Simple High-throughput virtual screening (HTVS) pipeline using BioExcel Building Blocks")
     
-    parser.add_argument('--config', dest='config_path',
+    parser.add_argument('--config', dest='config_path', type=str,
                         help="Configuration file (YAML)",
                         required=True)
 
-    parser.add_argument('--ligand_lib', dest='ligand_lib',
+    parser.add_argument('--ligand_lib', dest='ligand_lib', type=str,
                         help="Path to file with ligand library. The file should contain one ligand identifier (SMILES format) per line.",
                         required=True)
     
-    parser.add_argument('--structure_path', dest='structure_path',
+    parser.add_argument('--structure_path', dest='structure_path', type=str,
                         help="Path to file with target structure (PDB format)",
                         required=False)
     
-    parser.add_argument('--input_pockets_zip', dest='input_pockets_zip',
+    parser.add_argument('--input_pockets_zip', dest='input_pockets_zip', type=str,
                         help="Path to file with pockets in a zip file",
                         required=False)
 
-    parser.add_argument('--pocket', dest='pocket',
+    parser.add_argument('--pocket', dest='pocket', type=int,
                         help="Pocket number to be used (default: 1)",
                         required=False)
 
-    parser.add_argument('--output', dest='output_path',
+    parser.add_argument('--output', dest='output_path', type=str,
                         help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
     
-    parser.add_argument('--num_top_ligands', dest='num_top_ligands',
+    parser.add_argument('--num_top_ligands', dest='num_top_ligands', type=int,
                         help="Number of top ligands to be saved (default: corresponding value in YAML config file)",
                         required=False)
 
-    parser.add_argument('--keep_poses', dest='keep_poses', action='store_true',
+    parser.add_argument('--keep_poses', dest='keep_poses', type=bool, action='store_true',
                         help="Save docking poses for top ligands (default: False)",
                         required=False)
 
-    parser.add_argument('--dock_to_residues', dest='dock_to_residues', action='store_true',
+    parser.add_argument('--dock_to_residues', dest='dock_to_residues', type=bool, action='store_true',
                         help="Dock to residues instead of cavity. Define the docking box using a set of residues instead of a pocket. (default: False)",
+                        required=False)
+    
+    parser.add_argument('--cpus', dest='cpus', type=int, 
+                        help="Number of CPUs to use for each docking (default: 1)",
+                        required=False)
+    
+    parser.add_argument('--exhaustiveness', dest='exhaustiveness', type=int,
+                        help="Exhaustiveness of the docking (default: 8)",
                         required=False)
     
     args = parser.parse_args()
@@ -552,4 +574,6 @@ if __name__ == '__main__':
             output_path = args.output_path,
             num_top_ligands = args.num_top_ligands,
             keep_poses = args.keep_poses,
-            dock_to_residues = args.dock_to_residues)
+            dock_to_residues = args.dock_to_residues,
+            cpus = args.cpus,
+            exhaustiveness = args.exhaustiveness)

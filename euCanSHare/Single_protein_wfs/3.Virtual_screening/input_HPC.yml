@@ -62,6 +62,7 @@ step5_autodock_vina_run:
     output_pdbqt_path: output_vina.pdbqt
     output_log_path: output_vina.log
   properties:
+    exhaustiveness: 8
     cpu: 1
 
 step6_top_ligands:
