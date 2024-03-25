@@ -364,14 +364,6 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     if num_top_ligands is not None:
         global_prop['step6_top_ligands']['num_top_ligands'] = int(num_top_ligands)
 
-    # Enforce cpus if specified
-    if cpus is not None:
-        global_prop['step5_autodock_vina_run']['cpus'] = int(cpus)
-
-    # Enforce exhaustiveness if specified
-    if exhaustiveness is not None:
-        global_prop['step5_autodock_vina_run']['exhaustiveness'] = int(exhaustiveness)
-
     if dock_to_residues:
         # STEP 1: Extract residues from structure
         global_log.info("step1b_extract_residues: Extracting residues from structure")
@@ -411,6 +403,14 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
         # STEP 4: Convert from smiles to pdbqt
         global_log.info("step4_babel_prepare_lig: Prepare ligand for docking")
         babel_convert(**ligand_paths['step4_babel_prepare_lig'], properties = ligand_prop["step4_babel_prepare_lig"])
+ 
+        # Enforce cpus if specified
+        if cpus is not None:
+            ligand_prop['step5_autodock_vina_run']['cpus'] = int(cpus)
+
+        # Enforce exhaustiveness if specified
+        if exhaustiveness is not None:
+            ligand_prop['step5_autodock_vina_run']['exhaustiveness'] = int(exhaustiveness)
 
         # Update common paths - NOTE: different processes will try to access the same files here ...
         ligand_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path'] = global_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path']

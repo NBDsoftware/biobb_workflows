@@ -10,3 +10,5 @@ dependencies:
   - biobb_structure_utils>=4.0.0
   - biopython<=1.81
 prefix: /shared/work/BiobbWorkflows/envs/biobb_sp_virtual_screening
+
+# After re-installing make sure you add the exhaustiveness parameter to the autodock vina run Biobb or upgrade the biobb_vs package to the latest version

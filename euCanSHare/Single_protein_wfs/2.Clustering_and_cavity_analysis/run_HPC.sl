@@ -13,40 +13,21 @@
 module purge 
 
 # Load conda / miniconda module
-module load Miniconda3/4.9.2
+module load Miniconda3
 
 # Load GROMACS module
-module load GROMACS/2022.3-intel-2021b-CUDA.11.6.0
-
-# Load SLURM
-module load slurm/slurm/21.08.6 
+module load GROMACS
 
 # Activate previously created conda environment from environment.yml
-source activate /home/pnavarro/.conda/envs/single_protein_wf2
+source activate /shared/work/BiobbWorkflows/envs/biobb_sp_cavity_analysis
 
-# Test 1
-# INPUT=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/input
-# OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/output1
-# TRAJ_PATH=$INPUT/all_trajectories.xtc
-# TOP_PATH=$INPUT/dry_structure.gro
-# python biobb_clustering_cavity_analysis.py --config input_HPC.yml --traj_path $TRAJ_PATH --top_path $TOP_PATH --output $OUTPUT_PATH
+# Path to the workflow
+REPO_PATH=/path/to/repo/biobb_workflows
+WF_PATH=$REPO_PATH/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis
 
-# Test 2
-# INPUT=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/input2
-# CLUSTERS=$INPUT/clusters
-# OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/output2
-# python biobb_clustering_cavity_analysis.py --config input_HPC.yml --clustering_path $CLUSTERS --output $OUTPUT_PATH
+# Input files
+INPUT=/path/to/input/folder
+OUTPUT_PATH=/path/to/output/folder
 
-# Test 3
-INPUT=/shared/scratch/jobs/pnavarro/2023_ENSEM/P53/round3_new/clustering/extended_pocket/states
-OUTPUT_PATH=$INPUT/pocket_analysis
-OUTPUT_SUMMARY_PATH=$OUTPUT_PATH/pocket_analysis.yml
-python biobb_clustering_cavity_analysis.py --config input_HPC.yml --clustering_path $INPUT --output $OUTPUT_PATH --output_summary $OUTPUT_SUMMARY_PATH
-
-# Test 4
-# INPUT=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/input
-# TRAJ_PATH=$INPUT/all_trajectories.xtc
-# TOP_PATH=$INPUT/dry_structure.gro
-# OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis/output4
-# OUTPUT_SUMMARY_PATH=$OUTPUT_PATH/summary4.yml
-# python biobb_clustering_cavity_analysis.py --config input_HPC.yml --traj_path $TRAJ_PATH --top_path $TOP_PATH --output $OUTPUT_PATH --output_summary $OUTPUT_SUMMARY_PATH
+# Launch workflow
+python $WF_PATH/biobb_clustering_cavity_analysis.py --config input_HPC.yml --clustering_path $INPUT --output $OUTPUT_PATH

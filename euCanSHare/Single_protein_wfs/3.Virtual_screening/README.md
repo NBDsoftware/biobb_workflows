@@ -4,7 +4,7 @@
 
 ## Quick installation and run
 
-Go to workflow folder and install conda environment:
+Go to workflow folder and install the conda environment (running in Nostrum's cluster use the already installed environments located in */shared/work/BiobbWorkflows/envs*)
 
 ```bash
 conda env create -f environment.yml
@@ -36,7 +36,7 @@ This workflow has several steps. The input for the workflow is a zip file contai
 
 - **Step 2**: creation of box surrounding the selected cavity or residues.
 
-- **Step 3**: addition of H atoms and charges to the target structure (generation of .pdbqt file from .pdb).
+- **Step 3**: addition of H atoms (generation of .pdbqt file from .pdb). The charges in the generated pdbqt file are ignored by Autodock Vina. The H atoms though are relevant. To avoid adding H select mode = null in the control file.
 
 - **Step 4**: convert SMILES to .pdbqt format. Here the 3D structure is generated from the SMILES using OpenBabel. The current approach makes use of --gen3D to generate the lowest energy conformer ([see manual](https://open-babel.readthedocs.io/en/latest/3DStructureGen/SingleConformer.html#gen3d)). In the future faster options will be included (still some optimization might be needed as AutoDock needs a reasonably good initial conformation for the ligand).
 

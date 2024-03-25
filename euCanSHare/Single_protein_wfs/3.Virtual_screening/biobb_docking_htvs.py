@@ -212,6 +212,10 @@ def read_ligand_lib(ligand_lib_path):
             else:
                 ligand_names.append(str(index))
 
+        # If there are no ligands, raise an error
+        if len(ligand_smiles) == 0:
+            raise ValueError(f"No ligands found in ligand library file {ligand_lib_path}")
+        
     return ligand_smiles, ligand_names
 
 def write_smiles(smiles, smiles_path):
@@ -286,10 +290,12 @@ def clean_output(ligand_names, output_path):
     Removes all ligand subdirectories in the output directory
     """
 
-    # Remove all ligand subdirectories - NOTE: this could be potentially dangerous
+    # Remove all ligand subdirectories
     for name in ligand_names:
         ligand_path = os.path.join(output_path, name)
-        shutil.rmtree(ligand_path)
+
+        if os.path.exists(ligand_path):
+            shutil.rmtree(ligand_path)
     
 def check_arguments(global_log, global_paths, global_prop, ligand_lib_path, structure_path, input_pockets_zip, dock_to_residues):
     """
@@ -392,14 +398,6 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     if num_top_ligands is not None:
         global_prop['step6_top_ligands']['num_top_ligands'] = int(num_top_ligands)
 
-    # Enforce cpus if specified
-    if cpus is not None:
-        global_prop['step5_autodock_vina_run']['cpus'] = int(cpus)
-
-    # Enforce exhaustiveness if specified
-    if exhaustiveness is not None:
-        global_prop['step5_autodock_vina_run']['exhaustiveness'] = int(exhaustiveness)
-
     if dock_to_residues:
         # STEP 1: Extract residues from structure
         global_log.info("step1b_extract_residues: Extracting residues from structure")
@@ -447,6 +445,15 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
 
         # STEP 5: AutoDock vina
         if lastStep_successful:
+
+            # Enforce cpus if specified
+            if cpus is not None:
+                ligand_prop['step5_autodock_vina_run']['cpus'] = int(cpus)
+
+            # Enforce exhaustiveness if specified
+            if exhaustiveness is not None:
+                global_log.info(f"step5_autodock_vina_run: Setting exhaustiveness to {exhaustiveness}")
+                ligand_prop['step5_autodock_vina_run']['exhaustiveness'] = int(exhaustiveness)
 
             # Update common paths - NOTE: different processes will try to access the same files here ...
             ligand_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path'] = global_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path']

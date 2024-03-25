@@ -4,7 +4,7 @@
 
 ## Quick installation and run
 
-Go to workflow folder and install conda environment:
+Go to workflow folder and install the conda environment (running in Nostrum's cluster use the already installed environments located in */shared/work/BiobbWorkflows/envs*)
 
 ```bash
 conda env create -f environment.yml
