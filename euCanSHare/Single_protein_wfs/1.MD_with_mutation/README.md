@@ -14,12 +14,14 @@ conda activate biobb_sp_md
 
 To install it in an HPC environment, do the same after loading the corresponding Conda or Miniconda module.
 
-See options for worklow:
+See different options for the worklow and modify any if needed:
 
 ```bash
 vi input_HPC.yml
 python biobb_md_setup_mutation.py --help
 ```
+
+Specially important are: the binary path of GROMACS, the input files and the MODELLER key.
 
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
 

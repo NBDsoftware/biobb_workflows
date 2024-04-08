@@ -11,12 +11,14 @@ conda env create -f environment.yml
 conda activate single_protein_wf3
 ```
 
-See options for worklow:
+See different options for the worklow and modify any if needed:
 
 ```bash
 vi input.yml
 python biobb_docking_htvs.py --help
 ```
+
+Specially important are: the input files, the selection of the cavity or residue defining the pocket, the box size around the residue selection or cavity, the number of top ligands to show in the final summary and the settings for Autodock Vina (cpus and exhaustiveness).
 
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in input.yml.
 

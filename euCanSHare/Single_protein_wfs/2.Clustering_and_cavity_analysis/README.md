@@ -13,12 +13,14 @@ conda activate biobb_sp_cavity_analysis
 
 To install it in an HPC environment, do the same after loading the corresponding Conda or Miniconda module.
 
-See options for worklow:
+See different options for the worklow and modify any if needed:
 
 ```bash
 vi input.yml
 python biobb_clustering_cavity_analysis.py --help
 ```
+
+Specially important are: the input files, the definition of the rmsd group and the path to gromacs if a trajectory is given and the filtering settings in the last two steps.
 
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
 
