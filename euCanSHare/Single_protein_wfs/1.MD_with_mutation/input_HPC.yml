@@ -73,7 +73,7 @@ step2G_fixamides:
     input_pdb_path: dependency/step2F_fixssbonds/output_pdb_path
     output_pdb_path: fixamides.pdb
   properties:
-    # modeller_key: HERE YOUR MODELLER KEY  # MODELLER license key
+    modeller_key: HERE YOUR MODELLER KEY  # MODELLER license key
 
 step2H_fixchirality:
   tool: fix_chirality
@@ -164,7 +164,7 @@ step9_mdrun_min:
     output_edr_path: min.edr
     output_log_path: min.log
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi
     mpi_bin: /cm/shared/apps/slurm/current/bin/srun
     mpi_np: 8
 
@@ -211,7 +211,7 @@ step12_mdrun_nvt:
     output_log_path: nvt.log
     output_cpt_path: nvt.cpt
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi
     mpi_bin: /cm/shared/apps/slurm/current/bin/srun
     mpi_np: 8
     # binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
@@ -253,7 +253,7 @@ step15_mdrun_npt:
     output_log_path: npt.log
     output_cpt_path: npt.cpt
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi
     mpi_bin: /cm/shared/apps/slurm/current/bin/srun
     mpi_np: 8
     # binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
@@ -303,7 +303,7 @@ step18_mdrun_md:
     output_log_path: md.log
     output_cpt_path: md.cpt
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b/bin/gmx_mpi
+    binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi
     mpi_bin: /cm/shared/apps/slurm/current/bin/srun
     mpi_np: 8
     # binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
