@@ -4,6 +4,7 @@ channels:
   - bioconda
   - salilab
 dependencies:
+  - python==3.10
   - modeller # Activate if you want to use Modeller
   - biobb_io>=4.0.0
   - biobb_common>=4.0.0
