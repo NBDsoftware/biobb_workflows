@@ -18,6 +18,9 @@ module purge
 # Load conda / miniconda module
 module load Miniconda3
 
+# Load slurm to call srun in the computation node
+module load slurm
+
 # Load GROMACS module
 module load GROMACS
 
