@@ -277,6 +277,14 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         traj_prop = conf.get_prop_dic(prefix=traj)
         traj_paths = conf.get_paths_dic(prefix=traj)
 
+        # Enforce gromacs binary path for all steps using gromacs
+        if conf.properties.get('binary_path'):
+            set_gromacs_path(traj_prop, conf.properties['binary_path'])
+
+        # Enforce mpi binary path for all steps using mpi
+        if conf.properties.get('mpi_bin'):
+            set_mpi_path(traj_prop, conf.properties['mpi_bin'], conf.properties.get('mpi_np'))
+
         # Change seed of temperature coupling algorithm (V-rescale)
         new_seed = {'ld-seed': random.randint(1, 1000000)}
         traj_prop['step17_grompp_md']['mdp'].update(new_seed)
