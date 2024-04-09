@@ -37,9 +37,44 @@ from biobb_adapters.pycompss.biobb_analysis.ambertools.cpptraj_rmsf import cpptr
 from biobb_adapters.pycompss.biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_adapters.pycompss.biobb_structure_utils.utils.renumber_structure import renumber_structure
 
+def set_gromacs_path(global_prop: dict, binary_path: str) -> None:
+    """
+    Set the path to the GROMACS binary for all steps using GROMACS.
+
+    Inputs
+    ------
+
+        global_prop (dict): Dictionary containing all the properties of the workflow.
+        binary_path (str): Path to the GROMACS binary.
+    """
+
+    list_of_steps = ['step3_pdb2gmx', 'step4_editconf', 'step5_solvate', 'step6_grompp_genion', 'step7_genion',
+                        'step8_grompp_min', 'step9_mdrun_min', 'step11_grompp_nvt', 'step12_mdrun_nvt',
+                        'step14_grompp_npt', 'step15_mdrun_npt', 'step17_grompp_md', 'step18_mdrun_md']
+
+    for step in list_of_steps:
+        global_prop[step]['binary_path'] = binary_path
+
+def set_mpi_path(global_prop: dict, mpi_bin: str, mpi_np: int) -> None:
+    """
+    Set the path to the MPI binary for all steps using MPI.
+
+    Inputs
+    ------
+
+        global_prop (dict): Dictionary containing all the properties of the workflow.
+        mpi_bin (str): Path to the MPI binary.
+        mpi_np (int): Number of processors to be used.
+    """
+
+    list_of_steps = ['step9_mdrun_min', 'step12_mdrun_nvt', 'step15_mdrun_npt', 'step18_mdrun_md']
+
+    for step in list_of_steps:
+        global_prop[step]['mpi_bin'] = mpi_bin
+        global_prop[step]['mpi_np'] = mpi_np
 
 def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input_pdb_path = None, pdb_chains = None,
-            mutation_list = None, input_gro_path = None, input_top_path = None, fix_backbn = None, fix_ss = None):
+            mutation_list = None, input_gro_path = None, input_top_path = None, fix_backbn = None, fix_ss = None, fix_amides = None):
     '''
     Main MD Setup, mutation and run workflow. Can be used to retrieve a PDB, fix some defects of the structure,
     add specific mutations, prepare the system, minimize it, equilibrate it and finally do N production runs.
@@ -58,6 +93,7 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         input_top_path     (str): (Optional) path to input topology file (.zip)
         fix_backbn        (bool): (Optional) wether to add missing backbone atoms
         fix_ss            (bool): (Optional) wether to add disulfide bonds
+        fix_amides        (bool): (Optional) wether to flip clashing amides to relieve the clashes
 
     Outputs
     -------
@@ -87,6 +123,16 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     # Dividing it in global paths and global properties
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
+    
+    # Enforce gromacs binary path for all steps using gromacs
+    if conf.properties.get('binary_path'):
+        global_log.info(f"Using GROMACS binary path: {conf.properties['binary_path']}")
+        set_gromacs_path(global_prop, conf.properties['binary_path'])
+
+    # Enforce mpi binary path for all steps using mpi
+    if conf.properties.get('mpi_bin'):
+        global_log.info(f"Using MPI binary path: {conf.properties['mpi_bin']}")
+        set_mpi_path(global_prop, conf.properties['mpi_bin'], conf.properties.get('mpi_np'))
 
     # If prepared structure is not provided
     if input_gro_path is None:
@@ -99,7 +145,7 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         if pdb_chains is not None:
             global_prop["step1_extractMolecule"]["chains"] = pdb_chains
 
-        # STEP 1: extracts molecule of interest
+        # STEP 1: extract molecules of interest
         global_log.info("step1_extractMolecule: extract molecule of interest (protein)")
         extract_molecule(**global_paths["step1_extractMolecule"], properties=global_prop["step1_extractMolecule"])
 
@@ -136,9 +182,15 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         else:
             global_paths['step2G_fixamides']['input_pdb_path'] = global_paths['step2E_fixsidechain']['output_pdb_path']
 
-        # STEP 2 (G): Fix amides
-        global_log.info("step2G_fixamides: fix clashing amides")
-        fix_amides(**global_paths["step2G_fixamides"], properties=global_prop["step2G_fixamides"])
+        if fix_amides:
+            # STEP 2 (G): Fix amides
+            global_log.info("step2G_fixamides: fix clashing amides")
+            fix_amides(**global_paths["step2G_fixamides"], properties=global_prop["step2G_fixamides"])
+        else:
+            if fix_ss:
+                global_paths['step2H_fixchirality']['input_pdb_path'] = global_paths['step2F_fixssbonds']['output_pdb_path']
+            else:
+                global_paths['step2H_fixchirality']['input_pdb_path'] = global_paths['step2E_fixsidechain']['output_pdb_path']
 
         # STEP 2 (H): Fix chirality
         global_log.info("step2H_fixchirality: fix chirality of residues")
@@ -350,6 +402,10 @@ if __name__ == "__main__":
                         help="Add missing backbone atoms. Requires internet connection, PDB code and a MODELLER license key (default: False)",
                         required=False)
 
+    parser.add_argument('--fix_amides', action='store_true',
+                        help="Flip clashing amides to relieve the clashes (default: False)",
+                        required=False)
+
     args = parser.parse_args()
 
     # Default number of trajectories
@@ -369,4 +425,4 @@ if __name__ == "__main__":
     main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_trajs=num_trajs, output_path=args.output_path,
             input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list,
             input_gro_path=args.input_gro_path, input_top_path=args.input_top_path,
-            fix_backbn=args.fix_backbone, fix_ss=args.fix_ss)
+            fix_backbn=args.fix_backbone, fix_ss=args.fix_ss, fix_amides=args.fix_amides)
