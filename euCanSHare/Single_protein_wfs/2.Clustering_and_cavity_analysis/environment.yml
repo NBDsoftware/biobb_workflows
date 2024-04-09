@@ -13,4 +13,3 @@ dependencies:
   - biopython<=1.81
   - mdanalysis
 prefix: /shared/work/BiobbWorkflows/envs/biobb_sp_cavity_analysis
-

@@ -3,8 +3,8 @@
 # Global properties (common for all steps)
 binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi # GROMACS binary path
 mpi_bin: null                                                                                   # MPI binary path, e.g. mpirun, srun... (should be left as null if gromacs already includes MPI support)
-mpi_np: 1 
-use_gpu: False                                                                                      # Number of processors for MPI selected in the mpi_bin call
+mpi_np: 1                                                                                       # Number of processors for MPI selected in the mpi_bin call
+use_gpu: False                                                                                  # Wether to use GPU support or not
 working_dir_path: output                                                                        # Workflow default output directory
 can_write_console_log: False                                                                    # Verbose writing of log information
 restart: False                                                                                  # Skip steps already performed
