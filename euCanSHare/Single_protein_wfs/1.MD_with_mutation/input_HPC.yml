@@ -1,38 +1,45 @@
-# Example of a YAML configuration file for the MD with mutation workflow
+# YAML configuration file for the MD with mutation workflow
 
-working_dir_path: output            # Workflow default output directory
-can_write_console_log: False        # Verbose writing of log information
-restart: False                      # Skip steps already performed
-remove_tmp: True                    # Remove temporal files
+# Global properties (common for all steps)
+binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi # GROMACS binary path
+working_dir_path: output                                                                        # Workflow default output directory
+can_write_console_log: False                                                                    # Verbose writing of log information
+restart: False                                                                                  # Skip steps already performed
+remove_tmp: True                                                                                # Remove temporal files
 
+# Step 1: extract molecules from input PDB file
 step1_extractMolecule:
   tool: extract_molecule
   paths:
-    input_structure_path: /path/to/input/structure.pdb
+    input_structure_path: /path/to/input/structure.pdb                   # Overwriten by command line
     output_molecule_path: protein.pdb
   properties:
-    molecule_type: chains          # (all), protein, na, dna, rna, chains
-    chains: [A]                    # None or [A, B]
+    molecule_type: chains                                                # type of molecule to extract. Options: all, protein, na, dna, rna, chains
+    chains: [A]                                                          # if "chains" is selected in molecule_type. Options: None, [A], [A, B], ...
 
-step2A_fixaltlocs:
+# Step 2 A: fix alternative locations of residues if any with biobb_structure_checking and the Modeller suite (if key property is given)
+step2A_fixaltlocs:                 
   tool: fix_altlocs
   paths:
     input_pdb_path: dependency/step1_extractMolecule/output_molecule_path
     output_pdb_path: fixaltlocs.pdb
   properties:
-    # altlocs: ["A339:A", "A171:B", "A768:A"]  # ["Chain Residue_number:Altloc"]
-    # modeller_key: HERE YOUR MODELLER KEY     # MODELLER license key
+    altlocs: null                                                        # Format: ["Chain Residue_number:Altloc"], e.g. # ["A339:A", "A171:B", "A768:A"] 
+    # modeller_key: HERE YOUR MODELLER KEY                               # MODELLER license key
 
+# Step 2 B: Mutate residues in the structure if needed
 step2B_mutations:
   tool: mutate
   paths:
     input_pdb_path: dependency/step2A_fixaltlocs/output_pdb_path
     output_pdb_path: mutated.pdb
   properties:
-    # mutation_list: "A:Arg220Ala"          # "Chain:Wild_type_residue_name Residue_number Mutated_type_residue_name"
-    # use_modeller: True                    # Use MODELLER to optimize side chains
-    # modeller_key: HERE YOUR MODELLER KEY  # MODELLER license key
+    # mutation_list: A:Arg220Ala                                         # List of mutations to include. Format: "Chain : Wild_type_residue_name Residue_number Mutated_type_residue_name", e.g. "A:Arg220Ala,A:Arg221Gly,B:Arg220Ala" 
+    use_modeller: False                                                  # Use MODELLER to optimize side chains
+    # modeller_key: HERE YOUR MODELLER KEY                               # MODELLER license key
 
+# Step 2 C: Download a FASTA file with the canonical sequence of the protein
+# Optional step (activate from command line with --fix_backbn)
 # It requires internet connection and a PDB code
 step2C_canonical_fasta:
   tool: canonical_fasta
@@ -41,6 +48,8 @@ step2C_canonical_fasta:
   properties:
     pdb_code: HERE YOUR PDB CODE
 
+# Step 2 D: Model missing backbone atoms with biobb_structure_checking and the Modeller suite
+# Optional step (activate from command line with --fix_backbn)
 # It requires a MODELLER license 
 step2D_fixbackbone:
   tool: fix_backbone
@@ -52,21 +61,28 @@ step2D_fixbackbone:
     add_caps: False
     modeller_key: HERE YOUR MODELLER KEY
 
+# Step 2 E: Model missing side chain atoms with biobb_structure_checking and the Modeller suite (if key property is given)
 step2E_fixsidechain:
   tool: fix_side_chain
   paths:
     input_pdb_path: dependency/step2D_fixbackbone/output_pdb_path
     output_pdb_path: fixsidechain.pdb
   properties:
-    # use_modeller: True                   # Use MODELLER to optimize side chains 
+    use_modeller: False                                     # Use MODELLER to optimize side chains 
     # modeller_key: HERE YOUR MODELLER KEY  # MODELLER license key
 
+# Step 2 F: Fix disulfide bonds with biobb_structure_checking (CYS -> CYX for cysteines involved in disulfide bonds)
+# Optional step (activate from command line with --fix_ss)
 step2F_fixssbonds:
   tool: fix_ssbonds
   paths:
     input_pdb_path: dependency/step2E_fixsidechain/output_pdb_path
     output_pdb_path: fixssbonds.pdb
+  # properties:
+    # modeller_key: HERE YOUR MODELLER KEY  # MODELLER license key
 
+# Step 2 G: Flip clashing amides with biobb_structure_checking and the Modeller suite
+# Optional step (activate from command line with --fix_amides)
 step2G_fixamides:
   tool: fix_amides
   paths:
@@ -154,6 +170,7 @@ step8_grompp_min:
     mdp:
       nsteps: 1000
       emtol: 10
+    
 
 step9_mdrun_min:
   tool: mdrun
@@ -163,10 +180,6 @@ step9_mdrun_min:
     output_gro_path: min.gro
     output_edr_path: min.edr
     output_log_path: min.log
-  properties:
-    binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi
-    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
-    mpi_np: 8
 
 step9B_make_ndx:
   tool: make_ndx 
@@ -211,10 +224,6 @@ step12_mdrun_nvt:
     output_log_path: nvt.log
     output_cpt_path: nvt.cpt
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi
-    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
-    mpi_np: 8
-    # binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
     # use_gpu: True
 
 step13_temp_nvt:
@@ -253,10 +262,6 @@ step15_mdrun_npt:
     output_log_path: npt.log
     output_cpt_path: npt.cpt
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi
-    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
-    mpi_np: 8
-    # binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
     # use_gpu: True
 
 step16_density_npt:
@@ -285,7 +290,7 @@ step17_grompp_md:
       ref-t: 310 310
       tc-grps: "Protein Water_and_ions"
       nstxout: 0                   # freq. of .trr trajectory (coordinates) writing in time steps
-      nstxout-compressed: 500    # freq. of .xtc trajectory (coordinates) writing in time steps 
+      nstxout-compressed: 500      # freq. of .xtc trajectory (coordinates) writing in time steps 
       nstvout: 0                   # freq. of .trr trajectory (velocities) writing in time steps
       nstfout: 0
       continuation: 'no'
@@ -303,10 +308,6 @@ step18_mdrun_md:
     output_log_path: md.log
     output_cpt_path: md.cpt
   properties:
-    binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi
-    mpi_bin: /cm/shared/apps/slurm/current/bin/srun
-    mpi_np: 8
-    # binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
     # use_gpu: True
 
 step19_rmsfirst:
