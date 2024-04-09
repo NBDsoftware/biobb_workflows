@@ -1,21 +1,21 @@
 # Example of a YAML configuration file for the Clustering and cavity analysis workflow
-
-working_dir_path: output                              # Workflow default output directory
-can_write_console_log: True                           # Output log to console
-remove_tmp: True                                      # Remove temporal files
-restart: False                                        # Do not execute steps if output files are already created
-num_clusters: 20                                      # Number of clusters to extract from the trajectory and analyze with fpocket
+binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi # GROMACS binary path
+working_dir_path: output                                                                        # Workflow default output directory
+can_write_console_log: True                                                                     # Output log to console
+remove_tmp: True                                                                                # Remove temporal files
+restart: False                                                                                  # Do not execute steps if output files are already created
+num_clusters: 20                                                                                # Number of most populated clusters to extract from the trajectory and analyze 
+                                                                                                # with fpocket, if representative structures are given instead of a traj, this
+                                                                                                # number is ignored
 
 # Step 0: Create index file
-
 step0A_make_ndx:
   tool: make_ndx 
   paths:
     input_structure_path: /path/to/structure.pdb
     output_ndx_path: index.ndx
   properties:
-    selection: "System"
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx          
+    selection: "System"      
 
 step0B_add_rmsd_group:                                       
   tool: gmxselect
@@ -25,8 +25,7 @@ step0B_add_rmsd_group:
     output_ndx_path: index_rmsd.ndx
   properties:
     selection: '"RmsdGroup" resnr 181 to 296' 
-    append: True
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx          
+    append: True        
 
 step0C_add_output_group:                                       
   tool: gmxselect
@@ -37,7 +36,6 @@ step0C_add_output_group:
   properties:
     selection: '"OutputGroup" group "Protein"'
     append: True
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx 
 
 # Steps 1-2: Cluster trajectory and extract centroids pdb
 
@@ -58,7 +56,6 @@ step1_gmx_cluster:
     method: linkage                      
     cutoff: 0.10                    # nm (RMSD cut-off)
     nofit: True                     # Wether to use the RmsdGroups also for fitting or not
-    binary_path: /eb/x86_64/software/GROMACS/2022.3-intel-2021b-CUDA-11.6.0/bin/gmx
 
 step2_extract_models:
   tool: extract_model

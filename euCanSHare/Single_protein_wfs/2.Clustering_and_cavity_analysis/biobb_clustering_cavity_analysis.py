@@ -26,6 +26,22 @@ from biobb_structure_utils.utils.extract_model import extract_model
 from biobb_vs.fpocket.fpocket_run import fpocket_run
 from biobb_vs.fpocket.fpocket_filter import fpocket_filter
 
+def set_gromacs_path(global_prop: dict, binary_path: str) -> None:
+    """
+    Set the path to the GROMACS binary for all steps using GROMACS.
+
+    Inputs
+    ------
+
+        global_prop (dict): Dictionary containing all the properties of the workflow.
+        binary_path (str): Path to the GROMACS binary.
+    """
+
+    list_of_steps = ['step0A_make_ndx', 'step0B_add_rmsd_group', 'step0C_add_output_group', 'step1_gmx_cluster']
+
+    for step in list_of_steps:
+        global_prop[step]['binary_path'] = binary_path
+
 def get_clusters_population(log_path: str, output_path: str, global_log) -> list:
     '''
     Reads the centroids' ID and populations from the log, sorts the clusters by population 
@@ -542,6 +558,11 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
     # Dividing it in global properties and global paths
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
+
+    # Enforce gromacs binary path for all steps using gromacs
+    if conf.properties.get('binary_path'):
+        global_log.info(f"Using GROMACS binary path: {conf.properties['binary_path']}")
+        set_gromacs_path(global_prop, conf.properties['binary_path'])
 
     # Check arguments
     check_arguments(global_log, global_paths, traj_path, top_path, clustering_path)
