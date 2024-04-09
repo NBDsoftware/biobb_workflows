@@ -72,6 +72,22 @@ def set_mpi_path(global_prop: dict, mpi_bin: str, mpi_np: int) -> None:
         global_prop[step]['mpi_bin'] = mpi_bin
         global_prop[step]['mpi_np'] = mpi_np
 
+def set_gpu_use(global_prop: dict, gpu_use: bool) -> None:
+    """
+    Set the use of GPU for all steps using GROMACS that support it.
+
+    Inputs
+    ------
+
+        global_prop (dict): Dictionary containing all the properties of the workflow.
+        gpu_use (bool): Whether to use GPU or not.
+    """
+
+    list_of_steps = ['step12_mdrun_nvt', 'step15_mdrun_npt', 'step18_mdrun_md']
+
+    for step in list_of_steps:
+        global_prop[step]['use_gpu'] = gpu_use
+
 def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input_pdb_path = None, pdb_chains = None,
             mutation_list = None, input_gro_path = None, input_top_path = None, fix_backbn = None, fix_ss = None, fix_amides = None):
     '''
@@ -132,6 +148,11 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     if conf.properties.get('mpi_bin'):
         global_log.info(f"Using MPI binary path: {conf.properties['mpi_bin']}")
         set_mpi_path(global_prop, conf.properties['mpi_bin'], conf.properties.get('mpi_np'))
+
+    # Enforce gpu use for all steps using gromacs that support it
+    if conf.properties.get('use_gpu'):
+        global_log.info(f"Using GPU for GROMACS steps")
+        set_gpu_use(global_prop, conf.properties['use_gpu'])
 
     # If prepared structure is not provided
     if input_gro_path is None:
@@ -283,6 +304,10 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         # Enforce mpi binary path for all steps using mpi
         if conf.properties.get('mpi_bin'):
             set_mpi_path(traj_prop, conf.properties['mpi_bin'], conf.properties.get('mpi_np'))
+
+        # Enforce gpu use for all steps using gromacs that support it
+        if conf.properties.get('use_gpu'):
+            set_gpu_use(traj_prop, conf.properties['use_gpu'])
 
         # Change seed of temperature coupling algorithm (V-rescale)
         new_seed = {'ld-seed': random.randint(1, 1000000)}
