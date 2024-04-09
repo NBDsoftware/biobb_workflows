@@ -20,7 +20,7 @@ vi input.yml
 python biobb_clustering_cavity_analysis.py --help
 ```
 
-Specially important are: the input files, the definition of the rmsd group and the path to gromacs if a trajectory is given and the filtering settings in the last two steps.
+Specially important are: the input files, the definition of the rmsd group and the filtering settings in the last two steps. If a trajectory file is given as input, also take a look to the total number of most pupulated clusters to analyze and the path to the GROMACS binary file in the global properties of the configuration file. Make sure the binary path specified and the module loaded in the run file agree between them.
 
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
 

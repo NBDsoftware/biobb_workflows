@@ -21,7 +21,7 @@ vi input_HPC.yml
 python biobb_md_setup_mutation.py --help
 ```
 
-Specially important are: the binary path of GROMACS, the input files and the MODELLER key.
+Specially important are: the binary path of GROMACS, the input files and the MODELLER key. Make sure the binary path specified and the module loaded in the run file agree between them.
 
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
 
