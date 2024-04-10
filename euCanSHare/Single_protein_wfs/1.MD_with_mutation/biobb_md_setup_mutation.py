@@ -89,7 +89,7 @@ def set_gpu_use(global_prop: dict, gpu_use: bool) -> None:
         global_prop[step]['use_gpu'] = gpu_use
 
 def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input_pdb_path = None, pdb_chains = None,
-            mutation_list = None, input_gro_path = None, input_top_path = None, fix_backbn = None, fix_ss = None, fix_amides = None):
+            mutation_list = None, input_gro_path = None, input_top_path = None, fix_backbn = None, fix_ss = None, fix_amide_clashes = None):
     '''
     Main MD Setup, mutation and run workflow. Can be used to retrieve a PDB, fix some defects of the structure,
     add specific mutations, prepare the system, minimize it, equilibrate it and finally do N production runs.
@@ -108,7 +108,7 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         input_top_path     (str): (Optional) path to input topology file (.zip)
         fix_backbn        (bool): (Optional) wether to add missing backbone atoms
         fix_ss            (bool): (Optional) wether to add disulfide bonds
-        fix_amides        (bool): (Optional) wether to flip clashing amides to relieve the clashes
+        fix_amide_clashes        (bool): (Optional) wether to flip clashing amides to relieve the clashes
 
     Outputs
     -------
@@ -202,7 +202,7 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
         else:
             global_paths['step2G_fixamides']['input_pdb_path'] = global_paths['step2E_fixsidechain']['output_pdb_path']
 
-        if fix_amides:
+        if fix_amide_clashes:
             # STEP 2 (G): Fix amides
             global_log.info("step2G_fixamides: fix clashing amides")
             fix_amides(**global_paths["step2G_fixamides"], properties=global_prop["step2G_fixamides"])
@@ -431,7 +431,7 @@ if __name__ == "__main__":
                         help="Add missing backbone atoms. Requires internet connection, PDB code and a MODELLER license key (default: False)",
                         required=False)
 
-    parser.add_argument('--fix_amides', action='store_true',
+    parser.add_argument('--fix_amides', action='store_true', dest='fix_amide_clashes',
                         help="Flip clashing amides to relieve the clashes (default: False)",
                         required=False)
 
@@ -454,4 +454,4 @@ if __name__ == "__main__":
     main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_trajs=num_trajs, output_path=args.output_path,
             input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list,
             input_gro_path=args.input_gro_path, input_top_path=args.input_top_path,
-            fix_backbn=args.fix_backbone, fix_ss=args.fix_ss, fix_amides=args.fix_amides)
+            fix_backbn=args.fix_backbone, fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes)
