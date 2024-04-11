@@ -24,9 +24,53 @@ from pycompss.api.api import compss_barrier
 from biobb_adapters.pycompss.biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_adapters.pycompss.biobb_gromacs.gromacs.gmxselect import gmxselect
 from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_cluster import gmx_cluster
+from biobb_adapters.pycompss.biobb_analysis.ambertools.cpptraj_convert import cpptraj_convert
+from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
+from biobb_adapters.pycompss.biobb_analysis.gromacs.gmx_trjconv_trj import gmx_trjconv_trj
 from biobb_adapters.pycompss.biobb_structure_utils.utils.extract_model import extract_model
 from biobb_adapters.pycompss.biobb_vs.fpocket.fpocket_run import fpocket_run
 from biobb_adapters.pycompss.biobb_vs.fpocket.fpocket_filter import fpocket_filter
+
+def is_gromacs_format(traj_path: str) -> bool:
+    """
+    Checks if the trajectory is in a GROMACS-compatible format (xtc, trr, cpt, g96, gro, pdb, tng)
+
+    Inputs
+    ------
+
+        traj_path (str): Path to the trajectory file
+    
+    Output
+    -------
+
+        bool: True if the trajectory is in a GROMACS-compatible format, False otherwise
+    """
+
+    # List of GROMACS-compatible formats
+    gromacs_formats = ['.xtc', '.trr', '.cpt', '.g96', '.gro', '.pdb', '.tng']
+
+    # Check if the trajectory file is in a GROMACS-compatible format
+    if any([traj_path.endswith(format) for format in gromacs_formats]):
+        return True
+    else:
+        return False
+
+def set_gromacs_path(global_prop: dict, binary_path: str) -> None:
+    """
+    Set the path to the GROMACS binary for all steps using GROMACS.
+
+    Inputs
+    ------
+
+        global_prop (dict): Dictionary containing all the properties of the workflow.
+        binary_path (str): Path to the GROMACS binary.
+    """
+
+    list_of_steps = ['step1A_traj_preparation_ndx', 'step1B_add_selection_group', 'step2A_strip_traj', 'step2B_strip_top',
+                     'step3A_rmsd_calculation_ndx', 'step3B_add_rmsd_group', 'step3C_add_output_group', 'step4_gmx_cluster']
+
+    for step in list_of_steps:
+        global_prop[step]['binary_path'] = binary_path
 
 def get_clusters_population(log_path: str, output_path: str, global_log) -> list:
     '''
@@ -135,7 +179,7 @@ def create_summary(cluster_names, cluster_populations, cluster_filtered_pockets,
     '''
 
     # Find step names
-    cavity_analysis_folder = 'step3_cavity_analysis'
+    cavity_analysis_folder = 'step6_cavity_analysis'
 
     # Find unfiltered summary file name
     pockets_summary_filename = Path(global_paths[cavity_analysis_folder]['output_summary']).name
@@ -446,7 +490,7 @@ def get_pockets_IDs(input_pockets_zip: str, properties: dict, global_log):
 
     return filtered_pocket_IDs
 
-def check_arguments(global_log, global_paths, traj_path, top_path, clustering_path):
+def check_arguments(global_log, traj_path, top_path, clustering_path):
     """
     Check the arguments provided by the user
     """
@@ -454,26 +498,12 @@ def check_arguments(global_log, global_paths, traj_path, top_path, clustering_pa
     # If the user doesn't provide traj_path and top_path or clustering_path 
     if (None in [traj_path, top_path]) and clustering_path is None:
 
-        # And the traj and topology are not given through the configuration file either -> exit
-        config_traj_path = global_paths['step1_gmx_cluster'].get('input_traj_path', None)
-        config_top_path = global_paths['step0A_make_ndx'].get('input_structure_path', None)
-
-        if (None in [config_traj_path, config_top_path]):
-            global_log.error("ERROR: Either clustering_path or both traj_path and top_path must be provided")
-            raise SystemExit
-        
-        # If the user provides traj_path and top_path through the configuration file -> check if they exist
-        if not os.path.exists(config_traj_path):
-            global_log.error("ERROR: traj_path doesn't exist")
-            raise SystemExit
-
-        if not os.path.exists(config_top_path):
-            global_log.error("ERROR: top_path doesn't exist")
-            raise SystemExit
+        global_log.error("ERROR: traj_path and top_path or clustering_path must be provided")
+        raise SystemExit
 
     # If the user provides traj_path and top_path and clustering_path -> exit
     if (None not in [traj_path, top_path]) and clustering_path is not None:
-        global_log.error("ERROR: Both traj_path and top_path and clustering_path are provided, clustering_path will be used")
+        global_log.error("ERROR: traj_path, top_path and clustering_path are provided, provide either traj_path and top_path or clustering_path")
         raise SystemExit
 
     # If the user provides traj_path and not top_path -> exit
@@ -502,7 +532,7 @@ def check_arguments(global_log, global_paths, traj_path, top_path, clustering_pa
         raise SystemExit
 
 
-def main_wf(configuration_path, traj_path, top_path, clustering_path, output_path):
+def main_wf(configuration_path, traj_path, top_path, clustering_path, prepare_traj, output_path):
     '''
     Main clustering and cavity analysis workflow. This workflow clusters a given trajectory and analyzes the cavities of the most representative
     structures. Then filters the cavities according to a pre-defined criteria and outputs the pockets that passed the filter.
@@ -514,6 +544,7 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
         traj_path           (str): (Optional) path to trajectory file
         top_path            (str): (Optional) path to topology file
         clustering_path     (str): (Optional) path to the folder with the most representative structures in pdb format from an external clustering 
+        prepare_traj        (bool): (Optional) flag to prepare the trajectory for clustering
         output_path         (str): (Optional) path to output folder
 
     Outputs
@@ -545,43 +576,87 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
 
+    # Enforce gromacs binary path for all steps using gromacs
+    if conf.properties.get('binary_path'):
+        global_log.info(f"Using GROMACS binary path: {conf.properties['binary_path']}")
+        set_gromacs_path(global_prop, conf.properties['binary_path'])
+
     # Check arguments
-    check_arguments(global_log, global_paths, traj_path, top_path, clustering_path)
+    check_arguments(global_log, traj_path, top_path, clustering_path)
 
-    # If clustering is not given externally -> cluster the input trajectory and return cluster path
+    # If clustering is not given externally -> cluster the input trajectory
     if clustering_path is None:
-        
-        # Enforce traj_path if provided
-        if traj_path is not None:
-            global_paths['step1_gmx_cluster']['input_traj_path'] = traj_path
 
-        # Enforce top_path if provided
-        if top_path is not None:
-            global_paths['step0A_make_ndx']['input_structure_path'] = top_path
-            global_paths['step0B_add_rmsd_group']['input_structure_path'] = top_path
-            global_paths['step0C_add_output_group']['input_structure_path'] = top_path
-            global_paths['step1_gmx_cluster']['input_structure_path'] = top_path
+        # If the user wants to prepare the trajectory before clustering
+        if prepare_traj:
 
-        # STEP 0: Create index file
-        global_log.info("step0A_make_ndx: Creation of index file")
-        make_ndx(**global_paths['step0A_make_ndx'], properties=global_prop['step0A_make_ndx'])
+            # Enforce traj and top paths
+            global_paths['step0_convert_amber_traj']['input_traj_path'] = traj_path
+            global_paths['step0_convert_amber_traj']['input_top_path'] = top_path
+            global_paths['step1A_traj_preparation_ndx']['input_structure_path'] = top_path
+            global_paths['step1B_add_selection_group']['input_structure_path'] = top_path
+            global_paths['step2A_strip_traj']['input_top_path'] = top_path
+            global_paths['step2B_strip_top']['input_structure_path'] = top_path
+            global_paths['step2B_strip_top']['input_top_path'] = top_path
 
-        # STEP 0: Add RmsdGroup to index file
-        global_log.info("step0B_add_rmsd_group: Adding RmsdGroup to index file")
-        gmxselect(**global_paths['step0B_add_rmsd_group'], properties=global_prop['step0B_add_rmsd_group'])
+            # Check if the trajectory is not in GROMACS format
+            if not is_gromacs_format(traj_path):
 
-        # STEP 0: Add OutputGroup to index file
-        global_log.info("step0C_add_output_group: Adding OutputGroup to index file")
-        gmxselect(**global_paths['step0C_add_output_group'], properties=global_prop['step0C_add_output_group'])
+                # STEP 0: Convert the trajectory to xtc format
+                global_log.info("step0_convert_amber_traj: Converting AMBER trajectory to xtc format")
+                cpptraj_convert(**global_paths['step0_convert_amber_traj'], properties=global_prop['step0_convert_amber_traj'])
+            
+            else:
 
-        # STEP 1: Cluster trajectory with gmx_cluster
-        global_log.info("step1_gmx_cluster: Clustering structures from the trajectory")
-        gmx_cluster(**global_paths["step1_gmx_cluster"], properties=global_prop["step1_gmx_cluster"])
+                # Enforce traj path to next step
+                global_paths['step2A_strip_traj']['input_traj_path'] = traj_path
+
+            # STEP 1A: Create index file for atoms selection
+            global_log.info("step1A_traj_preparation_ndx: Creation of index file for atoms selection")
+            make_ndx(**global_paths['step1A_traj_preparation_ndx'], properties=global_prop['step1A_traj_preparation_ndx'])
+
+            # STEP 1B: Add selection group to index file
+            global_log.info("step1B_add_selection_group: Adding selection group to index file")
+            gmxselect(**global_paths['step1B_add_selection_group'], properties=global_prop['step1B_add_selection_group'])
+
+            # STEP 2A: Strip trajectory
+            global_log.info("step2A_strip_traj: Stripping trajectory, keeping just selected atoms")
+            gmx_trjconv_trj(**global_paths['step2A_strip_traj'], properties=global_prop['step2A_strip_traj'])
+
+            # STEP 2B: Strip topology
+            global_log.info("step2B_strip_top: Stripping topology, keeping just selected atoms")
+            gmx_trjconv_str(**global_paths['step2B_strip_top'], properties=global_prop['step2B_strip_top'])
+
+        # Trajectory and topology are already prepared (fitted, with no strange atoms and in GROMACS-compatible format)
+        else:
+            
+            # Enforce traj and top paths. 
+            global_paths['step4_gmx_cluster']['input_traj_path'] = traj_path
+            global_paths['step3A_rmsd_calculation_ndx']['input_structure_path'] = top_path
+            global_paths['step3B_add_rmsd_group']['input_structure_path'] = top_path
+            global_paths['step3C_add_output_group']['input_structure_path'] = top_path
+            global_paths['step4_gmx_cluster']['input_structure_path'] = top_path
+
+        # STEP 3A: Create index file for rmsd calculation
+        global_log.info("step3A_rmsd_calculation_ndx: Creation of index file")
+        make_ndx(**global_paths['step3A_rmsd_calculation_ndx'], properties=global_prop['step3A_rmsd_calculation_ndx'])
+
+        # STEP 3B: Add rmsd group to index file
+        global_log.info("step3B_add_rmsd_group: Adding RmsdGroup to index file")
+        gmxselect(**global_paths['step3B_add_rmsd_group'], properties=global_prop['step3B_add_rmsd_group'])
+
+        # STEP 3C: Add output group to index file
+        global_log.info("step3C_add_output_group: Adding OutputGroup to index file")
+        gmxselect(**global_paths['step3C_add_output_group'], properties=global_prop['step3C_add_output_group'])
+
+        # STEP 4: Cluster trajectory with gmx_cluster
+        global_log.info("step4_gmx_cluster: Clustering structures from the trajectory")
+        gmx_cluster(**global_paths["step4_gmx_cluster"], properties=global_prop["step4_gmx_cluster"])
 
         # Save centroid IDs and populations in JSON file
-        global_log.info( "step1_gmx_cluster: Reading clustering outcome, generating clusters JSON file")
-        cluster_populations = get_clusters_population(log_path = global_paths["step1_gmx_cluster"]['output_cluster_log_path'],
-                                                      output_path = global_prop["step1_gmx_cluster"]['path'],
+        global_log.info( "step4_gmx_cluster: Reading clustering outcome, generating clusters JSON file")
+        cluster_populations = get_clusters_population(log_path = global_paths["step4_gmx_cluster"]['output_cluster_log_path'],
+                                                      output_path = global_prop["step4_gmx_cluster"]['path'],
                                                       global_log = global_log)
 
         # Number of clusters: minimum between number of clusters requested and number of clusters obtained
@@ -589,6 +664,8 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
 
         # Cluster names are the cluster IDs
         cluster_names = [str(cluster_populations[i][1]) for i in range(num_clusters)]
+    
+    # If clustering is given externally
     else:
 
         # Obtain the full sorted list of pdb files from clustering path
@@ -608,47 +685,47 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, output_pat
     # Dictionary to save the filtered pocket IDs for each model
     cluster_filtered_pockets = {}
 
-    # For each model of the receptor
+    # For representative structure (model)
     for cluster_index, cluster_name in enumerate(cluster_names):
 
         # Create sub folder for the model
         cluster_prop = conf.get_prop_dic(prefix=cluster_name)
         cluster_paths = conf.get_paths_dic(prefix=cluster_name)
 
+        # If clustering was done here, extract the model from the clustering results
         if clustering_path is None:
 
-            # Update input structure path and model index of step 2
-            cluster_paths['step2_extract_models']['input_structure_path'] = global_paths['step1_gmx_cluster']['output_pdb_path']
-            cluster_prop['step2_extract_models']['models'] = [cluster_populations[cluster_index][1]]
+            # Update input structures path and model index
+            cluster_paths['step5_extract_models']['input_structure_path'] = global_paths['step4_gmx_cluster']['output_pdb_path']
+            cluster_prop['step5_extract_models']['models'] = [cluster_populations[cluster_index][1]]
 
-            # STEP 2: Extract one model from previous clustering
-            extract_model(**cluster_paths['step2_extract_models'], properties=cluster_prop['step2_extract_models'])
+            # STEP 5: Extract one model from the input structures path
+            extract_model(**cluster_paths['step5_extract_models'], properties=cluster_prop['step5_extract_models'])
 
+        # If clustering was done externally, just update the input pdb path
         else:
 
-            # Update input structure path of step3
-            cluster_paths['step3_cavity_analysis']['input_pdb_path'] = pdb_paths[cluster_index]
-            cluster_paths['step5_filter_residue_com']['input_pdb_path'] = pdb_paths[cluster_index]
+            cluster_paths['step6_cavity_analysis']['input_pdb_path'] = pdb_paths[cluster_index]
+            cluster_paths['step8_filter_residue_com']['input_pdb_path'] = pdb_paths[cluster_index]
         
         # STEP 3: Cavity analysis
-        global_log.info("step3_cavity_analysis: Compute protein cavities using fpocket")
-        fpocket_run(**cluster_paths['step3_cavity_analysis'], properties=cluster_prop["step3_cavity_analysis"])
+        global_log.info("step6_cavity_analysis: Compute protein cavities using fpocket")
+        fpocket_run(**cluster_paths['step6_cavity_analysis'], properties=cluster_prop["step6_cavity_analysis"])
 
         # STEP 4: Filtering cavities
-        global_log.info("step4_filter_cavities: Filter found cavities")
-        fpocket_filter(**cluster_paths['step4_filter_cavities'], properties=cluster_prop["step4_filter_cavities"])
+        global_log.info("step7_filter_cavities: Filter found cavities")
+        fpocket_filter(**cluster_paths['step7_filter_cavities'], properties=cluster_prop["step7_filter_cavities"])
 
-        # NOTE: this step should be decorated accordingly - not a standard biobb
         # STEP 5: Filter by pocket center of mass 
-        global_log.info("step5_filter_residue_com: Filter cavities by center of mass distance to a group of residues") 
-        filtered_pockets_IDs = filter_residue_com(**cluster_paths['step5_filter_residue_com'], properties=cluster_prop["step5_filter_residue_com"], global_log=global_log)
+        global_log.info("step8_filter_residue_com: Filter cavities by center of mass distance to a group of residues") 
+        filtered_pockets_IDs = filter_residue_com(**cluster_paths['step8_filter_residue_com'], properties=cluster_prop["step8_filter_residue_com"], global_log=global_log)
 
         # Update dictionary with filtered pockets
         cluster_filtered_pockets.update({cluster_name : filtered_pockets_IDs})
 
         # Save model pdb file in sub folder
         model_subfolder = os.path.join(output_path, cluster_name)
-        shutil.copyfile(cluster_paths['step3_cavity_analysis']['input_pdb_path'], os.path.join(model_subfolder, 'model.pdb'))
+        shutil.copyfile(cluster_paths['step6_cavity_analysis']['input_pdb_path'], os.path.join(model_subfolder, 'model.pdb'))
 
     # NOTE: here all processes should wait for the others to finish, but we cannot use files as not all of them will find pockets after filtering - no output file
     compss_barrier()
@@ -680,7 +757,7 @@ if __name__ == '__main__':
                         required=True)
     
     parser.add_argument('--traj_path', dest='traj_path',
-                        help="Path to input trajectory (xtc, trr, cpt, gro, g96, pdb, tng)", 
+                        help="Path to input trajectory (GROMACS or AMBER formats)", 
                         required=False)
 
     parser.add_argument('--top_path', dest='top_path',
@@ -689,6 +766,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--clustering_path', dest='clustering_path',
                         help="Input path to representative structures (folder with pdb files)", 
+                        required=False)
+
+    parser.add_argument('--prepare_traj', action='store_true',
+                        help="Prepare trajectory for clustering (activate if you need to delete atoms or you don't have a gromacs compatible trajectory file)",
                         required=False)
 
     parser.add_argument('--output', dest='output_path',
@@ -701,4 +782,5 @@ if __name__ == '__main__':
             traj_path = args.traj_path,
             top_path = args.top_path,
             clustering_path = args.clustering_path,
+            prepare_traj = args.prepare_traj,
             output_path = args.output_path)
