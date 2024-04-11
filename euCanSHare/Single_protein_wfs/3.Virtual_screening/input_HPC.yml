@@ -1,3 +1,6 @@
+# YAML configuration file for the Virtual screening workflow
+
+# Global properties (common for all steps)
 working_dir_path: output
 can_write_console_log: False
 restart: False 
