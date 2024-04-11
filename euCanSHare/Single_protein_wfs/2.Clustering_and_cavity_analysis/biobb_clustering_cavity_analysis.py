@@ -586,29 +586,35 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, prepare_tr
     # If clustering is not given externally -> cluster the input trajectory
     if clustering_path is None:
 
-        # If the user wants to prepare the trajectory before clustering
-        if prepare_traj:
+        # If the trajectory is not in a GROMACS-compatible format, convert it
+        if not is_gromacs_format(traj_path):
 
             # Enforce traj and top paths
             global_paths['step0_convert_amber_traj']['input_traj_path'] = traj_path
             global_paths['step0_convert_amber_traj']['input_top_path'] = top_path
+
+            # STEP 0: Convert the trajectory to xtc format
+            global_log.info("step0_convert_amber_traj: Converting AMBER trajectory to xtc format")
+            cpptraj_convert(**global_paths['step0_convert_amber_traj'], properties=global_prop['step0_convert_amber_traj'])
+
+            # Change the traj path to the converted version of the trajectory
+            traj_path = global_paths['step0_convert_amber_traj']['output_cpptraj_path']
+        
+        # If the trajectory is in a GROMACS-compatible format, pass the path to the next step
+        else:
+
+            # Enforce traj path to next step
+            global_paths['step2A_strip_traj']['input_traj_path'] = traj_path
+
+        # If the user wants to prepare the trajectory before clustering
+        if prepare_traj:
+
+            # Enforce traj and top paths
             global_paths['step1A_traj_preparation_ndx']['input_structure_path'] = top_path
             global_paths['step1B_add_selection_group']['input_structure_path'] = top_path
             global_paths['step2A_strip_traj']['input_top_path'] = top_path
             global_paths['step2B_strip_top']['input_structure_path'] = top_path
             global_paths['step2B_strip_top']['input_top_path'] = top_path
-
-            # Check if the trajectory is not in GROMACS format
-            if not is_gromacs_format(traj_path):
-
-                # STEP 0: Convert the trajectory to xtc format
-                global_log.info("step0_convert_amber_traj: Converting AMBER trajectory to xtc format")
-                cpptraj_convert(**global_paths['step0_convert_amber_traj'], properties=global_prop['step0_convert_amber_traj'])
-            
-            else:
-
-                # Enforce traj path to next step
-                global_paths['step2A_strip_traj']['input_traj_path'] = traj_path
 
             # STEP 1A: Create index file for atoms selection
             global_log.info("step1A_traj_preparation_ndx: Creation of index file for atoms selection")

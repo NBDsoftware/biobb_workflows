@@ -46,7 +46,7 @@ Specially important are: the configuration file path, the path to the external c
 
 This workflow has several steps. The input for the workflow can be either (1) a trajectory and topology or (2) a folder containing representative structures from an external clustering. In the former case the workflow will cluster the trajectory to find representative structures, in the later case the workflow will directly use the representative structures for the cavity analysis and filtering.
 
-- **Step 0 **: Conversion of trajectory from Amber to Gromacs xtc format. This step is only activated if the "--prepare_traj" flag is used and the provided trajectory is in Amber format.
+- **Step 0 **: Conversion of trajectory from Amber-compatible formats to Gromacs xtc format. This step will be done automatically if the input trajectory is not in a Gromacs compatible format.
 
 - **Step 1 (A-B)**: Creation of index file that will be used to select some atoms from the trajectory. This step can be used to delete waters, ions or any exotic atom from the trajectory. As the subsequent clutering step using gmx cluster might give problems when dealing with these. The step is only activated if the "--prepare_traj" flag is used.
 

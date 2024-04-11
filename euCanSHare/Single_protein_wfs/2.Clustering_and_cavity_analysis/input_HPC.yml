@@ -11,7 +11,7 @@ num_clusters: 20                                                                
                                                                                                 # number is ignored
 
 # Step 0: Convert from Amber to Gromacs compatible format
-# Optional step (activate from command line with --prepare_traj, only used if input trajectory is in Amber format)
+# Optional step (will be executed if the trajectory is not in a Gromacs-compatible format)
 step0_convert_amber_traj:
   tool: cpptraj_convert
   paths:
