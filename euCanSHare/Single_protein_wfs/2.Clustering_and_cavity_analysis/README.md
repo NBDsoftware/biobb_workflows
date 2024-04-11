@@ -77,6 +77,19 @@ This workflow has several steps. The input for the workflow can be either (1) a 
 
 Note that re-launching the workflow will skip the previously successful steps if restart is True and the output folder is the same. 
 
+## Output and visualization
+
+The output folder will contain 3 YAML files with a summary of the results ordered by drug score, score or volume.
+
+The pockets can be visualized using PyMOL and the visualization script provided (visualize_results.py). Open the visualization script and change the path to the output folder and any other options in the Important Inputs section.
+
+To visualize the results make sure PyMOL is installed and available (load the PyMOL module in an HPC environment), install any missing python packages using pip if needed and launch the script:
+
+```bash
+pymol visualize_results.py
+```
+
+PyMOL should open with all the models and pockets loaded and aligned. If you don't see anything in NICE move the window to force it to refresh its content or check the log file for errors.
 
 
 

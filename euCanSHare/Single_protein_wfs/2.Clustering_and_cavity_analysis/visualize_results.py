@@ -3,12 +3,12 @@
 #   2. The trajectory of each ensemble aligned to the centroid
 
 import os
+import sys
 import pymol 
 import glob
 import yaml
 import zipfile
 import logging
-import regex as re
 from pathlib import Path
 
 
@@ -16,22 +16,18 @@ from pathlib import Path
 # Functions #
 #############
 
-def load_model(model_name, model_path, models_cartoon_color, residues_to_highlight):
-
+def load_model(model_name: str, model_path: str, models_cartoon_color: str, residues_to_highlight: dict) -> None:
     """
-    Function to load a model and highlights the special residues 
+    Function to load a model in pymol and highlight some residues 
 
     Inputs:
     -------
         
-        model_name (str): name of the model to load (object name in pymol)
-        model_path (str): path to the model to load (pdb file)
-        models_cartoon_color (str): color of the model
+        model_name             (str): name of the model to load (object name in pymol)
+        model_path             (str): path to the model to load (pdb file)
+        models_cartoon_color   (str): color of the model
         residues_to_highlight (dict): dictionary with the special residues to highlight, e.g. {"i. 114-124": "cyan"}
     """
-
-    # Log
-    logger.info(f"Loading {model_name}")
 
     # Load model
     pymol.cmd.load(model_path, model_name)
@@ -45,85 +41,99 @@ def load_model(model_name, model_path, models_cartoon_color, residues_to_highlig
 
     return
 
-def sort_pockets(pockets_summary_path: str, output_folder: str):
+def find_models(pockets_summary: dict, output_folder: str, show_all: bool) -> dict:
     """
-    Function that reads the YAML summary file with all models and pockets and sorts the models by:
+    Function to create a dictionary with information for each model.
 
-        1. Volume of the largest pocket in that model
-        2. Druggability score of the best pocket in that model
-        3. Score of the best pocket in that model
-    
-    It then writes new YAML files with the sorted models and their pockets.
+    E.g. {"model_name": {"model_path": "path/to/model.pdb", "pockets_zip_path": "path/to/filtered_pockets.zip", pockets: ["pocket1", "pocket2"]}
+
+    Inputs:
+    -------
+        
+        pockets_summary (dict): dictionary with the summary of the pockets for each model
+        output_folder    (str): path to the output folder
+        show_all        (bool): whether to show all models or only the models with pockets
     """
 
-    # Find the YAML summary file name
-    pockets_summary_filename = Path(pockets_summary_path).stem
+    # Initialize dictionary
+    Models = {}
 
-    # Read the YAML summary file
-    with open(pockets_summary_path, "r") as f:
-        pockets_summary = yaml.load(f, Loader = yaml.FullLoader)
+    # Counter for the number of models with pockets
+    models_with_pockets = 0
 
-    # Sort the pockets by volume
-    sorted_pockets = dict(sorted(pockets_summary.items(), key = lambda x: largest_volume(x[1]), reverse = True))
+    # For each model
+    for model_name in pockets_summary.keys():
 
-    # Write the sorted pockets to a new YAML file
-    with open(f"{output_folder}/{pockets_summary_filename}_by_volume.yml", "w") as f:
-        yaml.dump(sorted_pockets, f, sort_keys = False)
+        # Find the model path
+        model_path = os.path.join(output_folder, f"{model_name}/model.pdb")
 
-    # Sort the pockets by druggability score
-    sorted_pockets = dict(sorted(pockets_summary.items(), key = lambda x: highest_drug_score(x[1]), reverse = True))
+        # Find filtered pockets path
+        pockets_zip_path = os.path.join(output_folder, f"{model_name}/step8_filter_residue_com/filtered_pockets.zip")
 
-    # Write the sorted pockets to a new YAML file 
-    with open(f"{output_folder}/{pockets_summary_filename}_by_drug_score.yml", "w") as f:
-        yaml.dump(sorted_pockets, f, sort_keys = False)
+        # Find pockets list
+        pockets_list = pockets_summary[model_name]["pockets"]
 
-    # Sort the pockets by score
-    sorted_pockets = dict(sorted(pockets_summary.items(), key = lambda x: highest_score(x[1]), reverse = True))
+        # If the model path exists
+        if os.path.exists(model_path):
 
-    # Write the sorted pockets to a new YAML file
-    with open(f"{output_folder}/{pockets_summary_filename}_by_score.yml", "w") as f:
-        yaml.dump(sorted_pockets, f, sort_keys = False)
+            # If the model has pockets
+            if os.path.exists(pockets_zip_path):
+                # Save the model information
+                Models[model_name] = {"model_path": model_path, "pockets_zip_path": pockets_zip_path, "pockets": pockets_list}
+                models_with_pockets += 1
+
+            elif show_all:
+                # Save the model information
+                Models[model_name] = {"model_path": model_path, "pockets_zip_path": None}
     
+    # Log
+    if models_with_pockets == 0:
+        logger.warning("No models with filtered pockets found")
+    else:
+        logger.info(f"Found {models_with_pockets} models with filtered pockets")
+
+    return Models
+
+def find_pockets(Models: dict) -> None:
+    """
+    For each model with a pockets zip file, extract the pockets in their corresponding folder and add the paths to the dictionary.
+
+    E.g. {"model_name": {"model_path": "path/to/model.pdb", "pockets_zip_path": "path/to/filtered_pockets.zip", pockets: ["pocket1", "pocket2"], "pockets_paths": ["path/to/pocket1_vert.pqr", "path/to/pocket2_vert.pqr"]}
+
+    Inputs:
+    -------
+        
+        Models (dict): dictionary with the information of each model
+    """
+
+    # For each model
+    for model_name in Models.keys():
+
+        # Find the pockets zip path
+        pockets_zip_path = Models[model_name]["pockets_zip_path"]
+
+        # Find the pockets list (names of the pockets)
+        pockets_list = Models[model_name]["pockets"]
+
+        # If the pockets zip file is not None
+        if pockets_zip_path is not None:
+
+            # Check the existence of the pockets zip file
+            if not os.path.exists(pockets_zip_path):
+                logger.error(f"Pockets zip file {pockets_zip_path} for model {model_name} does not exist")
+                continue
+
+            # Find the folder where the pockets will be extracted
+            pocket_folder = Path(pockets_zip_path).parent
+
+            # Unzip the pockets
+            with zipfile.ZipFile(pockets_zip_path, 'r') as zip_ref:
+                zip_ref.extractall(pocket_folder)
+
+            # Add list with the paths of the filtered pockets
+            Models[model_name]["pockets_paths"] = [os.path.join(pocket_folder, f"{pocket}_vert.pqr") for pocket in pockets_list]
+
     return
-
-def largest_volume(model: dict):
-    """
-    Function to sort the pockets by volume
-    """
-
-    # Find the largest volume
-    largest_volume = 0
-    for pocket in model["pockets"]:
-        if model[pocket]["volume"] > largest_volume:
-            largest_volume = model[pocket]["volume"]
-
-    return largest_volume
-
-def highest_drug_score(model: dict):
-    """
-    Function to sort the pockets by druggability score
-    """
-
-    # Find the highest druggability score
-    highest_drug_score = 0
-    for pocket in model["pockets"]:
-        if model[pocket]["druggability_score"] > highest_drug_score:
-            highest_drug_score = model[pocket]["druggability_score"]
-
-    return highest_drug_score
-
-def highest_score(model: dict):
-    """
-    Function to sort the pockets by score
-    """
-
-    # Find the highest score
-    highest_score = 0
-    for pocket in model["pockets"]:
-        if model[pocket]["score"] > highest_score:
-            highest_score = model[pocket]["score"]
-
-    return highest_score
 
 #############
 # Constants #
@@ -134,7 +144,7 @@ LOG_FILENAME = "visualize_results.log"
 
 # Set up logging
 # Create logger
-logger = logging.getLogger("PYMOL_POCKETS")
+logger = logging.getLogger("PyMOL_pockets")
 
 # Create file handler
 file_handler = logging.FileHandler(LOG_FILENAME, mode = "w")
@@ -150,236 +160,183 @@ logger.setLevel(logging.INFO)
 # Add file handler to the logger
 logger.addHandler(file_handler)
 
-logger.info("PYMOL_POCKETS")
-logger.info("==============\n")
+logger.info("Cavity analysis visualization with PyMOL")
+logger.info("========================================\n")
 
-##########
-# Inputs #
-##########
+####################
+# Important Inputs #
+####################
 
-# Change to the output folder of the cavity analysis
-#output_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/round3_new/clustering/extended_pocket/states/pocket_analysis_extendedRdown"
-output_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/round0/trajectories/clustering/extended_pocket/states/pocket_analysis_allstate9_vol300_ds3_sc3"
+# Output folder of the cavity analysis workflow
+output_folder = "/home/pnavarro/2023_IT/tests/BiobbWorkflows/Single_protein/Cavity_analysis/output_traj_b"
 
-# Change to the input folder of the cavity analysis or path were the models are stored
-# input_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/round3_new/clustering/extended_pocket/states/input/extended_R_down"
-input_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/round0/trajectories/clustering/extended_pocket/states/input/all_state9"
+# Experimental structures to add to the visualization
+experimental_folder = "/home/pnavarro/2023_ENSEM/P53/Experimental_structures/Reference_structures/prepared"
+
+# Wether to show all the representative structures or just the representative structures with pockets
+show_all = False
+
+# Distance to the pocket to show the atoms explicitly
+licorice_distance_threshold = 6
+
+
+#################
+# Other options #
+#################
 
 # Summary file with all the pockets
-pockets_summary_path = f"{output_folder}/pocket_analysis.yml"
+pockets_summary_path = f"{output_folder}/summary_by_drug_score.yml"
 
-# Experimental structure to compare the models to
-experimental_folder = "/home/nbd-pablo/Documents/2023_ENSEM/P53/Crystals_and_models/prepared"
+# Colors for the experimental structures
 experimental_colors = ["tv_red", "salmon", "orange", "yellow", "tv_green", "cyan", "marine", 
                 "purple", "white", "chocolate", "forest", "magenta", "teal", "deepblue", 
                 "limon", "splitpea", "blue", "gray", "red", "pink" ]
 experimental_colors.extend(experimental_colors)
 
-# Wether to show all the models or just the ones with pockets
-show_all_models = False
-
-# Wether to sort the pockets by volume, druggability score and score or not
-sort_pockets_summary = True
-
-# Distance to the pocket to show the atoms explicitly
-distance_to_pocket = 8
-
-# Color of the models
+# Color of the representative structures
 models_cartoon_color = "white"
 
-# Should be ok by default
-filtered_pockets_folder = "step5_filter_residue_com"
-filtered_pockets_filename = "filtered_pockets.zip"
-
-# Default dictionary with special residues to highlight
+# Dictionary with special residues to highlight, e.g. {"i. 114-124": "cyan"}. See the end of the script for more examples. 
 residues_to_highlight = {
 }
-    
-# Dictionary with special residues to highlight, e.g. {"i. 114-124": "cyan"} 
-#residues_to_highlight = {
-#    "i. 114-124": "cyan",
-#    "i. 125-127": "blue",
-#    "i. 131-136": "magenta",
-#    "i. 139-146": "yellow",
-#    "i. 277-289": "red",
-#    "i. 221-230": "orange",
-#    "i. 231-236": "green"
-# }
 
-# Different version of the dictionary (for simulation structures)
-# residues_to_highlight = {
-#     "i. 21-31": "cyan",
-#     "i. 32-34": "blue", 
-#     "i. 38-43": "magenta",
-#     "i. 46-53": "yellow",
-#     "i. 184-196": "red",
-#     "i. 128-137": "orange",
-#     "i. 138-143": "green"
-# }
+##################
+# Initialization #
+##################
 
-# List pdb files inside the input folder
-model_paths = glob.glob(f"{input_folder}/*.pdb")
+# Check existence of output folder
+if not os.path.exists(output_folder):
+    logger.error(f"Output folder {output_folder} does not exist")
+    sys.exit()
 
-# List directories inside the output folder
-pockets_folders = glob.glob(f"{output_folder}/*/")
+# Check existence of summary file
+if not os.path.exists(pockets_summary_path):
+    logger.error(f"Summary file {pockets_summary_path} does not exist")
+    sys.exit()
 
-# Add filtered pockets folder to each path 
-pockets_folders = [f"{pocket_folder}{filtered_pockets_folder}/" for pocket_folder in pockets_folders]
+# Read summary yaml file as dictionary
+with open(pockets_summary_path, 'r') as file:
+    pockets_summary = yaml.load(file, Loader=yaml.FullLoader)
 
-# Add filtered pockets filename to each path
-filtered_pockets_paths = [f"{pocket_folder}{filtered_pockets_filename}" for pocket_folder in pockets_folders]
+# If pockets summary is empty, exit
+if len(pockets_summary) == 0:
+    logger.error("No pockets found in the summary file")
+    sys.exit()
 
-# Sort pockets
-if sort_pockets_summary:
-    sort_pockets(pockets_summary_path, output_folder)
+# Create dictionary with information per model
+Models = find_models(pockets_summary, output_folder, show_all)
 
-##########################
-# Unzip filtered pockets #
-##########################
-
-# Unzip each filtered pocket inside the corresponding folder
-for filtered_pockets_path in filtered_pockets_paths:
-
-    # Get the folder where the filtered pockets are
-    pocket_folder = Path(filtered_pockets_path).parent
-
-    # If the file exists
-    if os.path.exists(filtered_pockets_path):
-
-        # Unzip the filtered pockets
-        with zipfile.ZipFile(filtered_pockets_path, 'r') as zip_ref:
-            zip_ref.extractall(pocket_folder)
+# Find and extract pockets for each model
+find_pockets(Models)
 
 ###########################
 # Load models and pockets #
 ###########################
 
+# Find all model names
+model_names = list(Models.keys())
+
+# Debug 
+logger.info(f"Models: {model_names}")
+
 # Load the first model as reference
-reference_model = Path(model_paths[0]).stem
-load_model(reference_model, model_paths[0], models_cartoon_color, residues_to_highlight)
+load_model("reference", Models[model_names[0]]["model_path"], "green", residues_to_highlight)
 
-# Load all models and corresponding filtered pockets if any
-for model_path in model_paths:
+for name in model_names:
 
-    # Find model name
-    model_name = Path(model_path).stem
+    # Log 
+    logger.info(f"Loading model {name}")
 
-    # Load all models
-    if show_all_models:
-        load_model(model_name, model_path, models_cartoon_color, residues_to_highlight)
+    # Load the model to be aligned (the one that will be shown in the visualization)
+    load_model(name, Models[name]["model_path"], models_cartoon_color, residues_to_highlight)
 
-    # Create corresponding filtered pockets path
-    filtered_pockets_path = os.path.join(output_folder, f"{model_name}/{filtered_pockets_folder}/")
+    # Align model to reference
+    pymol.cmd.align(name, "reference")
 
-    # Check if the filtered pockets path exists
-    if os.path.exists(filtered_pockets_path):
+    # Load the pockets if any
+    if Models[name].get("pockets_paths") is not None:
 
-        # Find all the pockets inside the filtered pockets path (vertices as pqr files)
-        pocket_paths = glob.glob(f"{filtered_pockets_path}/*.pqr")
+        # Load the model to be used to align pockets (this object will be used temporarily and then deleted)
+        pymol.cmd.load(Models[name]["model_path"], f"{name}_temp")
+        
+        # For each pocket
+        for pocket_name, pocket_path in zip(Models[name]["pockets"], Models[name]["pockets_paths"]):
 
-        # If pockets were found, load them
-        if len(pocket_paths) > 0:
-            
-            # Load only the models with pockets
-            if not show_all_models:
-                load_model(model_name, model_path, models_cartoon_color, residues_to_highlight)
+            ## Load and align the pocket to the reference
 
-            pocket_objects = []
+            # Load the pocket
+            pymol.cmd.load(pocket_path, pocket_name)
 
-            # For each pocket
-            for pocket_path in pocket_paths:
+            # Log 
+            logger.info(f"Loading pocket {pocket_name}")
 
-                # Find pocket name
-                pocket_name = Path(pocket_path).stem
+            # Create a temporal object with the pocket and the temporal model
+            pymol.cmd.copy_to(f"{name}_and_pocket", f"{name}_temp or {pocket_name}")
 
-                # Remove "_vert" from the pocket name
-                pocket_name = pocket_name.replace("_vert", f"_{model_name}")
+            # Delete the original pocket
+            pymol.cmd.delete(pocket_name)
 
-                # Log
-                logger.info(f"Loading {pocket_name}")
-
-                # Save pocket name
-                pocket_objects.append(pocket_name)
-
-                # Load pocket
-                pymol.cmd.load(pocket_path, pocket_name)
-
-                # Log 
-                logger.info(f"Loaded {pocket_path}")
-
-                # Hide licorice representation (hide licorice, pocket_name)
-                pymol.cmd.hide("licorice", pocket_name)
-
-                # Color pocket by atom type using util.cbag
-                pymol.cmd.util.cbac(pocket_name)
-
-                # Show mesh representation (show mesh, pocket_name)
-                pymol.cmd.show("mesh", pocket_name)
-
-                # Show licorice representation of the atoms close to the pocket (show licorice, (all within 5 of pocket_name) and not pocket_name)
-                pymol.cmd.show("licorice", f"({model_name} within {distance_to_pocket} of {pocket_name}) and not {pocket_name}")
-
-                # Color the side-chain atoms close to the pocket by atom type using util.cbac
-                pymol.cmd.util.cbaw(f"({model_name} within {distance_to_pocket} of {pocket_name}) and not {pocket_name}")
-            
-            # Copy the last pocket into temporal new object before aligning to reference model
-            pymol.cmd.copy_to(f"{model_name}_and_pockets", f"{model_name} or {pocket_objects[-1]}")
-
-            # Delete the original objects
-            pymol.cmd.delete(pocket_objects[-1])
-            pymol.cmd.delete(model_name)
-            
             # Align temporal object to reference 
-            if model_name != reference_model:
-                pymol.cmd.align(f"{model_name}_and_pockets", reference_model)
+            pymol.cmd.align(f"{name}_and_pocket", "reference")
 
-            # Extract the pocket  
-            pymol.cmd.extract(f"{pocket_objects[-1]}", f"{model_name}_and_pockets and resname STP")
+            # Name for the aligned pocket 
+            aligned_pocket = f"{pocket_name}_{name}"
 
-            # Extract the model
-            pymol.cmd.extract(f"{model_name}", f"{model_name}_and_pockets and not resname STP")
+            # Extract the pocket from the temporal object
+            pymol.cmd.extract(aligned_pocket,  f"{name}_and_pocket and resname STP")
 
-            # Delete temporal object
-            pymol.cmd.delete(f"{model_name}_and_pockets")
+            # Delete the temporal object
+            pymol.cmd.delete(f"{name}_and_pocket")
 
-            # Group model and pockets together
-            pymol.cmd.group(f"{model_name}_group", f"{model_name} {' '.join(pocket_objects)}")
+            ## Configure the visualization of the pocket and its surroundings
 
-        else:
-            logger.info(f"No pockets found for {model_name}")
+            # Hide licorice representation
+            pymol.cmd.hide("licorice", aligned_pocket)
 
-            # If we are showing all models, align it to the reference
-            if show_all_models and model_name != reference_model:
-                pymol.cmd.align(model_name, reference_model)
-    else:
-        logger.info(f"No {filtered_pockets_folder} folder found for {model_name}")
+            # Color pocket by atom type using util.cbag
+            pymol.cmd.util.cbag(aligned_pocket)
 
-        # If we are showing all models, align it to the reference
-        if show_all_models and model_name != reference_model:
-            pymol.cmd.align(model_name, reference_model)
+            # Show mesh representation
+            pymol.cmd.show("mesh", aligned_pocket)
 
+            # Show licorice representation of the atoms close to the pocket (show licorice, (all within 5 of pocket_name) and not pocket_name)
+            pymol.cmd.show("licorice", f"({name} within {licorice_distance_threshold} of {aligned_pocket}) and not {aligned_pocket}")
+
+            # Color the side-chain atoms close to the pocket by atom type using util.cbac
+            pymol.cmd.util.cbaw(f"({name} within {licorice_distance_threshold} of {aligned_pocket}) and not {aligned_pocket}")
+
+        # Delete the temporal model
+        pymol.cmd.delete(f"{name}_temp")
+
+        # List all the aligned pockets for this model
+        aligned_pockets = [f"{pocket_name}_{name}" for pocket_name in Models[name]["pockets"]]
+
+        # Group model and pockets
+        pymol.cmd.group(f"{name}_group", f"{name} {'or'.join(aligned_pockets)}")
 
 #################################
 # Load experimental structures  #
 #################################
 
-# Find the experimental paths
-experimental_paths = sorted(glob.glob(f"{experimental_folder}/*.pdb"))
+if experimental_folder is not None:
 
-# Load experimental structures
-for model_index, model_path in enumerate(experimental_paths):
+    # Find the experimental paths
+    experimental_paths = sorted(glob.glob(f"{experimental_folder}/*.pdb"))
 
-    # Find model name
-    model_name = Path(model_path).stem
+    # Load experimental structures
+    for model_index, model_path in enumerate(experimental_paths):
 
-    # Load model
-    pymol.cmd.load(model_path, model_name)
+        # Find model name
+        model_name = Path(model_path).stem
 
-    # Align to the reference structure. NOTE: "and not {flexible_loop_selection} and name CA"
-    result = pymol.cmd.align(model_name , reference_model, cycles = 20)
+        # Load model
+        pymol.cmd.load(model_path, model_name)
 
-    # Set a random color to the model
-    pymol.cmd.color(experimental_colors[model_index], model_name)
+        # Align to the reference structure
+        result = pymol.cmd.align(model_name, "reference", cycles = 20)
+
+        # Set a random color to the model
+        pymol.cmd.color(experimental_colors[model_index], model_name)
 
 
 #####################
@@ -390,7 +347,33 @@ for model_index, model_path in enumerate(experimental_paths):
 pymol.cmd.hide("licorice", "hydrogens")
 
 # Hide reference model
-pymol.cmd.hide("everything", reference_model)
+pymol.cmd.hide("everything", "reference")
 
 # Set min_mesh_spacing to 0.4
 pymol.cmd.set("min_mesh_spacing", 0.4)
+
+#########
+# Notes #
+#########
+
+# Example of residues_to_highlight dictionary:
+
+#residues_to_highlight = {
+#    "i. 114-124": "cyan",
+#    "i. 125-127": "blue",
+#    "i. 131-136": "magenta",
+#    "i. 139-146": "yellow",
+#    "i. 277-289": "red",
+#    "i. 221-230": "orange",
+#    "i. 231-236": "green"
+# }
+
+# residues_to_highlight = {
+#     "i. 21-31": "cyan",
+#     "i. 32-34": "blue", 
+#     "i. 38-43": "magenta",
+#     "i. 46-53": "yellow",
+#     "i. 184-196": "red",
+#     "i. 128-137": "orange",
+#     "i. 138-143": "green"
+# }
