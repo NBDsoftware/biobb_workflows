@@ -11,15 +11,6 @@ conda env create -f environment.yml
 conda activate single_protein_wf3
 ```
 
-See different options for the worklow and modify any if needed:
-
-```bash
-vi input.yml
-python biobb_docking_htvs.py --help
-```
-
-Specially important are: the input files, the selection of the cavity or residue defining the pocket, the box size around the residue selection or cavity, the number of top ligands to show in the final summary and the settings for Autodock Vina (cpus and exhaustiveness). Make sure the binary path specified and the module loaded in the run file agree between them.
-
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in input.yml.
 
 To run in an HPC environment adapt the run_HPC.sl script and send a job to the slurm queue:
@@ -28,11 +19,33 @@ To run in an HPC environment adapt the run_HPC.sl script and send a job to the s
 sbatch run_HPC.sl
 ```
 
-The output will be generated in the "working_dir_path" folder selected in the corresponding YAML input. The global log files will be in "/working_dir_path/log.out" and "/working_dir_path/log.err". Each step will have its own log files and output in a separate folder inside "/working_dir_path".
+By default, the output will be generated in the "working_dir_path" folder selected in the YAML configuration file. However, the "--output" command line option will overwrite "working_dir_path". The global log files will be in "output/log.out" and "output/log.err". Each step will have its own log files and output in a separate folder inside the output folder.
+
+## Inputs
+
+### Configuration file
+
+Take a look at the YAML configuration file to see the different properties that can be set.
+
+```bash
+vi input.yml
+```
+
+Specially important are: the selection of the cavity or residue defining the pocket, the box size around the residue selection or cavity, the number of top ligands to show in the final summary and the settings for Autodock Vina (cpus and exhaustiveness). Make sure the binary path specified and the module loaded in the run file agree between them.
+
+### Command line arguments
+
+The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
+
+```bash
+python biobb_docking_htvs.py --help
+```
+
+Specially important are: the configuration file path, the path to the ligand library (SMILES format), the path to the target structure (pdb format), the output path, the number of top ligands to keep in the final summary, the flag to keep the poses of the best ligands and the flag to dock to a box created around a residue selection instead of a pocket found with Fpocket (a zip file containing pockets from an Fpocket analysis). 
 
 ## Description
 
-This workflow has several steps. The input for the workflow is a zip file containing pockets (from an Fpocket analysis), a pdb structure of the target and a library of ligands in SMILES format. Paths can be provided through the YAML configuration file or through the command line arguments. The YAML configuration file will contain the default settings and paths of the workflow. The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
+This workflow has several steps. The input for the workflow is a ligand library in SMILES format, a target structure in pdb format and either a pocket from an Fpocket analysis or a selection of residues. The workflow will dock the ligands to the target structure and rank them according to their affinity.
 
 - **Step 1**: selection of cavity that will be used to dock the ligands. Autodock will use a box created surrounding either: a pocket from an input zip file (see cavity analysis workflow) or a selection of residues. Make sure the selected pocket or residues exist in the input files. 
 

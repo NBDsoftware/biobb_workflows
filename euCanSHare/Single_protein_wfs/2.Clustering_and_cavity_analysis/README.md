@@ -11,17 +11,6 @@ conda env create -f environment.yml
 conda activate biobb_sp_cavity_analysis
 ```
 
-To install it in an HPC environment, do the same after loading the corresponding Conda or Miniconda module.
-
-See different options for the worklow and modify any if needed:
-
-```bash
-vi input.yml
-python biobb_clustering_cavity_analysis.py --help
-```
-
-Specially important are: the input files, the definition of the rmsd group and the filtering settings in the last two steps. If a trajectory file is given as input, also take a look to the total number of most pupulated clusters to analyze and the path to the GROMACS binary file in the global properties of the configuration file. Make sure the binary path specified and the module loaded in the run file agree between them.
-
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
 
 To run in an HPC environment adapt the run_HPC.sl and input_HPC.yml scripts and send a job to the slurm queue:
@@ -30,40 +19,61 @@ To run in an HPC environment adapt the run_HPC.sl and input_HPC.yml scripts and 
 sbatch run_HPC.sl
 ```
 
-To run locally, modify run_local.sh and input_local.yml if needed:
+By default, the output will be generated in the "working_dir_path" folder selected in the YAML configuration file. However, the "--output" command line option will overwrite "working_dir_path". The global log files will be in "output/log.out" and "output/log.err". Each step will have its own log files and output in a separate folder inside the output folder.
+
+## Inputs
+
+### Configuration file
+
+Take a look at the YAML configuration file to see the different properties that can be set.
 
 ```bash
-./run_local.sh
+vi input_HPC.yml
+```
+Specially important are: the filtering settings in the last two steps. If a trajectory file is given as input, also take a look to the total number of most populated clusters to analyze, the definition of the rmsd group to do the clustering and the path to the GROMACS binary file in the global properties of the configuration file. Make sure the binary path specified and the module loaded in the run file agree between them. If the "--prepare_traj" flag is used, take a look at the selection group definition to trim the trajectory and the start, end and dt values to sub-sample the trajectory if needed.
+
+### Command line arguments
+
+The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
+
+```bash
+python biobb_clustering_cavity_analysis.py --help
 ```
 
-The output will be generatedin the "working_dir_path" folder selected in the corresponding YAML input. The global log files will be in "/working_dir_path/log.out" and "/working_dir_path/log.err". Each successful step will have its log files and output in a separate folder inside "/working_dir_path".
+Specially important are: the configuration file path, the path to the external clustering results with representative structures in pdb format or the path to the trajectory and topology files. The trajectory file can be in any Amber or Gromacs compatible format  (xtc, trr, cpt, gro, g96, pdb or tng). The topology file should be a pdb file if the trajectory is in Amber format (mdcrd, crd, cdf, netcdf, restart, ncrestart, dcd, charmm, cor, mol2, trr, binpos, xtc, cif, arc, sqm, sdf, conflib) or any Gromacs-compatible format (tpr, gro, g96, pdb or brk) if the trajectory is in a Gromacs format.
 
 ## Description
 
-This workflow has several steps. The input for the workflow can be either (1) a trajectory and topology or (2) a path to a folder containing representative structures in pdb format from an external clustering. In the former case the workflow will cluster the trajectory to find representative structures (steps 0-2), in the later case the workflow will directly use the representative structures for the cavity analysis and filtering (steps 3-4). The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
+This workflow has several steps. The input for the workflow can be either (1) a trajectory and topology or (2) a folder containing representative structures from an external clustering. In the former case the workflow will cluster the trajectory to find representative structures, in the later case the workflow will directly use the representative structures for the cavity analysis and filtering.
 
-**Step 0 (A-C)**: Creation of index files that define groups of atoms used during the clustering step.
+- **Step 0 **: Conversion of trajectory from Amber to Gromacs xtc format. This step is only activated if the "--prepare_traj" flag is used and the provided trajectory is in Amber format.
 
-- **Step 0A**: Create initial index file with standard groups from structure file (e.g. System, Protein, Protein-H, C-alpha, Backbone, MainChain...).
+- **Step 1 (A-B)**: Creation of index file that will be used to select some atoms from the trajectory. This step can be used to delete waters, ions or any exotic atom from the trajectory. As the subsequent clutering step using gmx cluster might give problems when dealing with these. The step is only activated if the "--prepare_traj" flag is used.
 
-- **Step 0B**: Addition of 'RmsdGroup'. Corresponds to the group of atoms that will be used to fit the trajectory (unless -nofit option is used - see biobb docs for gmx_cluster) and to do the calculation of the RMSD. Check the documentation of gmx select to see all the possible atom selections. Some examples: 
+- **Step 2 (A-B)**: Extraction of selected atoms from both the trajectory and the topology. This step is only activated if the "--prepare_traj" flag is used.
+
+- **Step 3 (A-C)**: Creation of index files that define groups of atoms used during the clustering step.
+
+- **Step 3A**: Create initial index file with standard groups from structure file (e.g. System, Protein, Protein-H, C-alpha, Backbone, MainChain...).
+
+- **Step 3B**: Addition of 'RmsdGroup'. Corresponds to the group of atoms that will be used to fit the trajectory (unless -nofit option is used - see biobb docs for gmx_cluster) and to do the calculation of the RMSD. Check the documentation of gmx select to see all the possible atom selections. Some examples: 
 
     - Centers of mass of residues 1 to 5 and 10: "res_com of resnr 1 to 5 10"
     - All atoms of a residue LIG within 0.5 nm of a protein (with a custom name): '"Close to protein" resname LIG and within 0.5 of group "Protein"'
     - All protein residues that have at least one atom within 0.5 nm of a residue
   LIG: "group "Protein" and same residue as within 0.5 of resname LIG"
 
-- **Step 0C**: Addition of 'OutputGroup' corresponds to atoms that will be included in the output representative structures. Check the documentation of gmx select to see all the possible atom selections.
+- **Step 3C**: Addition of 'OutputGroup' corresponds to atoms that will be included in the output representative structures. Check the documentation of gmx select to see all the possible atom selections.
 
-- **Step 1**: Clustering of the trajectory. A trajectory (accepted formats: xtc, trr, cpt, gro, g96, pdb or tng) and a topology (accepted formats: tpr, gro, g96, pdb or brk) are read.
+- **Step 4**: Clustering of the trajectory.
 
-- **Step 2**: From the pdb file with all the centroids the most populated ones are extracted. The number of extracted centroids is defined in the num_clusters keyword of the YAML configuration file.
+- **Step 5**: From the pdb file with all the centroids the most populated ones are extracted. The number of extracted centroids is defined in the num_clusters keyword of the YAML configuration file.
 
-- **Step 3**: Cavity analysis of the centroid structures using Fpocket.
+- **Step 6**: Cavity analysis of the centroid structures using Fpocket.
 
-- **Step 4**: Filtering of the cavities found according to the criteria defined in the properties of this step. This includes filtering according to minimum and maximum values for the score, druggability score and volume of the pocket.
+- **Step 7**: Filtering of the cavities found according to the criteria defined in the properties of this step. This includes filtering according to minimum and maximum values for the score, druggability score and volume of the pocket.
 
-- **Step 5**: Filtering of the cavities according to the distance from their centers of mass to the center of mass of a selection defined in the properties of this step. The center of mass of a pocket is computed using the corresponding pqr file from Fpocket.
+- **Step 8**: Filtering of the cavities according to the distance from their centers of mass to the center of mass of a selection defined in the properties of this step. The center of mass of a pocket is computed using the corresponding pqr file from Fpocket.
 
 Note that re-launching the workflow will skip the previously successful steps if restart is True and the output folder is the same. 
 

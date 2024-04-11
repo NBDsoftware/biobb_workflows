@@ -12,17 +12,6 @@ conda env create -f environment.yml
 conda activate biobb_sp_md
 ```
 
-To install it in an HPC environment, do the same after loading the corresponding Conda or Miniconda module.
-
-See different options for the worklow and modify any if needed:
-
-```bash
-vi input_HPC.yml
-python biobb_md_setup_mutation.py --help
-```
-
-Specially important are: the binary path of GROMACS, the input files and the MODELLER key. Make sure the binary path specified and the module loaded in the run file agree between them.
-
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
 
 To run in an HPC environment adapt the run_HPC.sl and input_HPC.yml scripts and send a job to the slurm queue:
@@ -31,23 +20,39 @@ To run in an HPC environment adapt the run_HPC.sl and input_HPC.yml scripts and 
 sbatch run_HPC.sl
 ```
 
-To run locally, modify run_local.sh and input_local.yml if needed:
+By default, the output will be generated in the "working_dir_path" folder selected in the YAML configuration file. However, the "--output" command line option will overwrite "working_dir_path". The global log files will be in "output/log.out" and "output/log.err". Each step will have its own log files and output in a separate folder inside the output folder.
+
+## Inputs
+
+### Configuration file
+
+Take a look at the YAML configuration file to see the different properties that can be set.
 
 ```bash
-./run_local.sh
+vi input_HPC.yml
 ```
 
-The output will be generated in the "working_dir_path" folder selected in the corresponding YAML input. The global log files will be in "/working_dir_path/log.out" and "/working_dir_path/log.err". Each step will have its own log files and output in a separate folder inside "/working_dir_path".
+Specially important are: the binary path of GROMACS, the input files and the MODELLER key. Make sure the binary path specified and the module loaded in the run file (HPC only) agree between them.
+
+### Command line arguments
+
+The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
+
+```bash
+python biobb_md_setup_mutation.py --help
+```
+
+Specially important are: the configuration file path, the input pdb file or the input topology (.zip) and coordinates file (.gro), the number of trajectories to launch and the output path.
 
 ## Description
 
-This workflow has several steps. The **input** for the workflow can be (1) a pdb file to be fixed and prepared in steps 1-3 (given through the YAML configuration file or the command line arguments). Or (2) an already prepared gromacs structure file and .zip topology files ready to be minimized (given through command line arguments). The YAML configuration file will contain the **default settings and paths** of the workflow. The **command line arguments** can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
+This workflow has several steps. The input for the workflow can be (1) a pdb file to be fixed and prepared. Or (2) an already prepared gromacs structure file and .zip topology files ready to be minimized.
 
 - **Step 1**: extraction of structure from PDB. Provide the input pdb file and chain to be extracted through the command line arguments of the workflow or through the paths and properties of step 1 section in the YAML configuration file. The workflow will always prioritize the inputs from command line arguments.
 
 **Steps 2 (A-I)**: steps to fix different possible defects in the input pdb structure. See below.
 
-- **Step 2A**: fix alternative locations. Choose one of the possible alternative positions of residues presenting alternative locations. To avoid this step, comment the 'altlocs' property.
+- **Step 2A**: fix alternative locations. Provide a list with the choices of alternative locations to keep in the final structure.
 
 - **Step 2B**: mutations of initial pdb structure. Mutations can be requested through the mutation_list property of the YAML configuration file as a single string of mutations separated by commas (no spaces). Where each mutation is defined by string with the following format: "Chain:Wild_type_residue_name Residue_number Mutated_type_residue_name". The residue name should be a 3 letter code starting with capital letters, e.g. "A:Arg220Ala". Alternatively, they can be given through the mutation_list command line argument. If no mutation is desired leave an empty string ("") or comment the mutation_list property.
 
