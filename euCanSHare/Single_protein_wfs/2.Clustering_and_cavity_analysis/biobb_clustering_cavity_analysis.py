@@ -19,6 +19,7 @@ import MDAnalysis as mda
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
+
 from biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_gromacs.gromacs.gmxselect import gmxselect
 from biobb_analysis.gromacs.gmx_cluster import gmx_cluster
@@ -76,7 +77,7 @@ def get_clusters_population(log_path: str, output_path: str, global_log) -> list
     in descending order and writes the sorted list to a JSON file in the output folder.
 
     Inputs
-    -------
+    ------
 
         log_path          : path to log file of clustering step
         output_path       : path to the output folder where the JSON file will be saved
@@ -706,15 +707,15 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, prepare_tr
             cluster_paths['step6_cavity_analysis']['input_pdb_path'] = pdb_paths[cluster_index]
             cluster_paths['step8_filter_residue_com']['input_pdb_path'] = pdb_paths[cluster_index]
         
-        # STEP 3: Cavity analysis
+        # STEP 6: Cavity analysis
         global_log.info("step6_cavity_analysis: Compute protein cavities using fpocket")
         fpocket_run(**cluster_paths['step6_cavity_analysis'], properties=cluster_prop["step6_cavity_analysis"])
 
-        # STEP 4: Filtering cavities
+        # STEP 7: Filtering cavities
         global_log.info("step7_filter_cavities: Filter found cavities")
         fpocket_filter(**cluster_paths['step7_filter_cavities'], properties=cluster_prop["step7_filter_cavities"])
 
-        # STEP 5: Filter by pocket center of mass 
+        # STEP 8: Filter by pocket center of mass 
         global_log.info("step8_filter_residue_com: Filter cavities by center of mass distance to a group of residues") 
         filtered_pockets_IDs = filter_residue_com(**cluster_paths['step8_filter_residue_com'], properties=cluster_prop["step8_filter_residue_com"], global_log=global_log)
 
