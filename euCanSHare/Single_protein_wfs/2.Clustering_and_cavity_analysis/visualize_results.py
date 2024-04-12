@@ -7,6 +7,7 @@ import sys
 import pymol 
 import glob
 import yaml
+import json
 import zipfile
 import logging
 from pathlib import Path
@@ -135,6 +136,43 @@ def find_pockets(Models: dict) -> None:
 
     return
 
+def find_populations(Models: dict) -> None:
+    """
+    For each model find the corresponding population in output folder and add the value to the dictionary.
+
+    Inputs:
+    -------
+        
+        Models (dict): dictionary with the information of each model
+    """
+
+    # Path to file with population per cluster
+    populations_path = os.path.join(output_folder, "step4_gmx_cluster", "clusters.json")
+
+    # Check existence of populations file
+    if not os.path.exists(populations_path):
+        logger.error(f"Populations file {populations_path} does not exist")
+        return False
+    
+    # Read populations file
+    with open(populations_path, 'r') as file:
+        populations = json.load(file)
+
+    # Find the sum of all populations
+    total_population = sum([cluster_dict["population"] for cluster_dict in populations])
+
+    # For each model
+    for model_name in Models.keys():
+
+        # Find its dictionary
+        for cluster_dict in populations:
+            if str(cluster_dict["cluster"]) == str(model_name):
+                # Add the normalized population to the dictionary
+                Models[model_name]["population"] = cluster_dict["population"]/total_population
+                break
+    
+    return True
+
 #############
 # Constants #
 #############
@@ -171,7 +209,7 @@ logger.info("========================================\n")
 output_folder = "/home/pnavarro/2023_IT/tests/BiobbWorkflows/Single_protein/Cavity_analysis/output_traj_b"
 
 # Experimental structures to add to the visualization
-experimental_folder = "/home/pnavarro/2023_ENSEM/P53/Experimental_structures/Reference_structures/prepared"
+experimental_folder = None # "/home/pnavarro/2023_ENSEM/P53/Experimental_structures/Reference_structures/prepared"
 
 # Wether to show all the representative structures or just the representative structures with pockets
 show_all = False
@@ -229,12 +267,22 @@ Models = find_models(pockets_summary, output_folder, show_all)
 # Find and extract pockets for each model
 find_pockets(Models)
 
+# Find and extract populations for each model
+populations_available = find_populations(Models)
+
 ###########################
 # Load models and pockets #
 ###########################
 
-# Find all model names
+# Find all model names 
 model_names = list(Models.keys())
+
+if populations_available:
+    # Find their populations
+    populations = [Models[model_name].get("population", 0) for model_name in model_names]
+
+    # Order models by descending population
+    model_names = [model_name for _, model_name in sorted(zip(populations, model_names), reverse = True)]
 
 # Debug 
 logger.info(f"Models: {model_names}")
@@ -311,8 +359,14 @@ for name in model_names:
         # List all the aligned pockets for this model
         aligned_pockets = [f"{pocket_name}_{name}" for pocket_name in Models[name]["pockets"]]
 
+        # Create a name for the group
+        if populations_available:
+            group_name = f"{name}_pop_{round(Models[name]['population'],3)}"
+        else:
+            group_name = f"{name}_group"
+        
         # Group model and pockets
-        pymol.cmd.group(f"{name}_group", f"{name} or {' or '.join(aligned_pockets)}")
+        pymol.cmd.group(group_name, f"{name} or {' or '.join(aligned_pockets)}")
 
 #################################
 # Load experimental structures  #
