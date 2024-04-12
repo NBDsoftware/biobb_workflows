@@ -312,7 +312,7 @@ for name in model_names:
         aligned_pockets = [f"{pocket_name}_{name}" for pocket_name in Models[name]["pockets"]]
 
         # Group model and pockets
-        pymol.cmd.group(f"{name}_group", f"{name} {'or'.join(aligned_pockets)}")
+        pymol.cmd.group(f"{name}_group", f"{name} or {' or '.join(aligned_pockets)}")
 
 #################################
 # Load experimental structures  #
