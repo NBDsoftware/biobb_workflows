@@ -531,7 +531,7 @@ def check_arguments(global_log, traj_path, top_path, clustering_path):
         raise SystemExit
 
 
-def main_wf(configuration_path, traj_path, top_path, clustering_path, prepare_traj, output_path):
+def main_wf(configuration_path, traj_path, top_path, clustering_path, prepare_traj, filtering_selection, output_path):
     '''
     Main clustering and cavity analysis workflow. This workflow clusters a given trajectory and analyzes the cavities of the most representative
     structures. Then filters the cavities according to a pre-defined criteria and outputs the pockets that passed the filter.
@@ -539,12 +539,13 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, prepare_tr
     Inputs
     ------
 
-        configuration_path  (str): path to YAML configuration file
-        traj_path           (str): (Optional) path to trajectory file
-        top_path            (str): (Optional) path to topology file
-        clustering_path     (str): (Optional) path to the folder with the most representative structures in pdb format from an external clustering 
+        configuration_path   (str): path to YAML configuration file
+        traj_path            (str): (Optional) path to trajectory file
+        top_path             (str): (Optional) path to topology file
+        clustering_path      (str): (Optional) path to the folder with the most representative structures in pdb format from an external clustering 
         prepare_traj        (bool): (Optional) flag to prepare the trajectory for clustering
-        output_path         (str): (Optional) path to output folder
+        filtering_selection  (str): (Optional) residue selection to filter pockets by distance to center of mass
+        output_path          (str): (Optional) path to output folder
 
     Outputs
     -------
@@ -697,6 +698,10 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, prepare_tr
         cluster_prop = conf.get_prop_dic(prefix=cluster_name)
         cluster_paths = conf.get_paths_dic(prefix=cluster_name)
 
+        # Enforce filtering selection
+        if filtering_selection is not None:
+            cluster_prop['step8_filter_residue_com']['residue_selection'] = filtering_selection 
+            
         # If clustering was done here, extract the model from the clustering results
         if clustering_path is None:
 
@@ -774,6 +779,10 @@ if __name__ == '__main__':
                         help="Prepare trajectory for clustering (activate if you need to delete atoms or you don't have a gromacs compatible trajectory file)",
                         required=False)
 
+    parser.add_argument('--filtering_selection', dest='filtering_selection',
+                        help="Residue selection to filter pockets by distance to center of mass",
+                        required=False)
+    
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
@@ -785,4 +794,5 @@ if __name__ == '__main__':
             top_path = args.top_path,
             clustering_path = args.clustering_path,
             prepare_traj = args.prepare_traj,
+            filtering_selection = args.filtering_selection,
             output_path = args.output_path)
