@@ -235,6 +235,9 @@ models_cartoon_color = "white"
 residues_to_highlight = {
 }
 
+# Background color
+background_color = "white"
+
 ##################
 # Initialization #
 ##################
@@ -402,6 +405,9 @@ pymol.cmd.hide("everything", "reference")
 
 # Set min_mesh_spacing to 0.4
 pymol.cmd.set("min_mesh_spacing", 0.4)
+
+# Set background color
+pymol.cmd.bg_color(background_color)
 
 #########
 # Notes #
