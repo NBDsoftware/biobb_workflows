@@ -1,6 +1,4 @@
-# Script to visualize the ensembles:
-#   1. The centroid of each ensemble with the RMSF 
-#   2. The trajectory of each ensemble aligned to the centroid
+# Script to visualize the results from the cavity analysis workflow using PyMOL
 
 import os
 import sys
@@ -178,7 +176,7 @@ def find_populations(Models: dict) -> None:
 #############
 
 # Define constants
-LOG_FILENAME = "visualize_results.log"
+LOG_FILENAME = "pymol_cavity_analysis.log"
 
 # Set up logging
 # Create logger
@@ -216,7 +214,6 @@ show_all = False
 
 # Distance to the pocket to show the atoms explicitly
 licorice_distance_threshold = 6
-
 
 #################
 # Other options #
