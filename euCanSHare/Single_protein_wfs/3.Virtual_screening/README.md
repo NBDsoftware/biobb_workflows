@@ -47,7 +47,7 @@ Specially important are: the configuration file path, the path to the ligand lib
 
 This workflow has several steps. The input for the workflow is a ligand library in SMILES format, a target structure in pdb format and either a pocket from an Fpocket analysis or a selection of residues. The workflow will dock the ligands to the target structure and rank them according to their affinity.
 
-- **Step 1**: selection of cavity that will be used to dock the ligands. Autodock will use a box created surrounding either: a pocket from an input zip file (see cavity analysis workflow) or a selection of residues. Make sure the selected pocket or residues exist in the input files. 
+- **Step 1**: selection of cavity that will be used to dock the ligands. Autodock will use a box created surrounding either: a pocket from an input zip file (see cavity analysis workflow) or a selection of residues. Make sure the selected pocket or residues exist in the input files. By default the pocket is used to create the box. To use a residue selection instead add the --dock_to_residues flag in the command line call to the workflow.
 
 - **Step 2**: creation of box surrounding the selected cavity or residues.
 

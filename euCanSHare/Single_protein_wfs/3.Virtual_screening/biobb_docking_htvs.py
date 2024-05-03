@@ -560,7 +560,7 @@ if __name__ == '__main__':
                         required=False)
 
     parser.add_argument('--dock_to_residues', dest='dock_to_residues', action='store_true',
-                        help="Dock to residues instead of cavity. Define the docking box using a set of residues instead of a pocket. (default: False)",
+                        help="Dock to residues instead of pocket. Define the docking box using a set of residues instead of a pocket. (default: False)",
                         required=False)
     
     parser.add_argument('--cpus', dest='cpus', type=int, 

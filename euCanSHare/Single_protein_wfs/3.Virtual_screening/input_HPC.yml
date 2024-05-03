@@ -11,19 +11,19 @@ remove_tmp: True
 step1_fpocket_select:
   tool: fpocket_select
   paths:
-    input_pockets_zip: /path/to/input_pockets.zip      # CHANGE
+    input_pockets_zip: /path/to/input_pockets.zip       # change (also from command line)
     output_pocket_pdb: fpocket_cavity.pdb
     output_pocket_pqr: fpocket_pocket.pqr
   properties:
-    pocket: 1
+    pocket: 1                                           # change (also from command line)
 
 step1b_extract_residues:
   tool: extract_residues
   paths:
-    input_structure_path: /path/to/input_structure.pdb # CHANGE
+    input_structure_path: /path/to/input_structure.pdb  # change (also from command line) 
     output_residues_path: pocket_residues.pdb
   properties:
-    residues: [4,5,6]
+    residues: [4,5,6]                                   # change 
 
 step2_box:
   tool: box
@@ -31,17 +31,17 @@ step2_box:
     input_pdb_path: dependency/step1_fpocket_select/output_pocket_pqr
     output_pdb_path: box.pdb 
   properties:
-    offset: 12                                  
+    offset: 12                                         # change - Extra distance (Angstroms) between the last residue atom and the box boundary
     box_coordinates: True
 
 step3_str_check_add_hydrogens:
   tool: str_check_add_hydrogens
   paths:
-    input_structure_path: /path/to/input_structure.pdb     # CHANGE
+    input_structure_path: /path/to/input_structure.pdb  # change (also from command line)
     output_structure_path: prep_receptor.pdbqt
   properties:
     charges: False
-    mode: auto # or null to avoid                      
+    mode: null                                          # change - auto, list, ph or null to avoid adding any Hs                      
 
 # Section 2: Source each ligand and dock it to receptor
 
@@ -65,12 +65,12 @@ step5_autodock_vina_run:
     output_pdbqt_path: output_vina.pdbqt
     output_log_path: output_vina.log
   properties:
-    exhaustiveness: 8
-    cpu: 1
+    exhaustiveness: 8                                    # change - 4: to optimize speed, 8: to optimize accuracy
+    cpu: 1                                               # change - number of CPUs to use for each docking
 
 step6_top_ligands:
   properties:
-    num_top_ligands: 50                                     
+    num_top_ligands: 50                                  # change - number of top ligand scores to keep in the final summary    
 
 step7_babel_prepare_pose:
   tool: babel_convert
