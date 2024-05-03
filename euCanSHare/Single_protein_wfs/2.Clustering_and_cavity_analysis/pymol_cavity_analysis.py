@@ -1,6 +1,4 @@
-# Script to visualize the ensembles:
-#   1. The centroid of each ensemble with the RMSF 
-#   2. The trajectory of each ensemble aligned to the centroid
+# Script to visualize the results from the cavity analysis workflow using PyMOL
 
 import os
 import sys
@@ -178,7 +176,7 @@ def find_populations(Models: dict) -> None:
 #############
 
 # Define constants
-LOG_FILENAME = "visualize_results.log"
+LOG_FILENAME = "pymol_cavity_analysis.log"
 
 # Set up logging
 # Create logger
@@ -217,7 +215,6 @@ show_all = False
 # Distance to the pocket to show the atoms explicitly
 licorice_distance_threshold = 6
 
-
 #################
 # Other options #
 #################
@@ -237,6 +234,9 @@ models_cartoon_color = "white"
 # Dictionary with special residues to highlight, e.g. {"i. 114-124": "cyan"}. See the end of the script for more examples. 
 residues_to_highlight = {
 }
+
+# Background color
+background_color = "white"
 
 ##################
 # Initialization #
@@ -405,6 +405,9 @@ pymol.cmd.hide("everything", "reference")
 
 # Set min_mesh_spacing to 0.4
 pymol.cmd.set("min_mesh_spacing", 0.4)
+
+# Set background color
+pymol.cmd.bg_color(background_color)
 
 #########
 # Notes #
