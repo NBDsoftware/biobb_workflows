@@ -15,6 +15,7 @@ from biobb_vs.utils.box import box
 from biobb_vs.fpocket.fpocket_select import fpocket_select
 from biobb_vs.vina.autodock_vina_run import autodock_vina_run
 from biobb_chemistry.babelm.babel_convert import babel_convert
+from biobb_chemistry.babelm.babel_add_hydrogens import babel_add_hydrogens
 from biobb_structure_utils.utils.str_check_add_hydrogens import str_check_add_hydrogens
 from biobb_structure_utils.utils.extract_residues import extract_residues
 
@@ -434,10 +435,10 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
         # Write smiles to file
         write_smiles(smiles = smiles, smiles_path = ligand_paths['step4_babel_prepare_lig']['input_path'])
 
-        # STEP 4: Convert from smiles to pdbqt
+        # STEP 4: Convert from smiles to pdbqt adding hydrogens
         global_log.info("step4_babel_prepare_lig: Prepare ligand for docking")
         try:
-            babel_convert(**ligand_paths['step4_babel_prepare_lig'], properties = ligand_prop["step4_babel_prepare_lig"])
+            babel_add_hydrogens(**ligand_paths['step4_babel_prepare_lig'], properties = ligand_prop["step4_babel_prepare_lig"])
             lastStep_successful = validate_step(ligand_paths['step4_babel_prepare_lig']['output_path'])
         except:
             global_log.info(f"step4_babel_prepare_lig: Open Babel failed to convert ligand {name} to pdbqt format")

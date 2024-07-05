@@ -46,7 +46,7 @@ step3_str_check_add_hydrogens:
 # Section 2: Source each ligand and dock it to receptor
 
 step4_babel_prepare_lig:
-  tool: babel_convert
+  tool: babel_add_hydrogens
   paths:
     input_path: ligand.smi
     output_path: ligand.pdbqt
@@ -54,7 +54,7 @@ step4_babel_prepare_lig:
     input_format: smi
     output_format: pdbqt
     coordinates: 3
-    flex: False
+    ph: 7.4
 
 step5_autodock_vina_run:
   tool: autodock_vina_run
