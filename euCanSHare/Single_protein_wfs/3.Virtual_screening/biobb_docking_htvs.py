@@ -449,7 +449,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
 
             # Enforce cpus if specified
             if cpus is not None:
-                ligand_prop['step5_autodock_vina_run']['cpus'] = int(cpus)
+                ligand_prop['step5_autodock_vina_run']['cpu'] = int(cpus)
 
             # Enforce exhaustiveness if specified
             if exhaustiveness is not None:
