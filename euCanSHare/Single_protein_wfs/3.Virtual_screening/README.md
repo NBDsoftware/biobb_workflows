@@ -53,7 +53,7 @@ This workflow has several steps. The input for the workflow is a ligand library 
 
 - **Step 3**: addition of H atoms (generation of .pdbqt file from .pdb). The charges in the generated pdbqt file are ignored by Autodock Vina. The H atoms though are relevant. To avoid adding H select mode = null in the control file.
 
-- **Step 4**: convert SMILES to .pdbqt format. Here the 3D structure is generated from the SMILES using OpenBabel. The current approach makes use of --gen3D to generate the lowest energy conformer ([see manual](https://open-babel.readthedocs.io/en/latest/3DStructureGen/SingleConformer.html#gen3d)). In the future faster options will be included (still some optimization might be needed as AutoDock needs a reasonably good initial conformation for the ligand).
+- **Step 4**: convert SMILES to .pdbqt format. Here the 3D structure is generated from the SMILES using OpenBabel. The current approach makes use of the following obabel options: obabel -i \<input> -o \<output> --gen3d -h -p \<ph_value>. It generates the lowest energy conformer with hydrogen atoms for that pH ([see manual](https://openbabel.org/docs/Command-line_tools/babel.html)). In the future faster options will be included (still some optimization might be needed as AutoDock needs a reasonably good initial conformation for the ligand).
 
 - **Step 5**: docking of the ligand onto the target structure using [AutoDock Vina](https://vina.scripps.edu/manual/#summary). The target is kept rigid but different ligand conformers are explored.
 
