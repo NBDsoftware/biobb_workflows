@@ -15,6 +15,7 @@ from biobb_adapters.pycompss.biobb_vs.utils.box import box
 from biobb_adapters.pycompss.biobb_vs.fpocket.fpocket_select import fpocket_select
 from biobb_adapters.pycompss.biobb_vs.vina.autodock_vina_run import autodock_vina_run
 from biobb_adapters.pycompss.biobb_chemistry.babelm.babel_convert import babel_convert
+from biobb_adapters.pycompss.biobb_chemistry.babelm.babel_add_hydrogens import babel_add_hydrogens
 from biobb_adapters.pycompss.biobb_structure_utils.utils.str_check_add_hydrogens import str_check_add_hydrogens
 from biobb_adapters.pycompss.biobb_structure_utils.utils.extract_residues import extract_residues
 from pycompss.api.api import compss_barrier
@@ -258,10 +259,12 @@ def clean_output(ligand_names, output_path):
     Removes all ligand subdirectories in the output directory
     """
 
-    # Remove all ligand subdirectories - NOTE: this could be potentially dangerous
+    # Remove all ligand subdirectories
     for name in ligand_names:
         ligand_path = os.path.join(output_path, name)
-        shutil.rmtree(ligand_path)
+
+        if os.path.exists(ligand_path):
+            shutil.rmtree(ligand_path)
     
 def check_arguments(global_log, global_paths, global_prop, ligand_lib_path, structure_path, input_pockets_zip, dock_to_residues):
     """
@@ -400,13 +403,13 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
         # Write smiles to file
         write_smiles(smiles = smiles, smiles_path = ligand_paths['step4_babel_prepare_lig']['input_path'])
 
-        # STEP 4: Convert from smiles to pdbqt
+        # STEP 4: Convert ligand from smiles to pdbqt adding hydrogens at a certain pH
         global_log.info("step4_babel_prepare_lig: Prepare ligand for docking")
-        babel_convert(**ligand_paths['step4_babel_prepare_lig'], properties = ligand_prop["step4_babel_prepare_lig"])
+        babel_add_hydrogens(**ligand_paths['step4_babel_prepare_lig'], properties = ligand_prop["step4_babel_prepare_lig"])
  
         # Enforce cpus if specified
         if cpus is not None:
-            ligand_prop['step5_autodock_vina_run']['cpus'] = int(cpus)
+            ligand_prop['step5_autodock_vina_run']['cpu'] = int(cpus)
 
         # Enforce exhaustiveness if specified
         if exhaustiveness is not None:
@@ -514,7 +517,7 @@ if __name__ == '__main__':
                         required=False)
 
     parser.add_argument('--dock_to_residues', dest='dock_to_residues', action='store_true',
-                        help="Dock to residues instead of cavity. Define the docking box using a set of residues instead of a pocket. (default: False)",
+                        help="Dock to residues instead of pocket. Define the docking box using a set of residues instead of a pocket. (default: False)",
                         required=False)
     
     parser.add_argument('--cpus', dest='cpus', type=int, 
