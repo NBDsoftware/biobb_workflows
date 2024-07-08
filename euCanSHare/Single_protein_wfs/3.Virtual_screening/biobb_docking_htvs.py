@@ -435,7 +435,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
         # Write smiles to file
         write_smiles(smiles = smiles, smiles_path = ligand_paths['step4_babel_prepare_lig']['input_path'])
 
-        # STEP 4: Convert from smiles to pdbqt adding hydrogens
+        # STEP 4: Convert ligand from smiles to pdbqt adding hydrogens at a certain pH
         global_log.info("step4_babel_prepare_lig: Prepare ligand for docking")
         try:
             babel_add_hydrogens(**ligand_paths['step4_babel_prepare_lig'], properties = ligand_prop["step4_babel_prepare_lig"])
