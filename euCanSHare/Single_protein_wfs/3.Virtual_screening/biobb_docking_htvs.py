@@ -453,10 +453,9 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
 
             # Enforce exhaustiveness if specified
             if exhaustiveness is not None:
-                global_log.info(f"step5_autodock_vina_run: Setting exhaustiveness to {exhaustiveness}")
                 ligand_prop['step5_autodock_vina_run']['exhaustiveness'] = int(exhaustiveness)
 
-            # Update common paths - NOTE: different processes will try to access the same files here ...
+            # Update common paths
             ligand_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path'] = global_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path']
             ligand_paths['step5_autodock_vina_run']['input_box_path'] = global_paths['step5_autodock_vina_run']['input_box_path']
 
