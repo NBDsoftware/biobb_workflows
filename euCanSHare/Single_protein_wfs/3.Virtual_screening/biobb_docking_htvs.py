@@ -159,38 +159,33 @@ def validate_step(*output_paths):
 
 def read_ligand_lib(ligand_lib_path):
     '''
-    Read all ligand identifiers from ligand library file. 
-    The expected format is one of the following:
+    Read all ligand identifiers from ligand library file. The expected format is one of the following:
 
-    Format 1:
+    - Format 1:
 
-    ligand1_id
-    ligand2_id
-    .
-    .
-    .
+            ligand1_id \n
+            ligand2_id
 
-    Format 2:
+    - Format 2:
 
-    ligand1_id  name_ligand1
-    ligand2_id  name_ligand2
-    .
-    .
-    .
+            ligand1_id  ligand1_name \n
+            ligand2_id  ligand2_name
 
-    Where ligand_id is a SMILES and name_ligand is a string with the ligand name
+    Where ligand_id is a unique identifier (e.g. SMILES) and name_ligand is a string with the ligand name
     
     Inputs
     ------
+
         ligand_lib_path (str): path to ligand library file
 
     Output
     ------
-        ligand_smiles   (list(str)): list of ligand SMILES
+
+        ligand_ids      (list(str)): list of ligand identifiers
         ligand_names    (list(str)): list with ligand names
     '''
 
-    ligand_smiles = []
+    ligand_ids = []
     ligand_names = []
 
     # Open file
@@ -205,7 +200,7 @@ def read_ligand_lib(ligand_lib_path):
             line = line.split()
 
             # Append ligand ID to list
-            ligand_smiles.append(line[0])
+            ligand_ids.append(line[0])
 
             # If there is no name, use index as name
             if len(line)>1:
@@ -214,14 +209,14 @@ def read_ligand_lib(ligand_lib_path):
                 ligand_names.append(str(index))
 
         # If there are no ligands, raise an error
-        if len(ligand_smiles) == 0:
+        if len(ligand_ids) == 0:
             raise ValueError(f"No ligands found in ligand library file {ligand_lib_path}")
         
-    return ligand_smiles, ligand_names
+    return ligand_ids, ligand_names
 
 def write_smiles(smiles, smiles_path):
     '''
-    Writes a SMILES code into a file in step_path. 
+    Writes a SMILES code into a file. If the file exists, it will be overwritten.
 
     Inputs
     ------
@@ -241,16 +236,16 @@ def write_smiles(smiles, smiles_path):
     smiles_tmp_file.write(smiles)
     smiles_tmp_file.close()
 
-def get_ranking(ligand_smiles, ligand_names, global_paths, output_path):
+def get_ranking(ligand_ids, ligand_names, global_paths, output_path):
 
     """
     Reads autodock log files to find best affinity for each ligand. 
-    Returns a list of tuples ordered by affinity: (affinity, ligand_name, ligand_smiles) 
+    Returns a list of tuples ordered by affinity: (affinity, ligand_name, ligand_ids) 
 
     Inputs
     ------
 
-        ligand_smiles   (list): list of SMILES codes
+        ligand_ids   (list): list of SMILES codes
         ligand_names    (list): list of ligand names
         global_prop     (dict): global properties dictionary
         global_paths    (dict): global paths dictionary
@@ -258,7 +253,7 @@ def get_ranking(ligand_smiles, ligand_names, global_paths, output_path):
     Output
     ------
 
-        all_ligands      (list): list of tuples ordered by affinity: (affinity, ligand_name, ligand_smiles) 
+        all_ligands      (list): list of tuples ordered by affinity: (affinity, ligand_name, ligand_ids) 
     """
 
     # AutoDock step name
@@ -270,7 +265,7 @@ def get_ranking(ligand_smiles, ligand_names, global_paths, output_path):
     # List where best affinity for each ligand will be stored
     all_ligands = []
     
-    for smiles, name in zip(ligand_smiles, ligand_names):
+    for smiles, name in zip(ligand_ids, ligand_names):
 
         # Find AutoDock log path
         log_path = os.path.join(output_path, name, autodock_step_name, log_name)
@@ -338,7 +333,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     ------
 
         configuration_path   (str): path to input.yml 
-        ligand_lib_path      (str): path to ligand library with SMILES
+        ligand_lib_path      (str): path to ligand library. Either a SMILES file or a SDF file
         structure_path       (str): path to receptor structure
         input_pockets_zip    (str): path to input pockets zip file
         pocket               (str): pocket name
@@ -423,7 +418,7 @@ def main_wf(configuration_path, ligand_lib_path, structure_path, input_pockets_z
     # STEP 4-5: Prepare ligand, run docking
     docking_start_time = time.time()
 
-    # Load drug list - NOTE: the whole library is loaded into memory
+    # Load drug library
     ligand_smiles, ligand_names = read_ligand_lib(ligand_lib_path)
 
     for smiles, name in zip(ligand_smiles, ligand_names):
@@ -533,7 +528,7 @@ if __name__ == '__main__':
                         required=True)
 
     parser.add_argument('--ligand_lib', dest='ligand_lib', type=str,
-                        help="Path to file with ligand library. The file should contain one ligand identifier (SMILES format) per line.",
+                        help="Path to file with the ligand library. The format should be SMILES (.smi) or SDF (.sdf). For .smi files, one ligand per line is expected: 'smiles name'. For sdf files, the file may contain one or more ligands.",
                         required=True)
     
     parser.add_argument('--structure_path', dest='structure_path', type=str,
