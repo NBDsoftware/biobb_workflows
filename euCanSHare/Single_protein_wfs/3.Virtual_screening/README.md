@@ -8,10 +8,10 @@ Go to workflow folder and install the conda environment (running in Nostrum's cl
 
 ```bash
 conda env create -f environment.yml
-conda activate single_protein_wf3
+conda activate biobb_sp_virtual_screening
 ```
 
-See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in input.yml.
+See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the input_HPC.yml.
 
 To run in an HPC environment adapt the run_HPC.sl script and send a job to the slurm queue:
 
@@ -19,7 +19,7 @@ To run in an HPC environment adapt the run_HPC.sl script and send a job to the s
 sbatch run_HPC.sl
 ```
 
-By default, the output will be generated in the "working_dir_path" folder selected in the YAML configuration file. However, the "--output" command line option will overwrite "working_dir_path". The global log files will be in "output/log.out" and "output/log.err". Each step will have its own log files and output in a separate folder inside the output folder.
+By default, the output will be generated in the `working_dir_path` folder selected in the YAML configuration file. However, the `--output` command line option will overwrite `working_dir_path`. Global log files will be generated in the output folder. Each step will have its own log files and output in a separate subfolder.
 
 ## Inputs
 
@@ -45,17 +45,17 @@ Specially important are: the configuration file path, the path to the ligand lib
 
 ## Description
 
-This workflow has several steps. The input for the workflow is a ligand library in SMILES format, a target structure in pdb format and either a pocket from an Fpocket analysis or a selection of residues. The workflow will dock the ligands to the target structure and rank them according to their affinity.
+This workflow has several steps. The input for the workflow is a ligand library in SMILES or SDF format, a target structure in pdb format and either a pocket from an Fpocket analysis or a selection of residues. The workflow will dock the ligands to the target structure and rank them according to their affinity. The top scoring ligands will be saved in a csv file with their rank, name, identifier and affinity. The poses of the top scoring ligands can also be saved.
 
 - **Step 1**: selection of cavity that will be used to dock the ligands. Autodock will use a box created surrounding either: a pocket from an input zip file (see cavity analysis workflow) or a selection of residues. Make sure the selected pocket or residues exist in the input files. By default the pocket is used to create the box. To use a residue selection instead add the `--dock_to_residues` flag in the command line call to the workflow.
 
 - **Step 2**: creation of box surrounding the selected cavity or residues.
 
-- **Step 3**: addition of H atoms (generation of .pdbqt file from .pdb). The charges in the generated pdbqt file are ignored by Autodock Vina. The H atoms though are relevant. To avoid adding H select `mode = null` in the control file.
+- **Step 3**: addition of H atoms to the receptor (generation of .pdbqt file from .pdb). The charges in the generated pdbqt file are ignored by Autodock Vina. The H atoms though are relevant (see [Vina FAQs](https://autodock-vina.readthedocs.io/en/latest/faq.html)). To avoid adding H to the receptor select `mode = null` in the control file.
 
-- **Step 4**: convert 2D SMILES to 3D .pdbqt format using OpenBabel. The current approach makes use of the following obabel command: `obabel -i <input> -o <output> --gen3d -h -p <ph_value>`. It generates the lowest energy conformer with hydrogen atoms for that pH ([see manual](https://openbabel.org/docs/Command-line_tools/babel.html)).
+- **Step 4**: prepare ligands for docking. If the ligand library is in SMILES format the workflow will use OpenBabel to convert 2D SMILES to protonated 3D ligand conformers in .pdbqt format. The current approach makes use of the following obabel command: `obabel <input> -O <output> --gen3d -h -p <ph_value> -xh`. It generates the lowest energy conformer with hydrogen atoms for that pH ([see manual](https://openbabel.org/docs/Command-line_tools/babel.html)). If the ligand library is in SDF format the workflow will use OpenBabel to convert the ligands to .pdbqt format without changing the protonation state or the conformer. The current approach makes use of the following obabel command: `obabel <input> -O <output> -xh`. Note that the protonation state of the ligand is important to obtain the correct affinity (see [Vina FAQs](https://autodock-vina.readthedocs.io/en/latest/faq.html).
 
-- **Step 5**: docking of the ligand onto the target structure using [AutoDock Vina](https://vina.scripps.edu/manual/#summary). The target is kept rigid but different ligand conformers are explored.
+- **Step 5**: docking of the ligand onto the target structure using [AutoDock Vina](https://vina.scripps.edu/manual/#summary). The target is kept rigid but some degrees of freedom of the ligand conformation are explored (rings are rigid for example). 
 
 - **Step 6**: find top scoring ligands, save their rank, names, smiles and affinity in a csv file. Make sure to select the number of top ligands to keep in the final summary in the control file option `num_top_ligands`
 
