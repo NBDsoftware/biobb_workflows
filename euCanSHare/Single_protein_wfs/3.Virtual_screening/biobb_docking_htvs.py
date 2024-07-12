@@ -6,7 +6,6 @@ import re
 import time
 import shutil
 import argparse
-from pathlib import Path
 from openbabel import pybel
 from typing import Dict, List, Pattern, Tuple, Union, Optional
 
@@ -17,7 +16,6 @@ from biobb_vs.utils.box import box
 from biobb_vs.fpocket.fpocket_select import fpocket_select
 from biobb_vs.vina.autodock_vina_run import autodock_vina_run
 from biobb_chemistry.babelm.babel_convert import babel_convert
-from biobb_chemistry.babelm.babel_add_hydrogens import babel_add_hydrogens
 from biobb_structure_utils.utils.str_check_add_hydrogens import str_check_add_hydrogens
 from biobb_structure_utils.utils.extract_residues import extract_residues
 
@@ -528,7 +526,7 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
             # STEP 4: Convert ligand from smiles to pdbqt adding hydrogens at a certain pH
             global_log.info("step4_babel_protonate: Prepare ligand for docking")
             try:
-                babel_add_hydrogens(**ligand_paths['step4_babel_protonate'], properties = ligand_prop["step4_babel_protonate"])
+                babel_convert(**ligand_paths['step4_babel_protonate'], properties = ligand_prop["step4_babel_protonate"])
                 lastStep_successful = validate_step(ligand_paths['step4_babel_protonate']['output_path'])
             except:
                 global_log.info(f"step4_babel_protonate: Open Babel failed to convert ligand {ligand_name} to pdbqt format")

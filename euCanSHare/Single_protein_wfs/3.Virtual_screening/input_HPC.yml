@@ -46,7 +46,7 @@ step3_str_check_add_hydrogens:
 # Section 2: Source each ligand and dock it to receptor
 
 step4_babel_protonate:
-  tool: babel_add_hydrogens
+  tool: babel_convert
   paths:
     input_path: ligand.smi
     output_path: ligand.pdbqt
