@@ -79,58 +79,51 @@ def get_affinity(pdbqt_path: str) -> float:
     else:
         return None
 
-def create_summary(ranking: List[Tuple], properties: Dict, output_path: str) -> List[str]:
+def save_ranking(ranking: List[Tuple], num_top_ligands: Union[int, None], ranking_path: str) -> List[str]:
     '''
     Create file with ranking of ligands according to affinity
 
     Inputs
     ------
 
-        ranking          : list with tuples -> (affinity, ligand name, smiles) ordered by affinity
-        properties       : dictionary with properties of the step
-        output_path      : path to output directory
+        ranking          : list with tuples -> (affinity, index, id) ordered by affinity
+        num_top_ligands  : number of top ligands to save in the ranking, if None all ligands are saved
+        ranking_path     : path to ranking file
     
     Output  
     ------
 
-        top_ligand_names : list with names of top ligands
+        top_ligand_indices : list with indices of top ligands
     '''
 
-    # Define summary file name
-    summary_filename = "top_ligands.csv"
-
-    # Define summary file path
-    summary_path = os.path.join(output_path, summary_filename)
-
     # Find number of top ligands to save
-    ranking_length = min(properties['num_top_ligands'], len(ranking)) 
+    if num_top_ligands is None:
+        ranking_length = len(ranking)
+    else:
+        ranking_length = min(num_top_ligands, len(ranking)) 
 
     # Extract top ligands (ranking is already sorted)
     top_ligands = ranking[:ranking_length]
-    top_ligand_names = []
-
-    # Create step folder if it does not exist
-    if not os.path.exists(properties['path']):
-        os.makedirs(properties['path'])
+    top_ligand_indices = []
     
     # Create summary file with top ligands
-    with open(summary_path, 'w') as file:
+    with open(ranking_path, 'w') as file:
 
         # Write header
-        file.write("Rank,Affinity,Name,Identifier \n")
+        file.write("Rank,Affinity,Index,Identifier \n")
 
         # For each ligand
         for rank, affinity_tuple in enumerate(top_ligands):
 
-            affinity, ligand_name, ligand_ID = affinity_tuple
+            affinity, ligand_index, ligand_id = affinity_tuple
 
             # Write line
-            file.write(f"{rank+1},{affinity},{ligand_name},{ligand_ID}\n")
+            file.write(f"{rank+1},{affinity},{ligand_index},{ligand_id}\n")
 
             # Add ligand name to list
-            top_ligand_names.append(ligand_name)
+            top_ligand_indices.append(ligand_index)
 
-    return top_ligand_names
+    return top_ligand_indices
 
 def validate_step(*output_paths: str) -> bool:
     '''
@@ -238,7 +231,7 @@ def write_smiles(smiles: str, smiles_path: str):
 def get_ranking(ligand_ids: List, ligand_names: List, autodock_vina_paths: Dict, output_path: Dict) -> List[Tuple]:   
     """
     Takes the name of each ligand and finds the best affinity given by AutoDock Vina from the output pdbqt file.
-    Returns a list of tuples ordered by affinity: (affinity, ligand_name, ligand_ids) 
+    Returns a list of tuples ordered by affinity: (affinity, index, ligand_id) 
 
     Inputs
     ------
@@ -251,7 +244,7 @@ def get_ranking(ligand_ids: List, ligand_names: List, autodock_vina_paths: Dict,
     Output
     ------
 
-        ranking         : list of tuples ordered by affinity: (affinity, ligand_name, ligand_ids) 
+        ranking         : list of tuples ordered by affinity: (affinity, index, ligand_id) 
     """
 
     # Generic path to pdbqt file with poses
@@ -266,7 +259,11 @@ def get_ranking(ligand_ids: List, ligand_names: List, autodock_vina_paths: Dict,
     # List where best affinity for each ligand will be stored
     ranking = []
     
-    for ligand_id, ligand_name in zip(ligand_ids, ligand_names):
+    # Go through all ligands
+    for ligand_index in range(len(ligand_ids)):
+
+        ligand_id = ligand_ids[ligand_index]
+        ligand_name = ligand_names[ligand_index]
 
         # Find path to ligand subfolder
         ligand_folder = os.path.join(output_path, ligand_name)
@@ -281,9 +278,9 @@ def get_ranking(ligand_ids: List, ligand_names: List, autodock_vina_paths: Dict,
         affinity = get_affinity(pdbqt_path = pdbqt_path)
 
         if affinity:
-            ranking.append((affinity, ligand_name, ligand_id))
+            ranking.append((affinity, ligand_index, ligand_id))
 
-    # Sort list according to affinity
+    # Sort list according to affinity (first element of tuple)
     ranking = sorted(ranking)
 
     return ranking
@@ -401,10 +398,6 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
         global_paths['step3_str_check_add_hydrogens']['input_structure_path'] = structure_path
     else:
         structure_path = global_paths['step3_str_check_add_hydrogens']['input_structure_path']
-    
-    # Enforce num_top_ligands if specified
-    if num_top_ligands is not None:
-        global_prop['step6_top_ligands']['num_top_ligands'] = int(num_top_ligands)
 
     # STEP 1: Select pocket or extract residues
     if dock_to_residues:
@@ -563,15 +556,23 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
     # Rank ligands: find the best affinity for each ligand
     ranking = get_ranking(ligand_ids, ligand_names, global_paths['step5_autodock_vina_run'], output_path)
 
-    # STEP 6: Find top ligands and create csv file with ranking
-    global_log.info("step6_top_ligands: create ranking and save poses for top ligands")  
-    top_ligand_names = create_summary(ranking, global_prop['step6_top_ligands'], output_path)
+    # Find top ligands and create csv file with ranking
+    global_log.info("Create ranking and save poses for top ligands") 
+    ranking_path = os.path.join(output_path, "scores.csv") 
+    top_ligand_indices = save_ranking(ranking, num_top_ligands, ranking_path)
 
-    # STEP 7: extract poses for top ligands if requested
+    # STEP 6: extract poses for top ligands if requested
     if keep_poses:
 
+        # Create poses folder
+        poses_folder = os.path.join(output_path, "poses")
+        if not os.path.exists(poses_folder):
+            os.makedirs(poses_folder)
+
         # Iterate over top ligands
-        for ligand_name in top_ligand_names:
+        for index in top_ligand_indices:
+
+            ligand_name = ligand_names[index]
 
             # Add ligand name to properties and paths
             top_ligand_prop = conf.get_prop_dic(prefix=ligand_name)
@@ -579,19 +580,19 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
 
             try:
                 # Convert pose from pdbqt to pdb
-                global_log.info("step7_babel_prepare_pose: Converting ligand pose to PDB format")    
-                babel_convert(**top_ligand_paths['step7_babel_prepare_pose'], properties=top_ligand_prop["step7_babel_prepare_pose"])
+                global_log.info("step6_babel_prepare_pose: Converting ligand pose to PDB format")    
+                babel_convert(**top_ligand_paths['step6_babel_prepare_pose'], properties=top_ligand_prop["step6_babel_prepare_pose"])
 
                 # Move pose to final location
                 # Pose path inside ligand subfolder
-                pose_path = top_ligand_paths['step7_babel_prepare_pose']['output_path']
-                # New pose path in output folder
-                new_pose_path = os.path.join(global_prop['step6_top_ligands']['path'], f"{ligand_name}_poses.pdb")
+                pose_path = top_ligand_paths['step6_babel_prepare_pose']['output_path']
+                # New pose path in poses folder
+                new_pose_path = os.path.join(poses_folder, f"{ligand_name}_poses.pdb")
                 # Move pose to new location 
                 shutil.move(pose_path, new_pose_path)
 
             except:
-                global_log.info(f"step7_babel_prepare_pose: Open Babel failed to convert pose for ligand {ligand_name} to PDB format")
+                global_log.info(f"step6_babel_prepare_pose: Open Babel failed to convert pose for ligand {ligand_name} to PDB format")
     
     # Show success rate of screening
     success_rate = round(len(ranking)/len(ligand_names)*100, 2)
@@ -603,6 +604,10 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
 
     # Save structure path in output_path
     shutil.copy(structure_path, os.path.join(output_path, 'receptor.pdb'))
+
+    # Save absolute path to ligand library in a text file
+    with open(os.path.join(output_path, 'ligand_library.txt'), 'w') as file:
+        file.write(os.path.abspath(ligand_lib_path))
 
     # Timing information
     elapsed_time = time.time() - start_time
@@ -650,7 +655,7 @@ if __name__ == '__main__':
                         required=False)
     
     parser.add_argument('-nl', '--num_top_ligands', dest='num_top_ligands', type=int,
-                        help="Number of top ligands to be saved (default: corresponding value in YAML config file)",
+                        help="Number of top ligands to be saved (default: all successfully docked ligands)",
                         required=False)
 
     parser.add_argument('-kp', '--keep_poses', dest='keep_poses', action='store_true',

@@ -74,11 +74,7 @@ step5_autodock_vina_run:
     cpu: 1                                               # change - number of CPUs to use for each docking
     binary_path: vina                                    # change - path to the vina binary
 
-step6_top_ligands:
-  properties:
-    num_top_ligands: 50                                  # change - number of top ligand scores to keep in the final summary    
-
-step7_babel_prepare_pose:
+step6_babel_prepare_pose:
   tool: babel_convert
   paths:
     input_path: dependency/step5_autodock_vina_run/output_pdbqt_path
