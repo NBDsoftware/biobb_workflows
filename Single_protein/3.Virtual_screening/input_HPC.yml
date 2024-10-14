@@ -53,7 +53,7 @@ step4_babel_protonate:
   properties:
     coordinates: 3
     ph: 7.4
-  
+
 step4b_babel_convert:
   tool: babel_convert
   paths:
