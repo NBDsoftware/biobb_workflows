@@ -7,18 +7,18 @@ mpi_np: 1                                                                       
 use_gpu: False                                                                                  # Wether to use GPU support or not
 working_dir_path: output                                                                        # Workflow default output directory
 can_write_console_log: False                                                                    # Verbose writing of log information
-restart: False                                                                                  # Skip steps already performed
+restart: True                                                                                   # Skip steps already performed
 remove_tmp: True                                                                                # Remove temporal files
 
 # Step 1: extract molecules from input PDB file
 step1_extractMolecule:
   tool: extract_molecule
   paths:
-    input_structure_path: /path/to/input/structure.pdb                   # Overwriten by command line
+    input_structure_path: /path/to/input                            # Overwritten by command line
     output_molecule_path: protein.pdb
   properties:
-    molecule_type: chains                                                # type of molecule to extract. Options: all, protein, na, dna, rna, chains
-    chains: [A]                                                          # if "chains" is selected in molecule_type. Options: None, [A], [A, B], ...
+    molecule_type: chains                                           # type of molecule to extract. Options: all, protein, na, dna, rna, chains
+    chains: [A]                                                     # if "chains" is selected in molecule_type. Options: None, [A], [A, B], ...
 
 # Step 2 A: fix alternative locations of residues if any with biobb_structure_checking and the Modeller suite (if key property is given)
 step2A_fixaltlocs:                 
@@ -92,7 +92,7 @@ step2G_fixamides:
     input_pdb_path: dependency/step2F_fixssbonds/output_pdb_path
     output_pdb_path: fixamides.pdb
   properties:
-    modeller_key: HERE YOUR MODELLER KEY  # MODELLER license key
+    modeller_key: HERE YOUR MODELLER KEY # MODELLER license key
 
 step2H_fixchirality:
   tool: fix_chirality
@@ -119,7 +119,7 @@ step3_pdb2gmx:
     output_top_zip_path: pdb2gmx_top.zip
   properties:
     force_field: amber99sb-ildn   # gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut
-    water_type: spce              # spc, spce, tip3p, tip4p, tip5p, tips3p
+    water_type: tip3p             # spc, spce, tip3p, tip4p, tip5p, tips3p
     ignh: False                   # Ignore hydrogens in the input structure
     merge: False                  # Merge all chains into one molecule
     # his:                        # HIS protonation state array
@@ -130,7 +130,7 @@ step4_editconf:
     input_gro_path: dependency/step3_pdb2gmx/output_gro_path
     output_gro_path: editconf.gro
   properties:
-    box_type: dodecahedron       # cubic, triclinic, octahedron, dodecahedron
+    box_type: octahedron         # cubic, triclinic, octahedron, dodecahedron
     distance_to_molecule: 1.0    # Distance of the box from the outermost atom in nm
 
 step5_solvate:
@@ -160,7 +160,7 @@ step7_genion:
     output_top_zip_path: genion_top.zip
   properties:
     neutral: True             # Neutralize charge of the system
-    concentration: 0.05       # Concentration of ions in mols/L
+    concentration: 0.15       # Concentration of ions in mols/L
 
 step8_grompp_min:
   tool: grompp
@@ -171,7 +171,7 @@ step8_grompp_min:
   properties:
     simulation_type: minimization
     mdp:
-      nsteps: 1000
+      nsteps: 100000
       emtol: 10
     
 
@@ -212,9 +212,9 @@ step11_grompp_nvt:
   properties:
     simulation_type: nvt
     mdp:
-      ref-t: 310 310
+      ref-t: 300 300
       tc-grps: "Protein Water_and_ions"
-      nsteps: 5000
+      nsteps: 10000
       dt: 0.002
 
 step12_mdrun_nvt:
@@ -249,8 +249,9 @@ step14_grompp_npt:
   properties:
     simulation_type: npt
     mdp:
-      nsteps: 5000 
-      ref-t: 310 310
+      pcoupltype: isotropic
+      nsteps: 10000 
+      ref-t: 300 300
       tc-grps: "Protein Water_and_ions"
 
 step15_mdrun_npt:
@@ -278,108 +279,61 @@ step17_grompp_md:
   tool: grompp
   paths:
     input_gro_path: dependency/step15_mdrun_npt/output_gro_path
+    input_cpt_path: dependency/step15_mdrun_npt/output_cpt_path 
     input_ndx_path: dependency/step9B_make_ndx/output_ndx_path
     input_top_zip_path: dependency/step7_genion/output_top_zip_path
     output_tpr_path: gppmd.tpr
-    input_cpt_path: dependency/step15_mdrun_npt/output_cpt_path
   properties:
     simulation_type: free
     mdp:
-      nsteps: 10000 
-      ref-t: 310 310
+      nsteps: 250000
+      dt: 0.002 
+      ref-t: 300 300
       tc-grps: "Protein Water_and_ions"
-      nstxout: 0                   # freq. of .trr trajectory (coordinates) writing in time steps
-      nstxout-compressed: 500      # freq. of .xtc trajectory (coordinates) writing in time steps 
-      nstvout: 0                   # freq. of .trr trajectory (velocities) writing in time steps
-      nstfout: 0
-      continuation: 'no'
-      gen-vel: 'yes'          
-      gen-temp: 310   
+      nstxout: 2500      # freq. of .xtc trajectory (coordinates) writing in time steps 
+      nstvout: 2500      # freq. of .trr trajectory (velocities) writing in time steps
+      nstfout: 2500
+      nstenergy: 2500
+      continuation: 'yes'
+      gen-vel: 'no'          
+      gen-temp: 300   
+      ld-seed: 1
 
 step18_mdrun_md:
   tool: mdrun
   paths:
     input_tpr_path: dependency/step17_grompp_md/output_tpr_path
     output_trr_path: md.trr
-    output_xtc_path: md.xtc
     output_gro_path: md.gro
     output_edr_path: md.edr
     output_log_path: md.log
     output_cpt_path: md.cpt
 
-step19_rmsfirst:
-  tool: gmx_rms
+step19_trjcat:
+  tool: trjcat
   paths:
-    input_structure_path: dependency/step17_grompp_md/output_tpr_path
-    input_traj_path: dependency/step18_mdrun_md/output_xtc_path
-    output_xvg_path: md_rmsdfirst.xvg
-  properties:
-    selection: Backbone
-    xvg: xmgr # xmgrace, xmgr, none
+    input_trj_zip_path: all_trajectories_trr.zip
+    output_trj_path: all_trajectories.xtc
 
-step20_rmsexp:
-  tool: gmx_rms
-  paths:
-    input_structure_path: dependency/step8_grompp_min/output_tpr_path
-    input_traj_path: dependency/step18_mdrun_md/output_xtc_path
-    output_xvg_path: md_rmsdexp.xvg
-  properties:
-    selection: Backbone
-    xvg: xmgr # xmgrace, xmgr, none
-
-step21_rgyr:
-  tool: gmx_rgyr
-  paths:
-    input_structure_path: dependency/step17_grompp_md/output_tpr_path
-    input_traj_path: dependency/step18_mdrun_md/output_xtc_path
-    output_xvg_path: md_rgyr.xvg
-  properties:
-    selection: Backbone
-    xvg: xmgr # xmgrace, xmgr, none
-
-step22_rmsf:
-  tool: cpptraj_rmsf
-  paths:
-    input_top_path: dependency/step7_genion/output_top_zip_path
-    input_traj_path: dependency/step18_mdrun_md/output_xtc_path
-    output_cpptraj_path: md_rmsf.xmgr  # .dat, .agr, .xmgr, .gnu
-  properties:
-    start: 1
-    end: -1
-    steps: 1
-    mask: "!@H=" # by default cpptraj already strips solvent atoms
-
-step23_image_traj:
-  tool: gmx_image
-  paths:
-    input_traj_path: dependency/step18_mdrun_md/output_xtc_path
-    input_top_path: dependency/step17_grompp_md/output_tpr_path
-    input_index_path: dependency/step9B_make_ndx/output_ndx_path
-    output_traj_path: imaged_traj.xtc
-  properties:
-    center_selection: Protein
-    output_selection: System
-    center: True
-    ur: compact
-    pbc: mol
-
-step24_fit_traj:
-  tool: gmx_image
-  paths:
-    input_traj_path: dependency/step23_image_traj/output_traj_path
-    input_top_path: dependency/step17_grompp_md/output_tpr_path
-    input_index_path: dependency/step9B_make_ndx/output_ndx_path
-    output_traj_path: fitted_traj.xtc
-  properties:
-    fit_selection: Protein
-    output_selection: Protein  
-    fit: rot+trans
-
-step25_dry_str:
-  tool: gmx_trjconv_str
+step20_dry_trj:
+  tool: gmx_trjconv_trj
   paths: 
-    input_structure_path: dependency/step15_mdrun_npt/output_gro_path
+    input_traj_path: dependency/step19_trjcat/output_trj_path
     input_top_path: dependency/step14_grompp_npt/output_tpr_path
+    input_structure_path: dependency/step15_mdrun_npt/output_gro_path
+    output_traj_path: dry_structure.xtc
+    input_index_path: dependency/step9B_make_ndx/output_ndx_path
+  properties:
+    selection: Protein
+    center: True
+    pbc: mol
+    ur: compact
+
+step21_dry_str:
+  tool: gmx_trjconv_trj
+  paths: 
+    input_top_path: dependency/step14_grompp_npt/output_tpr_path
+    input_structure_path: dependency/step15_mdrun_npt/output_gro_path
     output_str_path: dry_structure.gro
     input_index_path: dependency/step9B_make_ndx/output_ndx_path
   properties:
@@ -388,8 +342,74 @@ step25_dry_str:
     pbc: mol
     ur: compact
 
-step26_trjcat:
-  tool: trjcat
+step22_rmsfirst:
+  tool: gmx_rms
   paths:
-    input_trj_zip_path: all_trajectories.zip
-    output_trj_path: all_trajectories.xtc
+    input_structure_path: dependency/step21_dry_str/output_str_path
+    input_traj_path: dependency/step20_dry_trj/output_traj_path
+    output_xvg_path: md_rmsdfirst.xvg
+  properties:
+    selection: Backbone
+    xvg: xmgr # xmgrace, xmgr, none
+
+step23_rmsexp:
+  tool: gmx_rms
+  paths:
+    input_structure_path: dependency/step8_grompp_min/output_tpr_path
+    input_traj_path: dependency/step20_dry_trj/output_traj_path
+    output_xvg_path: md_rmsdexp.xvg
+  properties:
+    selection: Backbone
+    xvg: xmgr # xmgrace, xmgr, none
+
+step24_rgyr:
+  tool: gmx_rgyr
+  paths:
+    input_structure_path: dependency/step21_dry_str/output_str_path
+    input_traj_path: dependency/step20_dry_trj/output_traj_path
+    output_xvg_path: md_rgyr.xvg
+  properties:
+    selection: Backbone
+    xvg: xmgr # xmgrace, xmgr, none
+
+step25_rmsf:
+  tool: cpptraj_rmsf
+  paths:
+    input_top_path: dependency/step7_genion/output_top_zip_path
+    input_traj_path: dependency/step20_dry_trj/output_traj_path
+    output_cpptraj_path: md_rmsf.xmgr  # .dat, .agr, .xmgr, .gnu
+  properties:
+    start: 1
+    end: -1
+    steps: 1
+    mask: "!@H=" # by default cpptraj already strips solvent atoms
+
+step26_image_traj:
+  tool: gmx_image
+  paths:
+    input_traj_path: dependency/step20_dry_trj/output_traj_path
+    input_top_path: dependency/step21_dry_str/output_str_path
+    input_index_path: dependency/step9B_make_ndx/output_ndx_path
+    output_traj_path: imaged_traj.xtc
+  properties:
+    center_selection: Protein
+    output_selection: Protein
+    center: True
+    ur: compact
+    pbc: mol
+
+step27_fit_traj:
+  tool: gmx_image
+  paths:
+    input_traj_path: dependency/step26_image_traj/output_traj_path
+    input_top_path: dependency/step21_dry_str/output_str_path
+    input_index_path: dependency/step9B_make_ndx/output_ndx_path
+    output_traj_path: fitted_traj.xtc
+  properties:
+    fit_selection: Protein
+    output_selection: Protein  
+    fit: rot+trans
+
+
+
+
