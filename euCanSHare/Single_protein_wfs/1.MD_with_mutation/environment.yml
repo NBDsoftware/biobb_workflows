@@ -1,15 +1,16 @@
-name: biobb_sp_md
+name: biobb_md
 channels:
   - conda-forge
   - bioconda
   - salilab
 dependencies:
   - python==3.10
-  - modeller # Activate if you want to use Modeller
+  - modeller                        # Activate if you want to use Modeller
   - biobb_io>=4.0.0
   - biobb_common>=4.0.0
   - biobb_structure_utils>=4.0.0
   - biobb_model>=4.0.0
   - biobb_gromacs>=4.0.0
+  - biobb_amber>=4.0.0
   - biobb_analysis>=4.0.0
-prefix: /shared/work/BiobbWorkflows/envs/biobb_sp_md
+prefix: /shared/work/BiobbWorkflows/envs/biobb_md
