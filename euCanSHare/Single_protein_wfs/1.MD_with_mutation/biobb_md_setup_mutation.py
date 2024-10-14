@@ -248,8 +248,14 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         global_log.info("step2I_renumberstructure: renumber structure")
         renumber_structure(**global_paths["step2I_renumberstructure"], properties=global_prop["step2I_renumberstructure"])
 
+        # NOTE: Check RMSF analysis step, not working - we need amber top
+        
+        # NOTE: Histidine protonation states come from pdb4amber which should be used within the WF!
         # STEP 3: add H atoms, generate coordinate (.gro) and topology (.top) file
         global_log.info("step3_pdb2gmx: Generate the topology")
+        if his:
+            global_prop["step3_pdb2gmx"]["his"]=his
+ 
         pdb2gmx(**global_paths["step3_pdb2gmx"], properties=global_prop["step3_pdb2gmx"])
 
         # STEP 4: Create simulation box
