@@ -36,14 +36,14 @@ from biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf
 from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 
-def set_gromacs_path(global_prop: dict, binary_path: str) -> None:
+def set_gromacs_path(properties: dict, binary_path: str) -> None:
     """
     Set the path to the GROMACS binary for all steps using GROMACS.
 
     Inputs
     ------
 
-        global_prop (dict): Dictionary containing all the properties of the workflow.
+        properties (dict): Dictionary containing the properties.
         binary_path (str): Path to the GROMACS binary.
     """
 
@@ -52,16 +52,16 @@ def set_gromacs_path(global_prop: dict, binary_path: str) -> None:
                         'step14_grompp_npt', 'step15_mdrun_npt', 'step17_grompp_md', 'step18_mdrun_md']
 
     for step in list_of_steps:
-        global_prop[step]['binary_path'] = binary_path
+        properties[step]['binary_path'] = binary_path
 
-def set_mpi_path(global_prop: dict, mpi_bin: str, mpi_np: int) -> None:
+def set_mpi_path(properties: dict, mpi_bin: str, mpi_np: int) -> None:
     """
     Set the path to the MPI binary for all steps using MPI.
 
     Inputs
     ------
 
-        global_prop (dict): Dictionary containing all the properties of the workflow.
+        properties (dict): Dictionary containing the properties.
         mpi_bin (str): Path to the MPI binary.
         mpi_np (int): Number of processors to be used.
     """
@@ -69,24 +69,52 @@ def set_mpi_path(global_prop: dict, mpi_bin: str, mpi_np: int) -> None:
     list_of_steps = ['step9_mdrun_min', 'step12_mdrun_nvt', 'step15_mdrun_npt', 'step18_mdrun_md']
 
     for step in list_of_steps:
-        global_prop[step]['mpi_bin'] = mpi_bin
-        global_prop[step]['mpi_np'] = mpi_np
+        properties[step]['mpi_bin'] = mpi_bin
+        properties[step]['mpi_np'] = mpi_np
 
-def set_gpu_use(global_prop: dict, gpu_use: bool) -> None:
+def set_gpu_use(properties: dict, gpu_use: bool) -> None:
     """
     Set the use of GPU for all steps using GROMACS that support it.
 
     Inputs
     ------
 
-        global_prop (dict): Dictionary containing all the properties of the workflow.
+        properties (dict): Dictionary containing the properties.
         gpu_use (bool): Whether to use GPU or not.
     """
 
     list_of_steps = ['step12_mdrun_nvt', 'step15_mdrun_npt', 'step18_mdrun_md']
 
     for step in list_of_steps:
-        global_prop[step]['use_gpu'] = gpu_use
+        properties[step]['use_gpu'] = gpu_use
+
+def set_general_properties(properties, conf, global_log) -> None:
+    """
+    Set all the additional global properties of this workflow, i.e. those properties included at the beginning of the YAML configuration file that
+    are general to all steps and are not included already when the global properties are parsed.
+    
+    Inputs
+    ------
+    
+        properties (dict): Dictionary containing the properties.
+        conf (class settings.ConfReader): Configuration file reader.
+    """
+    
+    # Enforce gromacs binary path for all steps using gromacs
+    if conf.properties.get('binary_path'):
+        global_log.info(f"Using GROMACS binary path: {conf.properties['binary_path']}")
+        set_gromacs_path(properties, conf.properties['binary_path'])
+
+    # Enforce mpi binary path for all steps using mpi
+    if conf.properties.get('mpi_bin'):
+        global_log.info(f"Using MPI binary path: {conf.properties['mpi_bin']}")
+        set_mpi_path(properties, conf.properties['mpi_bin'], conf.properties.get('mpi_np'))
+
+    # Enforce gpu use for all steps using gromacs that support it
+    if conf.properties.get('use_gpu'):
+        global_log.info(f"Using GPU for GROMACS steps")
+        set_gpu_use(properties, conf.properties['use_gpu'])
+    
 
 def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input_pdb_path = None, pdb_chains = None,
             mutation_list = None, input_gro_path = None, input_top_path = None, fix_backbn = None, fix_ss = None, fix_amide_clashes = None):
@@ -138,21 +166,8 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     # Dividing it in global paths and global properties
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
-    
-    # Enforce gromacs binary path for all steps using gromacs
-    if conf.properties.get('binary_path'):
-        global_log.info(f"Using GROMACS binary path: {conf.properties['binary_path']}")
-        set_gromacs_path(global_prop, conf.properties['binary_path'])
 
-    # Enforce mpi binary path for all steps using mpi
-    if conf.properties.get('mpi_bin'):
-        global_log.info(f"Using MPI binary path: {conf.properties['mpi_bin']}")
-        set_mpi_path(global_prop, conf.properties['mpi_bin'], conf.properties.get('mpi_np'))
-
-    # Enforce gpu use for all steps using gromacs that support it
-    if conf.properties.get('use_gpu'):
-        global_log.info(f"Using GPU for GROMACS steps")
-        set_gpu_use(global_prop, conf.properties['use_gpu'])
+    set_general_properties(global_prop, conf, global_log)
 
     # If prepared structure is not provided
     if input_gro_path is None:
@@ -292,26 +307,12 @@ def main_wf(configuration_path, setup_only, num_trajs, output_path = None, input
     # Production trajectories
     global_log.info(f"Number of trajectories: {num_trajs}")
     traj_list = []
-    for traj in (f"traj_{i}" for i in range(num_trajs)):
+    for simulation in simulation_folders:
+        
+        traj_prop = conf.get_prop_dic(prefix=simulation)
+        traj_paths = conf.get_paths_dic(prefix=simulation)
 
-        traj_prop = conf.get_prop_dic(prefix=traj)
-        traj_paths = conf.get_paths_dic(prefix=traj)
-
-        # Enforce gromacs binary path for all steps using gromacs
-        if conf.properties.get('binary_path'):
-            set_gromacs_path(traj_prop, conf.properties['binary_path'])
-
-        # Enforce mpi binary path for all steps using mpi
-        if conf.properties.get('mpi_bin'):
-            set_mpi_path(traj_prop, conf.properties['mpi_bin'], conf.properties.get('mpi_np'))
-
-        # Enforce gpu use for all steps using gromacs that support it
-        if conf.properties.get('use_gpu'):
-            set_gpu_use(traj_prop, conf.properties['use_gpu'])
-
-        # Change seed of temperature coupling algorithm (V-rescale)
-        new_seed = {'ld-seed': random.randint(1, 1000000)}
-        traj_prop['step17_grompp_md']['mdp'].update(new_seed)
+        set_general_properties(traj_prop, conf, global_log)
 
         # STEP 17: free NPT production run pre-processing
         global_log.info(f"{traj} >  step17_grompp_md: Preprocess free dynamics")
