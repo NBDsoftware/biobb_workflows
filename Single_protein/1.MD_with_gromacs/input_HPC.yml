@@ -42,7 +42,6 @@ step2B_mutations:
     # modeller_key: HERE YOUR MODELLER KEY                               # MODELLER license key
 
 # Step 2 C: Download a FASTA file with the canonical sequence of the protein
-# Optional step (activate from command line with --fix_backbn)
 # It requires internet connection and a PDB code
 step2C_canonical_fasta:
   tool: canonical_fasta
@@ -50,6 +49,14 @@ step2C_canonical_fasta:
     output_fasta_path: canonicalFasta.fasta
   properties:
     pdb_code: HERE YOUR PDB CODE
+
+# Step 2 C: Extract the residue sequence from the PDB file to FASTA format
+step2C_pdb_tofasta:
+  tool: biobb_pdb_tofasta
+  paths:
+    output_fasta_path: pdbFasta.fasta
+  properties:
+    multi: True
 
 # Step 2 D: Model missing backbone atoms with biobb_structure_checking and the Modeller suite
 # Optional step (activate from command line with --fix_backbn)

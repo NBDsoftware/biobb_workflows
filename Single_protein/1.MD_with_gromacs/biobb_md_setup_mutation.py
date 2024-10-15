@@ -5,8 +5,6 @@
 # Example of Python Script (should be accompanied by a YAML input configuration file)
 
 # Importing all the needed libraries
-from Bio.SeqIO.PdbIO import PdbSeqresIterator
-from Bio import SeqIO
 import time
 import random
 import argparse
@@ -39,6 +37,7 @@ from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 from biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf
 from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
+from biobb_pdb_tools.pdb_tools.biobb_pdb_tofasta import biobb_pdb_tofasta
 
 def set_gromacs_path(properties: dict, binary_path: str) -> None:
     """
@@ -118,32 +117,7 @@ def set_general_properties(properties, conf, global_log) -> None:
     if conf.properties.get('use_gpu'):
         global_log.info(f"Using GPU for GROMACS steps")
         set_gpu_use(properties, conf.properties['use_gpu'])
-    
-def fasta_from_pdb(input_pdb_path: str, output_fasta_path: str) -> bool:
-    """
-    Try to obtain the FASTA sequence using the SEQRES records in the PDB file with Biopython. If the SEQRES records are available, write the FASTA sequence to 
-    the output file and return True. If the SEQRES records are not available, return False.
-    
-    Inputs
-    ------
-    
-        input_pdb_path (str): Path to the input PDB file.
-        output_fasta_path (str): Path to the output FASTA file.
-    
-    Returns
-    -------
-    
-        bool: Whether the FASTA sequence was obtained or not.
-    """
-    
-    # Open the PDB file and use the PdbSeqresIterator to extract sequences
-    with open(input_pdb_path, "r") as handle:
-        for record in PdbSeqresIterator(handle):
-            # Write to a FASTA file
-            with open(output_fasta_path, "w") as fasta_out:
-                SeqIO.write(record, fasta_out, "fasta")
-                
-    return True
+
 
 def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path = None, input_pdb_path = None, pdb_chains = None,
             mutation_list = None, input_gro_path = None, input_top_path = None, fix_ss = None, fix_amide_clashes = None, 
@@ -243,7 +217,10 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         except:
             # If the request fails, try to get the canonical FASTA from the PDB file
             global_log.warning("step2C_canonical_fasta: Could not get canonical FASTA. Check the internet connection in the machine running the workflow. Trying to get the canonical FASTA from the PDB file...")
-            fasta_available = fasta_from_pdb(global_paths["step1_extractMolecule"]["input_structure_path"], global_paths["step2C_canonical_fasta"]["output_fasta_path"])
+            
+            global_log.info("step2C_pdb_tofasta: Get FASTA from PDB file")
+            biobb_pdb_tofasta(**global_paths["step2C_pdb_tofasta"], properties=global_prop["step2C_pdb_tofasta"])
+            global_paths['step2D_fixbackbone']['input_fasta_canonical_sequence_path'] = global_paths['step2C_pdb_tofasta']['output_fasta_path']
             
         if fasta_available:
             # STEP 2 (D): Model missing heavy atoms of backbone
