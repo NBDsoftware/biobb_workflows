@@ -55,7 +55,7 @@ This workflow has several steps. The input for the workflow can be (1) a pdb fil
     Steps to fix different possible defects in the input pdb structure. See below.
 
     A. **Fix alternative locations** 
-    Provide a list with the choices of alternative locations to keep in the final structure.
+    Provide a list with the choices of alternative locations to keep in the final structure. If no list is given (_null_ value) it will select the alternative location with the highest occupancy. 
 
     B. **Mutate initial pdb structure** 
     Mutations can be requested through the mutation_list property of the YAML configuration file as a single string of mutations separated by commas (no spaces). Where each mutation is defined by string with the following format: "Chain:Wild_type_residue_name Residue_number Mutated_type_residue_name". The residue name should be a 3 letter code starting with capital letters, e.g. "A:Arg220Ala". Alternatively, they can be given through the mutation_list command line argument. If no mutation is desired leave an empty string ("") or comment the mutation_list property.
