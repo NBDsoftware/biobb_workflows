@@ -5,6 +5,8 @@
 # Example of Python Script (should be accompanied by a YAML input configuration file)
 
 # Importing all the needed libraries
+from Bio.SeqIO.PdbIO import PdbSeqresIterator
+from Bio import SeqIO
 import time
 import random
 import argparse
@@ -91,7 +93,7 @@ def set_gpu_use(properties: dict, gpu_use: bool) -> None:
     for step in list_of_steps:
         properties[step]['use_gpu'] = gpu_use
 
-def set_general_properties(properties, conf, global_log) -> None:
+def set_general_properties(properties: dict, conf, global_log) -> None:
     """
     Set all the additional global properties of this workflow, i.e. those properties included at the beginning of the YAML configuration file that
     are general to all steps and are not included already when the global properties are parsed.
@@ -117,6 +119,46 @@ def set_general_properties(properties, conf, global_log) -> None:
     if conf.properties.get('use_gpu'):
         global_log.info(f"Using GPU for GROMACS steps")
         set_gpu_use(properties, conf.properties['use_gpu'])
+
+def fasta_from_pdb(input_pdb_path: str, output_fasta_path: str, global_log) -> bool:
+    """
+    Try to obtain the FASTA sequence using the SEQRES records in the PDB file with Biopython. If the SEQRES records are available, write the FASTA sequence to 
+    the output file and return True. If the SEQRES records are not available, return False.
+    
+    Inputs
+    ------
+    
+        input_pdb_path (str): Path to the input PDB file.
+        output_fasta_path (str): Path to the output FASTA file.
+    
+    Returns
+    -------
+    
+        bool: Whether the FASTA sequence was obtained from SEQRES records or not.
+    """
+    
+    # Open the PDB file and use the PdbSeqresIterator to extract sequences
+    with open(input_pdb_path, "r") as handle:
+        sequences = list(PdbSeqresIterator(handle))  # Extract all sequences into a list
+        
+        if not sequences:
+            global_log.warning(f"PDB doesn't contain SEQRES records")
+            return False
+        
+        global_log.info(f"PDB does contain SEQRES records {sequences}")
+        
+        # Find parent folder of output_fasta_path
+        parent_folder = os.path.dirname(output_fasta_path)
+        
+        # Create parent folder if it does not exist
+        if not os.path.exists(parent_folder):
+            os.makedirs(parent_folder)
+        
+        # Write sequences to a FASTA file
+        with open(output_fasta_path, "w") as fasta_out:
+            SeqIO.write(sequences, fasta_out, "fasta")
+    
+    return True
 
 
 def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path = None, input_pdb_path = None, pdb_chains = None,
@@ -207,7 +249,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         # STEP 2 (B): Add mutations if requested
         global_log.info("step2B_mutations: Preparing mutated structure")
         mutate(**global_paths["step2B_mutations"], properties=global_prop["step2B_mutations"])
-
+        
         # STEP 2 (C): Get FASTA sequence to model the backbone
         try:
             # Try to get the canonical FASTA sequence with an http request from the PDB code
@@ -215,13 +257,28 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
             canonical_fasta(**global_paths["step2C_canonical_fasta"], properties=global_prop["step2C_canonical_fasta"])
             fasta_available = True
         except:
-            # If the request fails, try to get the canonical FASTA from the PDB file
             global_log.warning("step2C_canonical_fasta: Could not get canonical FASTA. Check the internet connection in the machine running the workflow. Trying to get the canonical FASTA from the PDB file...")
+            fasta_available = False
             
+        if not fasta_available:
+            # Try to get the FASTA sequence from SEQRES records in the PDB file
+            global_log.info("step2C_pdb_tofasta: Get FASTA from SEQRES of PDB file")
+            fasta_available = fasta_from_pdb(global_paths["step1_extractMolecule"]["input_structure_path"], global_paths["step2C_pdb_tofasta"]["output_file_path"], global_log)
+
+            # Update fix backbone input
+            global_paths['step2D_fixbackbone']['input_fasta_canonical_sequence_path'] = global_paths['step2C_pdb_tofasta']['output_file_path']
+            
+        if not fasta_available:
+            # Try to get the FASTA sequence from the PDB file
             global_log.info("step2C_pdb_tofasta: Get FASTA from PDB file")
+            
+            # Update the input file path
             global_paths['step2C_pdb_tofasta']['input_file_path'] = global_paths["step1_extractMolecule"]["input_structure_path"]
-            biobb_pdb_tofasta(**global_paths["step2C_pdb_tofasta"], properties=global_prop["step2C_pdb_tofasta"])
+            
             # NOTE: this is not the canonical, only existing residues in the PDB file are included
+            biobb_pdb_tofasta(**global_paths["step2C_pdb_tofasta"], properties=global_prop["step2C_pdb_tofasta"])
+            
+            # Update fix backbone input
             global_paths['step2D_fixbackbone']['input_fasta_canonical_sequence_path'] = global_paths['step2C_pdb_tofasta']['output_file_path']
             fasta_available = True
             
@@ -230,7 +287,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
             global_log.info("step2D_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
             fix_backbone(**global_paths["step2D_fixbackbone"], properties=global_prop["step2D_fixbackbone"])
         else:
-            global_log.warning("step2D_fixbackbone: Could not get canonical FASTA. Skipping modeling of the missing heavy atoms in the backbone.")
+            global_log.warning("step2D_fixbackbone: Could not get FASTA sequence. Skipping modeling of the missing heavy atoms in the backbone.")
             global_paths['step2E_fixsidechain']['input_pdb_path'] = global_paths['step2B_mutations']['output_pdb_path']
 
         # STEP 2 (E): model missing heavy atoms of side chains
