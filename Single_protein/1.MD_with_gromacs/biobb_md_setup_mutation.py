@@ -219,8 +219,11 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
             global_log.warning("step2C_canonical_fasta: Could not get canonical FASTA. Check the internet connection in the machine running the workflow. Trying to get the canonical FASTA from the PDB file...")
             
             global_log.info("step2C_pdb_tofasta: Get FASTA from PDB file")
+            global_paths['step2C_pdb_tofasta']['input_file_path'] = global_paths["step1_extractMolecule"]["input_structure_path"]
             biobb_pdb_tofasta(**global_paths["step2C_pdb_tofasta"], properties=global_prop["step2C_pdb_tofasta"])
-            global_paths['step2D_fixbackbone']['input_fasta_canonical_sequence_path'] = global_paths['step2C_pdb_tofasta']['output_fasta_path']
+            # NOTE: this is not the canonical, only existing residues in the PDB file are included
+            global_paths['step2D_fixbackbone']['input_fasta_canonical_sequence_path'] = global_paths['step2C_pdb_tofasta']['output_file_path']
+            fasta_available = True
             
         if fasta_available:
             # STEP 2 (D): Model missing heavy atoms of backbone

@@ -54,7 +54,8 @@ step2C_canonical_fasta:
 step2C_pdb_tofasta:
   tool: biobb_pdb_tofasta
   paths:
-    output_fasta_path: pdbFasta.fasta
+    input_file_path: dependency/step1_extractMolecule/input_structure_path
+    output_file_path: pdbFasta.fasta
   properties:
     multi: True
 
