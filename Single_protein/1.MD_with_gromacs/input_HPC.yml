@@ -349,7 +349,20 @@ step21_dry_str:
     pbc: mol
     ur: compact
 
-step22_rmsfirst:
+step22_dry_exp:
+  tool: gmx_trjconv_str
+  paths: 
+    input_top_path: dependency/step6_grompp_genion/output_tpr_path
+    input_structure_path: dependency/step7_genion/output_gro_path
+    output_str_path: dry_structure.gro
+    input_index_path: dependency/step9B_make_ndx/output_ndx_path
+  properties:
+    selection: Protein
+    center: True
+    pbc: mol
+    ur: compact
+
+step23_rmsfirst:
   tool: gmx_rms
   paths:
     input_structure_path: dependency/step21_dry_str/output_str_path
@@ -359,17 +372,17 @@ step22_rmsfirst:
     selection: Backbone
     xvg: xmgr # xmgrace, xmgr, none
 
-step23_rmsexp:
+step24_rmsexp:
   tool: gmx_rms
   paths:
-    input_structure_path: dependency/step8_grompp_min/output_tpr_path
+    input_structure_path: dependency/step21_dry_str/output_str_path
     input_traj_path: dependency/step20_dry_trj/output_traj_path
     output_xvg_path: md_rmsdexp.xvg
   properties:
     selection: Backbone
     xvg: xmgr # xmgrace, xmgr, none
 
-step24_rgyr:
+step25_rgyr:
   tool: gmx_rgyr
   paths:
     input_structure_path: dependency/step21_dry_str/output_str_path
@@ -379,10 +392,10 @@ step24_rgyr:
     selection: Backbone
     xvg: xmgr # xmgrace, xmgr, none
 
-step25_rmsf:
+step26_rmsf:
   tool: cpptraj_rmsf
   paths:
-    input_top_path: dependency/step7_genion/output_top_zip_path
+    input_top_path: dependency/step21_dry_str/output_str_path
     input_traj_path: dependency/step20_dry_trj/output_traj_path
     output_cpptraj_path: md_rmsf.xmgr  # .dat, .agr, .xmgr, .gnu
   properties:
@@ -391,7 +404,7 @@ step25_rmsf:
     steps: 1
     mask: "!@H=" # by default cpptraj already strips solvent atoms
 
-step26_image_traj:
+step27_image_traj:
   tool: gmx_image
   paths:
     input_traj_path: dependency/step20_dry_trj/output_traj_path
@@ -405,10 +418,10 @@ step26_image_traj:
     ur: compact
     pbc: mol
 
-step27_fit_traj:
+step28_fit_traj:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/step26_image_traj/output_traj_path
+    input_traj_path: dependency/step27_image_traj/output_traj_path
     input_top_path: dependency/step21_dry_str/output_str_path
     input_index_path: dependency/step9B_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc

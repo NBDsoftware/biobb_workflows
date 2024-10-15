@@ -413,33 +413,37 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         # STEP 21: obtain dry structure
         global_log.info("step21_dry_str: Obtain dry structure")
         gmx_trjconv_str(**global_paths["step21_dry_str"], properties=global_prop["step21_dry_str"])
+        
+        # STEP 22: obtain dry structure
+        global_log.info("step22_dry_exp: Obtain dry structure")
+        gmx_trjconv_str(**global_paths["step22_dry_exp"], properties=global_prop["step22_dry_exp"])
 
         #Remove the concatenated file that contains waters
         os.remove(global_paths["step19_trjcat"]["output_trj_path"])
 
-        # STEP 22: dump RMSD with respect to equilibrated structure (first frame)
-        global_log.info("step22_rmsfirst: Compute Root Mean Square deviation against equilibrated structure (first)")
-        gmx_rms(**global_paths['step22_rmsfirst'], properties=global_prop['step22_rmsfirst'])
+        # STEP 23: dump RMSD with respect to equilibrated structure (first frame)
+        global_log.info("step23_rmsfirst: Compute Root Mean Square deviation against equilibrated structure (first)")
+        gmx_rms(**global_paths['step23_rmsfirst'], properties=global_prop['step23_rmsfirst'])
 
-        # STEP 23: dump RMSD with respect to minimized structure
-        global_log.info("step23_rmsexp: Compute Root Mean Square deviation against minimized structure (exp)")
-        gmx_rms(**global_paths['step23_rmsexp'], properties=global_prop['step23_rmsexp'])
+        # STEP 24: dump RMSD with respect to minimized structure
+        global_log.info("step24_rmsexp: Compute Root Mean Square deviation against minimized structure (exp)")
+        gmx_rms(**global_paths['step24_rmsexp'], properties=global_prop['step24_rmsexp'])
 
-        # STEP 24: dump Radius of gyration
-        global_log.info("step24_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
-        gmx_rgyr(**global_paths['step24_rgyr'], properties=global_prop['step24_rgyr'])
+        # STEP 25: dump Radius of gyration
+        global_log.info("step25_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
+        gmx_rgyr(**global_paths['step25_rgyr'], properties=global_prop['step25_rgyr'])
 
         # STEP 25: dump RMSF
-        global_log.info("step25_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
-        cpptraj_rmsf(**global_paths['step25_rmsf'], properties=global_prop['step25_rmsf'])
+        global_log.info("step26_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
+        cpptraj_rmsf(**global_paths['step26_rmsf'], properties=global_prop['step26_rmsf'])
 
         # STEP 26: image the trajectory
-        global_log.info("step26_image_traj: Imaging the trajectory")
-        gmx_image(**global_paths['step26_image_traj'], properties=global_prop['step26_image_traj'])
+        global_log.info("step27_image_traj: Imaging the trajectory")
+        gmx_image(**global_paths['step27_image_traj'], properties=global_prop['step27_image_traj'])
 
         # STEP 27: fit the trajectory
-        global_log.info("step27_fit_traj: Fit the trajectory")
-        gmx_image(**global_paths['step27_fit_traj'], properties=global_prop['step27_fit_traj'])
+        global_log.info("step28_fit_traj: Fit the trajectory")
+        gmx_image(**global_paths['step28_fit_traj'], properties=global_prop['step28_fit_traj'])
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
