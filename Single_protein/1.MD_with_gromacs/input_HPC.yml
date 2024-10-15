@@ -170,6 +170,13 @@ step7_genion:
     neutral: True             # Neutralize charge of the system
     concentration: 0.15       # Concentration of ions in mols/L
 
+step7B_gro2pdb:
+  tool: gmx_trjconv_str
+  paths: 
+    input_top_path: dependency/step7_genion/output_gro_path
+    input_structure_path: dependency/step7_genion/output_gro_path
+    output_str_path: topology.pdb
+
 step8_grompp_min:
   tool: grompp
   paths:
@@ -182,7 +189,6 @@ step8_grompp_min:
       nsteps: 100000
       emtol: 10
     
-
 step9_mdrun_min:
   tool: mdrun
   paths:
@@ -192,6 +198,7 @@ step9_mdrun_min:
     output_edr_path: min.edr
     output_log_path: min.log
 
+# NOTE: To end up creating just the "System" group I think we can skip this step
 step9B_make_ndx:
   tool: make_ndx 
   paths:
@@ -317,19 +324,68 @@ step18_mdrun_md:
     output_log_path: md.log
     output_cpt_path: md.cpt
 
+# NOTE: include here the RMSD wrt first frame, RMSD wrt modeled experimental structure, Radius of Gyration and RMSF calculation (for each replica or part) - if replicas, it doesn't make sense to compute it over the concatenated trajectory
+
+step19_rmsd_equilibrated:
+  tool: gmx_rms
+  paths:
+    input_structure_path: dependency/step15_mdrun_npt/output_gro_path
+    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    output_xvg_path: md_rmsdfirst.xvg
+  properties:
+    selection: Backbone
+    xvg: xmgr # xmgrace, xmgr, none
+
+step20_rmsd_experimental:
+  tool: gmx_rms
+  paths:
+    input_structure_path: dependency/step8_grompp_min/input_gro_path
+    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    output_xvg_path: md_rmsdexp.xvg
+  properties:
+    selection: Backbone
+    xvg: xmgr # xmgrace, xmgr, none
+  
+step21_rgyr:
+  tool: gmx_rgyr
+  paths:
+    input_structure_path: dependency/step15_mdrun_npt/output_gro_path
+    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    output_xvg_path: md_rgyr.xvg
+  properties:
+    selection: Backbone
+    xvg: xmgr # xmgrace, xmgr, none
+
+step22_rmsf:
+  tool: cpptraj_rmsf
+  paths:
+    input_top_path: dependency/step7B_gro2pdb/output_str_path
+    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    output_cpptraj_path: md_rmsf.xmgr   # .dat, .agr, .xmgr, .gnu
+  properties:
+    start: 1
+    end: -1
+    steps: 1
+    mask: "!@H=" # by default cpptraj already strips solvent atoms
+
+# NOTE: Then, if these are parts -> join them in a single file - if replicas it's not necessary
+
+# NOTE: Then if these are parts -> concatenate the trajectories - if replicas it's not necessary
+
 step19_trjcat:
   tool: trjcat
   paths:
     input_trj_zip_path: all_trajectories_trr.zip
     output_trj_path: all_trajectories.xtc
 
+# NOTE: Dry, image and fit the trajectory (parts) or the trajectories (replicas) - if parts we need to do this here, after the concatenation
+
 step20_dry_trj:
   tool: gmx_trjconv_trj
   paths: 
     input_traj_path: dependency/step19_trjcat/output_trj_path
-    input_top_path: dependency/step14_grompp_npt/output_tpr_path
-    input_structure_path: dependency/step15_mdrun_npt/output_gro_path
-    output_traj_path: dry_structure.xtc
+    input_top_path: dependency/step15_mdrun_npt/output_gro_path
+    output_traj_path: dry_traj.xtc
     input_index_path: dependency/step9B_make_ndx/output_ndx_path
   properties:
     selection: Protein
@@ -338,7 +394,7 @@ step20_dry_trj:
     ur: compact
 
 step21_dry_str:
-  tool: gmx_trjconv_trj
+  tool: gmx_trjconv_str
   paths: 
     input_top_path: dependency/step14_grompp_npt/output_tpr_path
     input_structure_path: dependency/step15_mdrun_npt/output_gro_path
@@ -349,48 +405,6 @@ step21_dry_str:
     center: True
     pbc: mol
     ur: compact
-
-step22_rmsfirst:
-  tool: gmx_rms
-  paths:
-    input_structure_path: dependency/step21_dry_str/output_str_path
-    input_traj_path: dependency/step20_dry_trj/output_traj_path
-    output_xvg_path: md_rmsdfirst.xvg
-  properties:
-    selection: Backbone
-    xvg: xmgr # xmgrace, xmgr, none
-
-step23_rmsexp:
-  tool: gmx_rms
-  paths:
-    input_structure_path: dependency/step8_grompp_min/output_tpr_path
-    input_traj_path: dependency/step20_dry_trj/output_traj_path
-    output_xvg_path: md_rmsdexp.xvg
-  properties:
-    selection: Backbone
-    xvg: xmgr # xmgrace, xmgr, none
-
-step24_rgyr:
-  tool: gmx_rgyr
-  paths:
-    input_structure_path: dependency/step21_dry_str/output_str_path
-    input_traj_path: dependency/step20_dry_trj/output_traj_path
-    output_xvg_path: md_rgyr.xvg
-  properties:
-    selection: Backbone
-    xvg: xmgr # xmgrace, xmgr, none
-
-step25_rmsf:
-  tool: cpptraj_rmsf
-  paths:
-    input_top_path: dependency/step7_genion/output_top_zip_path
-    input_traj_path: dependency/step20_dry_trj/output_traj_path
-    output_cpptraj_path: md_rmsf.xmgr  # .dat, .agr, .xmgr, .gnu
-  properties:
-    start: 1
-    end: -1
-    steps: 1
-    mask: "!@H=" # by default cpptraj already strips solvent atoms
 
 step26_image_traj:
   tool: gmx_image

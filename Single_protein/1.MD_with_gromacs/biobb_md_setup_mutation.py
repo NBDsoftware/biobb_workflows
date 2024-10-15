@@ -163,7 +163,7 @@ def fasta_from_pdb(input_pdb_path: str, output_fasta_path: str, global_log) -> b
 
 def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path = None, input_pdb_path = None, pdb_chains = None,
             mutation_list = None, input_gro_path = None, input_top_path = None, fix_ss = None, fix_amide_clashes = None, 
-            his = None, nsteps = None, analysis = None):
+            his = None, nsteps = None, final_analysis = None):
     '''
     Main setup, mutation and MD run workflow with GROMACS. Can be used to retrieve a PDB, fix some defects of the structure,
     add specific mutations, prepare the system, minimize it, equilibrate it and finally do N production runs (either replicas or parts).
@@ -172,9 +172,9 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
     ------
 
         configuration_path (str): path to YAML configuration file
-        setup_only        (bool): whether to only setup the system or also run the simulations
-        num_parts          (int): number of parts of the trajectory to launch in serial
-        num_replicas       (int): number of replicas of the trajectory
+        setup_only        (bool): (Optional) whether to only setup the system or also run the simulations
+        num_parts          (int): (Optional) number of parts of the trajectory 
+        num_replicas       (int): (Optional) number of replicas of the trajectory
         output_path        (str): (Optional) path to output folder
         input_pdb_path     (str): (Optional) path to input PDB file
         pdb_chains         (str): (Optional) chains to be extracted from the input PDB file
@@ -183,7 +183,10 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         input_top_path     (str): (Optional) path to input topology file (.zip)
         fix_ss            (bool): (Optional) wether to add disulfide bonds
         fix_amide_clashes (bool): (Optional) wether to flip clashing amides to relieve the clashes
-
+        his               (str): (Optional) histidine protonation states list
+        nsteps            (int): (Optional) Total number of steps of the production simulation
+        final_analysis    (bool): (Optional) whether to perform the final analysis or not
+        
     Outputs
     -------
 
@@ -344,6 +347,10 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         # STEP 7: ion generation
         global_log.info("step7_genion: Ion generation")
         genion(**global_paths["step7_genion"], properties=global_prop["step7_genion"])
+        
+        # Step 7B: conversion of topology from gro to pdb
+        global_log.info("step7B_gro2pdb: Convert topology from GRO to PDB")
+        gmx_trjconv_str(**global_paths["step7B_gro2pdb"], properties=global_prop["step7B_gro2pdb"])
 
         if setup_only:
             global_log.info("setup_only: setup_only flag is set to True, exiting...")
@@ -414,11 +421,15 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         # Set general properties for all steps
         set_general_properties(traj_prop, conf, global_log)
 
-        # Update previous global paths
+        # Update previous global paths needed by simulation-specific steps
         traj_paths['step17_grompp_md']['input_gro_path'] = global_paths["step17_grompp_md"]['input_gro_path']
         traj_paths['step17_grompp_md']['input_cpt_path'] = global_paths["step17_grompp_md"]['input_cpt_path']
         traj_paths['step17_grompp_md']['input_top_zip_path'] = global_paths["step17_grompp_md"]['input_top_zip_path']
         traj_paths['step17_grompp_md']['input_ndx_path'] = global_paths["step17_grompp_md"]['input_ndx_path']
+        traj_paths['step19_rmsd_equilibrated']['input_structure_path'] = global_paths["step15_mdrun_npt"]['output_gro_path']
+        traj_paths['step20_rmsd_experimental']['input_structure_path'] = global_paths["step8_grompp_min"]['input_gro_path']
+        traj_paths['step21_rgyr']['input_structure_path'] = global_paths["step15_mdrun_npt"]['output_gro_path']
+        traj_paths['step22_rmsf']['input_top_path'] = global_paths["step7B_gro2pdb"]['output_str_path']
         
         # Enforce nsteps if provided
         if nsteps is not None:
@@ -457,14 +468,36 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         # Update the previous gro and cpt files
         previous_gro_path = traj_paths['step18_mdrun_md']['output_gro_path']
         previous_cpt_path = traj_paths['step18_mdrun_md']['output_cpt_path']
+        
+        # STEP 19: compute the RMSD with respect to equilibrated structure
+        global_log.info("step19_rmsd_equilibrated: Compute Root Mean Square deviation against equilibrated structure")
+        gmx_rms(**traj_paths['step19_rmsd_equilibrated'], properties=traj_prop['step19_rmsd_equilibrated'])
+        
+        # STEP 20: compute the RMSD with respect to minimized structure
+        global_log.info("step20_rmsd_experimental: Compute Root Mean Square deviation against minimized structure (exp)")
+        gmx_rms(**traj_paths['step20_rmsd_experimental'], properties=traj_prop['step20_rmsd_experimental'])
+        
+        # STEP 21: compute the Radius of gyration
+        global_log.info("step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
+        gmx_rgyr(**traj_paths['step21_rgyr'], properties=traj_prop['step21_rgyr'])
 
-    # NOTE: If the workflow has to support both replicas and parts, this analysis should be done for each replica and part! 
-    if int(analysis) == 1:
+        # STEP 22: compute the RMSF
+        global_log.info("step22_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
+        cpptraj_rmsf(**traj_paths['step22_rmsf'], properties=traj_prop['step22_rmsf'])
+        
+        
+    if final_analysis:
+        
+        # NOTE: Then, if these are parts -> join analysis in a single file - - if replicas it's not necessary
+        
+        # NOTE: Then if these are parts -> concatenate the trajectories - if replicas it's not necessary
         
         # STEP 19: concatenate trajectories
         global_log.info("step19_trjcat: Concatenate trajectories")
         fu.zip_list(zip_file=global_paths["step19_trjcat"]['input_trj_zip_path'], file_list=traj_list)
         trjcat(global_paths["step19_trjcat"]["input_trj_zip_path"], global_paths["step19_trjcat"]["output_trj_path"], properties=global_prop["step19_trjcat"])
+
+    # NOTE: Dry, image and fit the trajectory (parts) or the trajectories (replicas) - if parts we need to do this here, after the concatenation
 
         # STEP 20: obtain dry trajectory
         global_log.info("step20_dry_trj: Obtain dry trajectory")
@@ -476,22 +509,6 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
 
         #Remove the concatenated file that contains waters
         os.remove(global_paths["step19_trjcat"]["output_trj_path"])
-
-        # STEP 22: dump RMSD with respect to equilibrated structure (first frame)
-        global_log.info("step22_rmsfirst: Compute Root Mean Square deviation against equilibrated structure (first)")
-        gmx_rms(**global_paths['step22_rmsfirst'], properties=global_prop['step22_rmsfirst'])
-
-        # STEP 23: dump RMSD with respect to minimized structure
-        global_log.info("step23_rmsexp: Compute Root Mean Square deviation against minimized structure (exp)")
-        gmx_rms(**global_paths['step23_rmsexp'], properties=global_prop['step23_rmsexp'])
-
-        # STEP 24: dump Radius of gyration
-        global_log.info("step24_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
-        gmx_rgyr(**global_paths['step24_rgyr'], properties=global_prop['step24_rgyr'])
-
-        # STEP 25: dump RMSF
-        global_log.info("step25_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
-        cpptraj_rmsf(**global_paths['step25_rmsf'], properties=global_prop['step25_rmsf'])
 
         # STEP 26: image the trajectory
         global_log.info("step26_image_traj: Imaging the trajectory")
@@ -575,8 +592,8 @@ if __name__ == "__main__":
                         help="Number of steps of the simulation",
                         required=False)
 
-    parser.add_argument('--analysis', dest='analysis',
-                        help="Analysis",
+    parser.add_argument('--final_analysis', action='store_true', dest='final_analysis',
+                        help="Run the final analysis of the trajectory/ies. Concatenation of the analysis and trajectory, trajectory drying, imaging and fitting (default: False)",
                         required=False)
 
     args = parser.parse_args()
@@ -592,4 +609,4 @@ if __name__ == "__main__":
     main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_parts=args.num_parts, num_replicas=args.num_replicas, output_path=args.output_path,
             input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list,
             input_gro_path=args.input_gro_path, input_top_path=args.input_top_path,
-            fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, his=args.his, nsteps=args.nsteps, analysis=args.analysis)
+            fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, his=args.his, nsteps=args.nsteps, final_analysis=args.final_analysis)
