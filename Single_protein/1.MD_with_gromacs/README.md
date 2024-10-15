@@ -9,7 +9,7 @@ Go to workflow folder and install the conda environment (running in Nostrum's cl
 ```bash
 export KEY_MODELLER="HERE YOUR MODELLER KEY"
 conda env create -f environment.yml
-conda activate biobb_sp_md
+conda activate biobb_md
 ```
 
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
@@ -48,41 +48,58 @@ Specially important are: the configuration file path, the input pdb file or the 
 
 This workflow has several steps. The input for the workflow can be (1) a pdb file to be fixed and prepared. Or (2) an already prepared gromacs structure file and .zip topology files ready to be minimized.
 
-- **Step 1**: extraction of structure from PDB. Provide the input pdb file and chain to be extracted through the command line arguments of the workflow or through the paths and properties of step 1 section in the YAML configuration file. The workflow will always prioritize the inputs from command line arguments.
+1. **Extraction of structure from PDB**
+    Provide the input pdb file and chain to be extracted through the command line arguments of the workflow or through the paths and properties of step 1 section in the YAML configuration file. The workflow will always prioritize the inputs from command line arguments.
 
-**Steps 2 (A-I)**: steps to fix different possible defects in the input pdb structure. See below.
+2. **Fix PDB defects (A-I)**
+    Steps to fix different possible defects in the input pdb structure. See below.
 
-- **Step 2A**: fix alternative locations. Provide a list with the choices of alternative locations to keep in the final structure.
+    A. **Fix alternative locations** 
+    Provide a list with the choices of alternative locations to keep in the final structure.
 
-- **Step 2B**: mutations of initial pdb structure. Mutations can be requested through the mutation_list property of the YAML configuration file as a single string of mutations separated by commas (no spaces). Where each mutation is defined by string with the following format: "Chain:Wild_type_residue_name Residue_number Mutated_type_residue_name". The residue name should be a 3 letter code starting with capital letters, e.g. "A:Arg220Ala". Alternatively, they can be given through the mutation_list command line argument. If no mutation is desired leave an empty string ("") or comment the mutation_list property.
+    B. **Mutate initial pdb structure** 
+    Mutations can be requested through the mutation_list property of the YAML configuration file as a single string of mutations separated by commas (no spaces). Where each mutation is defined by string with the following format: "Chain:Wild_type_residue_name Residue_number Mutated_type_residue_name". The residue name should be a 3 letter code starting with capital letters, e.g. "A:Arg220Ala". Alternatively, they can be given through the mutation_list command line argument. If no mutation is desired leave an empty string ("") or comment the mutation_list property.
 
-- **Step 2C**: download a canonical FASTA file from the Protein Data Bank. This FASTA sequence file is then used to model missing backbone atoms in step 2D. Internet connection and a PDB code are required for this step. This step is executed only if "--fix_backbone" is used in the command line arguments. 
+    C. **Obtain the Sequence in FASTA format** 
+    The sequence is then used to model missing backbone atoms in the next step. The workflow first tries to download the canonical FASTA (including all residues for that protein) from the Protein Data Bank. If there is no internet connection, it will try to obtain the sequence from the _SEQRES_ records in the PDB. If there are no _SEQRES_, then only the residues that contain at least one atom in the structure will be included.   
 
-- **Step 2D**: add missing backbone heavy atoms using biobb_structure_checking and Modeller suite. A modeller license key and the previous FASTA file are required for this step. This step is executed only if "--fix_backbone" is used in the command line arguments.  
+    D. **Model missing backbone atoms**
+    Add missing backbone heavy atoms using biobb_structure_checking and Modeller suite. A modeller license key and the previous FASTA file are required for this step.   
 
-- **Step 2E**: add missing side chain atoms using biobb_structure_checking (and Modeller suite if a license key is provided).
+    E. **Model missing side chain atoms**
+    Add missing side chain atoms using biobb_structure_checking (and Modeller suite if a license key is provided).
 
-- **Step 2F**: Add missing disulfide bonds. Use carefully. This step is executed only if "--fix_ss" is used in the command line arguments. 
+    F. **Add missing disulfide bonds**
+    It changes CYS for CYX to mark cysteines residues pertaining to a [di-sulfide bond](https://en.wikipedia.org/wiki/Disulfide). It uses a distance criteria to determine if nearby cysteines are part of a di-sulfide bridge (_check_structure getss_). Use carefully. This step is executed only if "--fix_ss" is used in the command line arguments. 
 
-- **Step 2G**: flip the clashing amide groups to avoid clashes.
+    G. **Relieve clashes flipping amide groups**
+    It flips the clashing amide groups to relieve clashes.
 
-- **Step 2H**: fix stereochemical errors in residue side-chains changing their chirality.
+    H. **Fix chirality of residues**
+    Creates a new PDB file fixing stereochemical errors in residue side-chains changing It's chirality.
 
-- **Step 2I**: renumber atomic indices.
+    I. **Renumber atomic indices**
 
 **Steps 3 - 7**: preparation of the system for minimization and MD with GROMACS.
 
-- **Step 3**: uses pdb2gmx to obtain a gromacs structure file (.gro) and topology file from the prepared structure file in step 2. Hydrogen atoms will be added in this step. A force field and water model are chosen with the force_field and water_type properties. 
+3. **pdb2gmx** 
+Uses pdb2gmx to obtain a gromacs structure file (.gro) and topology file from the prepared structure file in step 2. Hydrogen atoms will be added in this step. A force field and water model are chosen here. 
 
-- **Step 4**: generate a simulation box around the structure.
+4. **Generate simulation box** 
+Generate a simulation box around the structure. Some box types are more efficient than others (octahedron for globular proteins)
 
-- **Step 5**: generate a box of solvent around the structure.
+5. **Solvation** 
+Generate a box of solvent around the structure.
 
-- **Step 6**: prepare step 7
+6. **Prepare ion addition**
+Prepares the next step
 
-- **Step 7**: randomly replace solvent molecules with monoatomic ions. To prepare the system externally, use the "--input_gro" and "--input_top" command line arguments.
+7. **Add ions** 
+Randomly replace solvent molecules with monoatomic ions. 
 
-To make sure the system has been correctly prepared before minimizing or running MD, launch the workflow adding the '--setup_only' command line option. This will stop the workflow before the energy minimization. 
+To prepare the system externally, use the ```--input_gro``` and ```--input_top``` command line arguments.
+
+To make sure the system has been correctly prepared before minimizing or running MD, launch the workflow adding the ```--setup_only``` command line option. This will stop the workflow before the energy minimization. 
 
 **Steps 8 - 10**: energy minimization (including position restraints on the proteins heavy atoms)
 
