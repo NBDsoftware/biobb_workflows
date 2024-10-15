@@ -119,7 +119,7 @@ def set_general_properties(properties, conf, global_log) -> None:
     
 
 def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path = None, input_pdb_path = None, pdb_chains = None,
-            mutation_list = None, input_gro_path = None, input_top_path = None, fix_backbn = None, fix_ss = None, fix_amide_clashes = None, 
+            mutation_list = None, input_gro_path = None, input_top_path = None, fix_ss = None, fix_amide_clashes = None, 
             his = None, nsteps = None, analysis = None):
     '''
     Main setup, mutation and MD run workflow with GROMACS. Can be used to retrieve a PDB, fix some defects of the structure,
@@ -138,7 +138,6 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         mutation_list      (str): (Optional) list of mutations to be introduced in the structure
         input_gro_path     (str): (Optional) path to input structure file (.gro)
         input_top_path     (str): (Optional) path to input topology file (.zip)
-        fix_backbn        (bool): (Optional) wether to add missing backbone atoms
         fix_ss            (bool): (Optional) wether to add disulfide bonds
         fix_amide_clashes (bool): (Optional) wether to flip clashing amides to relieve the clashes
 
@@ -208,15 +207,18 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         global_log.info("step2B_mutations: Preparing mutated structure")
         mutate(**global_paths["step2B_mutations"], properties=global_prop["step2B_mutations"])
 
-        if fix_backbn:
+
+        # Try to get the canonical FASTA with an http request
+        try:
             # STEP 2 (C): Get canonical FASTA
             global_log.info("step2C_canonical_fasta: Get canonical FASTA")
             canonical_fasta(**global_paths["step2C_canonical_fasta"], properties=global_prop["step2C_canonical_fasta"])
-
-            # STEP 2 (D): Model missing heavy atoms of backbone
+            
+            # STEP 2 (D): Model missing heavy atoms of backbone using the canonical FASTA
             global_log.info("step2D_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
             fix_backbone(**global_paths["step2D_fixbackbone"], properties=global_prop["step2D_fixbackbone"])
-        else:
+        except:
+            global_log.warning("step2C_canonical_fasta: Could not get canonical FASTA. Check the internet connection in the machine running the workflow. Skipping...")
             global_paths['step2E_fixsidechain']['input_pdb_path'] = global_paths['step2B_mutations']['output_pdb_path']
 
         # STEP 2 (E): model missing heavy atoms of side chains
@@ -496,10 +498,6 @@ if __name__ == "__main__":
                         help="Add disulfide bonds to the protein. Use carefully! (default: False)",
                         required=False)
 
-    parser.add_argument('--fix_backbone', action='store_true',
-                        help="Add missing backbone atoms. Requires internet connection, PDB code and a MODELLER license key (default: False)",
-                        required=False)
-
     parser.add_argument('--fix_amides', action='store_true', dest='fix_amide_clashes',
                         help="Flip clashing amides to relieve the clashes (default: False)",
                         required=False)
@@ -525,4 +523,4 @@ if __name__ == "__main__":
     main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_parts=args.num_parts, num_replicas=args.num_replicas, output_path=args.output_path,
             input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list,
             input_gro_path=args.input_gro_path, input_top_path=args.input_top_path,
-            fix_backbn=args.fix_backbone, fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, his=args.his, nsteps=args.nsteps, analysis=args.analysis)
+            fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, his=args.his, nsteps=args.nsteps, analysis=args.analysis)
