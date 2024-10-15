@@ -1,7 +1,7 @@
 # YAML configuration file for the MD with mutation workflow
 
 # Global properties (common for all steps)
-binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi # GROMACS binary path
+binary_path: /path/to/gromacs/binary/path                                                       # GROMACS binary path, to avoid using the one pre-compiled and available in the environment
 mpi_bin: null                                                                                   # MPI binary path, e.g. mpirun, srun... (should be left as null if gromacs already includes MPI support)
 mpi_np: 1                                                                                       # Number of processors for MPI selected in the mpi_bin call
 use_gpu: False                                                                                  # Wether to use GPU support or not
