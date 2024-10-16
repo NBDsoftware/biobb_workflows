@@ -6,6 +6,7 @@
 
 # Importing all the needed libraries
 from Bio.SeqIO.PdbIO import PdbSeqresIterator
+from Bio.PDB import PDBParser
 from Bio import SeqIO
 import time
 import random
@@ -40,6 +41,71 @@ from biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf
 from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 from biobb_pdb_tools.pdb_tools.biobb_pdb_tofasta import biobb_pdb_tofasta
+
+def highest_occupancy_altlocs(pdb_file, global_log) -> list:
+    """
+    Reads a PDB file and returns a list of the highest occupancy alternative locations
+    for each residue that has multiple conformations (alternative locations). 
+
+    The output is a list where each element is a string in the format: 
+    "<chain_id><residue_number>:<altLoc>", representing the chain, residue number, 
+    and the alternative location identifier with the highest occupancy.
+
+    Args:
+        pdb_file (str): Path to the PDB file to be parsed.
+
+    Returns:
+        List[str]: A list of strings where each string represents the residue's chain ID, 
+                   residue number, and the highest occupancy alternative location identifier.
+                   The format of each string is "<chain_id><residue_number>:<altLoc>".
+
+    Example:
+        If a residue with ID 339 in chain 'A' has two alternative locations 'A' and 'B',
+        and 'A' has a higher occupancy, the output for this residue would be "A339:A".
+
+        >>> highest_occupancy_altlocs('example.pdb')
+        ["A339:A", "A171:B", "A768:A"]
+    """
+    
+    parser = PDBParser(QUIET=True)
+    
+    # Check if the file exists
+    if not os.path.exists(pdb_file):
+        global_log.error(f"File {pdb_file} not found")
+        return []
+    
+    structure = parser.get_structure('structure', pdb_file)
+
+    altloc_residues = []
+    
+    for model in structure:
+        for chain in model:
+            for residue in chain:
+                
+                altloc_dict = {}
+                for atom in residue:
+                    altloc = atom.get_altloc()
+                    
+                    if altloc and altloc != " ":  # Check if the atom has an alternative location
+                        # Keep track of highest occupancy for each altloc
+                        if altloc not in altloc_dict or atom.get_occupancy() > altloc_dict[altloc]['occupancy']:
+                            altloc_dict[altloc] = {'occupancy': atom.get_occupancy(), 'residue': residue}
+                            
+                # If there is any alternative location
+                if altloc_dict:
+                    # Find the altloc with the highest occupancy
+                    best_altloc = max(altloc_dict, key=lambda x: altloc_dict[x]['occupancy'])
+                    res_id = residue.get_id()[1]
+                    chain_id = chain.get_id()
+                    altloc_residues.append(f"{chain_id}{res_id}:{best_altloc}")
+    
+    # Log result
+    if altloc_residues:
+        global_log.info(f"Found residues with alternative locations: {altloc_residues}")
+    else:
+        global_log.info("No residues with alternative locations found")
+        
+    return altloc_residues
 
 def set_gromacs_path(properties: dict, binary_path: str) -> None:
     """
@@ -381,6 +447,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
 
         # STEP 2 (A): Fix alternative locations
         global_log.info("step2A_fixaltlocs: Fix alternative locations")
+        global_prop["step2A_fixaltlocs"]["altlocs"] = highest_occupancy_altlocs(global_paths["step1_extractMolecule"]["input_structure_path"], global_log)
         fix_altlocs(**global_paths["step2A_fixaltlocs"], properties=global_prop["step2A_fixaltlocs"])
 
         if mutation_list is not None:
