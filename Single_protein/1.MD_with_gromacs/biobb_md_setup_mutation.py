@@ -160,7 +160,144 @@ def fasta_from_pdb(input_pdb_path: str, output_fasta_path: str, global_log) -> b
     
     return True
 
+def merge_xvgtimeseries_files(file_paths: list, output_xvg_path: str) -> None:
+    """
+    Merges multiple XVG files containing time series data into a single file.
+    
+    The function reads each file, handles time data by adjusting the time
+    of subsequent files, ensures no duplicated points at the boundary between files,
+    and writes the merged data into a new XVG file. It also preserves the header 
+    from the first input file.
+    
+    Inputs
+    ------
+    filepaths : list of str
+        A list of file paths for the input XVG files to be merged. 
+        Each file should follow the format of time series data with comments starting 
+        with '#' followed by a header section starting with '@' with plot details 
+    
+    output_filepath : str
+        The path for the output XVG file that will contain the merged data.
 
+    Returns:
+    -------
+    None
+        The merged file is written to the specified output filepath.
+
+    Notes:
+    -----
+    - The function assumes that the time in each file starts at zero. 
+    - The last data point of each file is compared to the first data point of the next file 
+      to avoid duplication of the overlapping entry.
+    - The function adjusts the time values of the second and subsequent files by adding 
+      the final time value of the previous file to maintain a continuous time series.
+    
+    Example:
+    -------
+    To merge two files `part1.xvg` and `part2.xvg` into `merged_output.xvg`, you would do:
+
+    >>> filepaths = ["part1.xvg", "part2.xvg"]
+    >>> output_filepath = "merged_output.xvg"
+    >>> merge_xvg_files(filepaths, output_filepath)
+    
+    After execution, a merged XVG file with a continuous time series will be saved at the
+    specified output path.
+    """
+
+    # Initialize the time offset
+    time_offset = 0
+    header_written = False
+    merged_data = []
+
+    for i, file_path in enumerate(file_paths):
+        with open(file_path, 'r') as f:
+            lines = f.readlines()
+
+        # Temporary variables for the current file
+        file_data = []
+        file_last_time = 0
+        file_header = []
+
+        # Read current file
+        for line in lines:
+            line = line.strip()
+
+            if line.startswith('#'):
+                # Ignore comments
+                continue
+            elif line.startswith('@'):
+                # Store headers only from the first file
+                if not header_written:
+                    file_header.append(line)
+            else:
+                # Parse data (assuming it's space-separated values)
+                data_parts = line.split()
+                time = float(data_parts[0])
+                values = [float(val) for val in data_parts[1:]]
+
+                # Adjust time based on the current offset
+                adjusted_time = time + time_offset
+
+                # Add the data point to the current file data
+                if len(merged_data) > 0 and len(file_data) == 0:
+                    # If we are adding the first point of the next file, check for duplicates of the last point in the merged data
+                    last_time_in_merged = merged_data[-1][0]
+                    if adjusted_time <= last_time_in_merged:
+                        # Skip this point as it is a duplicate
+                        continue
+                    
+                # Add the data point to the current file data
+                file_data.append([adjusted_time] + values)
+
+        # If the file contains data, adjust the time offset and prepare for merging
+        if len(file_data) > 0:
+            file_last_time = file_data[-1][0]
+            merged_data.extend(file_data)
+            time_offset = file_last_time
+
+        # Write header only once
+        if not header_written and len(file_header) > 0:
+            with open(output_xvg_path, 'w') as output_file:
+                output_file.write('\n'.join(file_header) + '\n')
+            header_written = True
+
+    # Write the merged data to the output file
+    with open(output_xvg_path, 'a') as output_file:
+        for data_row in merged_data:
+            output_file.write(" ".join(f"{val:.6f}" for val in data_row) + '\n')
+    
+def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
+    """
+    Concatenates the analysis files for each step of the GROMACS analysis including
+    RMSD and Rgyr. The function reads the analysis files for each step from the
+    simulation folders, merges them into a single file, and writes the merged data
+    
+    Inputs:
+    -------
+    
+    conf : class settings.ConfReader
+        Configuration file reader object
+    simulation_folders : list of str
+        List of folder names containing the simulation data for each part or replica
+    output_path : str
+        Path to the output folder where the concatenated files will be saved
+    """
+    
+    # Construct a dictionary with the paths to the analysis files
+    gmx_analysis_steps = ['step19_rmsd_equilibrated', 'step20_rmsd_experimental', 'step21_rgyr']
+    analysis_files = {step: [] for step in gmx_analysis_steps}        
+    for simulation in simulation_folders:
+        traj_paths = conf.get_paths_dic(prefix=simulation)
+        for step in gmx_analysis_steps:
+            analysis_files[step].append(traj_paths[step]['output_xvg_path'])
+        
+    # Concatenate the analysis files for each step
+    for step, file_paths in analysis_files.items():
+        
+        # Output path for the concatenated file
+        output_xvg_path = os.path.join(output_path, f"{step}.xvg")
+        merge_xvgtimeseries_files(file_paths, output_xvg_path)
+    
 def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path = None, input_pdb_path = None, pdb_chains = None,
             mutation_list = None, input_gro_path = None, input_top_path = None, fix_ss = None, fix_amide_clashes = None, 
             his = None, nsteps = None, final_analysis = None):
@@ -321,10 +458,8 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         # STEP 2 (I): renumber structure atoms and residues
         global_log.info("step2I_renumberstructure: renumber structure")
         renumber_structure(**global_paths["step2I_renumberstructure"], properties=global_prop["step2I_renumberstructure"])
-
-        # NOTE: Check RMSF analysis step, not working - we need amber top
         
-        # NOTE: Histidine protonation states come from pdb4amber which should be used within the WF!
+        # NOTE: Histidine protonation states come from external call to pdb4amber, should be done within the WF!
         # STEP 3: add H atoms, generate coordinate (.gro) and topology (.top) file
         global_log.info("step3_pdb2gmx: Generate the topology")
         if his:
@@ -485,38 +620,90 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         global_log.info("step22_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
         cpptraj_rmsf(**traj_paths['step22_rmsf'], properties=traj_prop['step22_rmsf'])
         
-        
+    # Do the final analysis with all the previous parts or replicas
     if final_analysis:
         
-        # NOTE: Then, if these are parts -> join analysis in a single file - - if replicas it's not necessary
+        # If simulations are different parts of a single trajectory
+        if num_parts:
+            
+            # Concatenate the analysis files that can be concatenated
+            concatenate_gmx_analysis(conf, simulation_folders, output_path)
         
-        # NOTE: Then if these are parts -> concatenate the trajectories - if replicas it's not necessary
+            # STEP 23: concatenate trajectories
+            global_log.info("step23_trjcat: Concatenate trajectories")
+            fu.zip_list(zip_file=global_paths["step23_trjcat"]['input_trj_zip_path'], file_list=traj_list)
+            trjcat(**global_paths["step23_trjcat"], properties=global_prop["step23_trjcat"])
+            
+            # STEP 24: obtain dry the merged trajectory
+            global_log.info("step24_dry_trj: Obtain dry trajectory")
+            gmx_trjconv_trj(**global_paths["step24_dry_trj"], properties=global_prop["step24_dry_trj"])
         
-        # STEP 19: concatenate trajectories
-        global_log.info("step19_trjcat: Concatenate trajectories")
-        fu.zip_list(zip_file=global_paths["step19_trjcat"]['input_trj_zip_path'], file_list=traj_list)
-        trjcat(global_paths["step19_trjcat"]["input_trj_zip_path"], global_paths["step19_trjcat"]["output_trj_path"], properties=global_prop["step19_trjcat"])
+            #Remove unused trajectory
+            os.remove(global_paths["step23_trjcat"]["output_trj_path"])
+            
+            # STEP 25: obtain dry structure
+            global_log.info("step25_dry_str: Obtain dry structure")
+            gmx_trjconv_str(**global_paths["step25_dry_str"], properties=global_prop["step25_dry_str"])
 
-    # NOTE: Dry, image and fit the trajectory (parts) or the trajectories (replicas) - if parts we need to do this here, after the concatenation
+            # STEP 26: image the trajectory
+            global_log.info("step26_image_traj: Imaging the trajectory")
+            gmx_image(**global_paths['step26_image_traj'], properties=global_prop['step26_image_traj'])
+            
+            #Remove unused trajectory
+            os.remove(global_paths["step24_dry_trj"]["output_traj_path"])
 
-        # STEP 20: obtain dry trajectory
-        global_log.info("step20_dry_trj: Obtain dry trajectory")
-        gmx_trjconv_trj(**global_paths["step20_dry_trj"], properties=global_prop["step20_dry_trj"])
-
-        # STEP 21: obtain dry structure
-        global_log.info("step21_dry_str: Obtain dry structure")
-        gmx_trjconv_str(**global_paths["step21_dry_str"], properties=global_prop["step21_dry_str"])
-
-        #Remove the concatenated file that contains waters
-        os.remove(global_paths["step19_trjcat"]["output_trj_path"])
-
-        # STEP 26: image the trajectory
-        global_log.info("step26_image_traj: Imaging the trajectory")
-        gmx_image(**global_paths['step26_image_traj'], properties=global_prop['step26_image_traj'])
-
-        # STEP 27: fit the trajectory
-        global_log.info("step27_fit_traj: Fit the trajectory")
-        gmx_image(**global_paths['step27_fit_traj'], properties=global_prop['step27_fit_traj'])
+            # STEP 27: fit the trajectory
+            global_log.info("step27_fit_traj: Fit the trajectory")
+            gmx_image(**global_paths['step27_fit_traj'], properties=global_prop['step27_fit_traj'])
+            
+            #Remove unused trajectory
+            os.remove(global_paths["step26_image_traj"]["output_traj_path"])
+            
+        # If simulations are replicas
+        if num_replicas:
+            
+            # For each replica, do the final analysis
+            for simulation in simulation_folders:
+                
+                # Get the properties and paths for the replica
+                traj_prop = conf.get_prop_dic(prefix=simulation)
+                traj_paths = conf.get_paths_dic(prefix=simulation)
+                
+                # Set general properties for all steps
+                set_general_properties(traj_prop, conf, global_log)
+                
+                # NOTE: we are hard-coding the kind of traj that we are using with these paths: output_trr_path
+                # Update previous global paths needed by simulation-specific steps
+                traj_paths['step24_dry_trj']['input_traj_path'] = traj_paths['step18_mdrun_md']['output_trr_path']
+                traj_paths['step24_dry_trj']['input_top_path'] = global_paths["step15_mdrun_npt"]['output_gro_path']
+                traj_paths['step24_dry_trj']['input_index_path'] = global_paths["step9B_make_ndx"]['output_ndx_path']
+                traj_paths['step25_dry_str']['input_structure_path'] = global_paths["step15_mdrun_npt"]['output_gro_path']
+                traj_paths['step25_dry_str']['input_top_path'] = global_paths["step15_mdrun_npt"]['output_gro_path']
+                traj_paths['step25_dry_str']['input_index_path'] = global_paths["step9B_make_ndx"]['output_ndx_path']
+                traj_paths['step26_image_traj']['input_index_path'] = global_paths["step9B_make_ndx"]['output_ndx_path']
+                traj_paths['step27_fit_traj']['input_index_path'] = global_paths["step9B_make_ndx"]['output_ndx_path']
+                
+                # STEP 24: obtain dry the trajectory
+                global_log.info(f"{simulation} > step24_dry_trj: Obtain dry trajectory")
+                gmx_trjconv_trj(**traj_paths["step24_dry_trj"], properties=traj_prop["step24_dry_trj"])
+                
+                # STEP 25: obtain dry structure
+                global_log.info(f"{simulation} > step25_dry_str: Obtain dry structure")
+                gmx_trjconv_str(**traj_paths["step25_dry_str"], properties=traj_prop["step25_dry_str"])
+                
+                # STEP 26: image the trajectory
+                global_log.info(f"{simulation} > step26_image_traj: Imaging the trajectory")
+                gmx_image(**traj_paths['step26_image_traj'], properties=traj_prop['step26_image_traj'])
+                
+                #Remove unused trajectory
+                os.remove(traj_paths["step24_dry_trj"]["output_traj_path"])
+                
+                # STEP 27: fit the trajectory
+                global_log.info(f"{simulation} > step27_fit_traj: Fit the trajectory")
+                gmx_image(**traj_paths['step27_fit_traj'], properties=traj_prop['step27_fit_traj'])
+                
+                #Remove unused trajectory
+                os.remove(traj_paths["step26_image_traj"]["output_traj_path"])
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
