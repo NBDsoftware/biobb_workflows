@@ -365,7 +365,7 @@ def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
         merge_xvgtimeseries_files(file_paths, output_xvg_path)
     
 def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path = None, input_pdb_path = None, pdb_chains = None,
-            mutation_list = None, input_gro_path = None, input_top_path = None, fix_ss = None, fix_amide_clashes = None, 
+            mutation_list = None, input_gro_path = None, input_top_path = None, skip_fix_backbone = None, fix_ss = None, fix_amide_clashes = None, 
             his = None, nsteps = None, final_analysis = None):
     '''
     Main setup, mutation and MD run workflow with GROMACS. Can be used to retrieve a PDB, fix some defects of the structure,
@@ -384,6 +384,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         mutation_list      (str): (Optional) list of mutations to be introduced in the structure
         input_gro_path     (str): (Optional) path to input structure file (.gro)
         input_top_path     (str): (Optional) path to input topology file (.zip)
+        skip_fix_backbone (bool): (Optional) whether to skip the fix of the backbone atoms
         fix_ss            (bool): (Optional) wether to add disulfide bonds
         fix_amide_clashes (bool): (Optional) wether to flip clashing amides to relieve the clashes
         his               (str): (Optional) histidine protonation states list
@@ -457,44 +458,48 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         global_log.info("step2B_mutations: Preparing mutated structure")
         mutate(**global_paths["step2B_mutations"], properties=global_prop["step2B_mutations"])
         
-        # STEP 2 (C): Get FASTA sequence to model the backbone
-        try:
-            # Try to get the canonical FASTA sequence with an http request from the PDB code
-            global_log.info("step2C_canonical_fasta: Get canonical FASTA")
-            canonical_fasta(**global_paths["step2C_canonical_fasta"], properties=global_prop["step2C_canonical_fasta"])
-            fasta_available = True
-        except:
-            global_log.warning("step2C_canonical_fasta: Could not get canonical FASTA. Check the internet connection in the machine running the workflow. Trying to get the canonical FASTA from the PDB file...")
-            fasta_available = False
-            
-        if not fasta_available:
-            # Try to get the FASTA sequence from SEQRES records in the PDB file
-            global_log.info("step2C_pdb_tofasta: Get FASTA from SEQRES of PDB file")
-            fasta_available = fasta_from_pdb(global_paths["step1_extractMolecule"]["input_structure_path"], global_paths["step2C_pdb_tofasta"]["output_file_path"], global_log)
+        if not skip_fix_backbone:
+            # STEP 2 (C): Get FASTA sequence to model the backbone
+            try:
+                # Try to get the canonical FASTA sequence with an http request from the PDB code
+                global_log.info("step2C_canonical_fasta: Get canonical FASTA")
+                canonical_fasta(**global_paths["step2C_canonical_fasta"], properties=global_prop["step2C_canonical_fasta"])
+                fasta_available = True
+            except:
+                global_log.warning("step2C_canonical_fasta: Could not get canonical FASTA. Check the internet connection in the machine running the workflow. Trying to get the canonical FASTA from the PDB file...")
+                fasta_available = False
+                
+            if not fasta_available:
+                # Try to get the FASTA sequence from SEQRES records in the PDB file
+                global_log.info("step2C_pdb_tofasta: Get FASTA from SEQRES of PDB file")
+                fasta_available = fasta_from_pdb(global_paths["step1_extractMolecule"]["input_structure_path"], global_paths["step2C_pdb_tofasta"]["output_file_path"], global_log)
 
-            # Update fix backbone input
-            global_paths['step2D_fixbackbone']['input_fasta_canonical_sequence_path'] = global_paths['step2C_pdb_tofasta']['output_file_path']
-            
-        if not fasta_available:
-            # Try to get the FASTA sequence from the PDB file
-            global_log.info("step2C_pdb_tofasta: Get FASTA from PDB file")
-            
-            # Update the input file path
-            global_paths['step2C_pdb_tofasta']['input_file_path'] = global_paths["step1_extractMolecule"]["input_structure_path"]
-            
-            # NOTE: this is not the canonical, only existing residues in the PDB file are included
-            biobb_pdb_tofasta(**global_paths["step2C_pdb_tofasta"], properties=global_prop["step2C_pdb_tofasta"])
-            
-            # Update fix backbone input
-            global_paths['step2D_fixbackbone']['input_fasta_canonical_sequence_path'] = global_paths['step2C_pdb_tofasta']['output_file_path']
-            fasta_available = True
-            
-        if fasta_available:
-            # STEP 2 (D): Model missing heavy atoms of backbone
-            global_log.info("step2D_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
-            fix_backbone(**global_paths["step2D_fixbackbone"], properties=global_prop["step2D_fixbackbone"])
+                # Update fix backbone input
+                global_paths['step2D_fixbackbone']['input_fasta_canonical_sequence_path'] = global_paths['step2C_pdb_tofasta']['output_file_path']
+                
+            if not fasta_available:
+                # Try to get the FASTA sequence from the PDB file
+                global_log.info("step2C_pdb_tofasta: Get FASTA from PDB file")
+                
+                # Update the input file path
+                global_paths['step2C_pdb_tofasta']['input_file_path'] = global_paths["step1_extractMolecule"]["input_structure_path"]
+                
+                # NOTE: this is not the canonical, only existing residues in the PDB file are included
+                biobb_pdb_tofasta(**global_paths["step2C_pdb_tofasta"], properties=global_prop["step2C_pdb_tofasta"])
+                
+                # Update fix backbone input
+                global_paths['step2D_fixbackbone']['input_fasta_canonical_sequence_path'] = global_paths['step2C_pdb_tofasta']['output_file_path']
+                fasta_available = True
+                
+            if fasta_available:
+                # STEP 2 (D): Model missing heavy atoms of backbone
+                global_log.info("step2D_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
+                fix_backbone(**global_paths["step2D_fixbackbone"], properties=global_prop["step2D_fixbackbone"])
+            else:
+                global_log.warning("step2D_fixbackbone: Could not get FASTA sequence. Skipping modeling of the missing heavy atoms in the backbone.")
+                global_paths['step2E_fixsidechain']['input_pdb_path'] = global_paths['step2B_mutations']['output_pdb_path']
         else:
-            global_log.warning("step2D_fixbackbone: Could not get FASTA sequence. Skipping modeling of the missing heavy atoms in the backbone.")
+            global_log.info("step2D_fixbackbone: Skipping modeling of the missing heavy atoms in the backbone")
             global_paths['step2E_fixsidechain']['input_pdb_path'] = global_paths['step2B_mutations']['output_pdb_path']
 
         # STEP 2 (E): model missing heavy atoms of side chains
@@ -834,6 +839,10 @@ if __name__ == "__main__":
                         help="Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, use together with --input_gro (default: None)",
                         required=False)
 
+    parser.add_argument('--skip_fix_backbone', action='store_true', dest='skip_fix_backbone',
+                        help="Skip the backbone modeling of missing atoms (default: False)",
+                        required=False)
+    
     parser.add_argument('--fix_ss', action='store_true',
                         help="Add disulfide bonds to the protein. Use carefully! (default: False)",
                         required=False)
@@ -862,5 +871,5 @@ if __name__ == "__main__":
 
     main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_parts=args.num_parts, num_replicas=args.num_replicas, output_path=args.output_path,
             input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list,
-            input_gro_path=args.input_gro_path, input_top_path=args.input_top_path,
+            input_gro_path=args.input_gro_path, input_top_path=args.input_top_path, skip_fix_backbone=args.skip_fix_backbone,
             fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, his=args.his, nsteps=args.nsteps, final_analysis=args.final_analysis)
