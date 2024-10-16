@@ -41,37 +41,28 @@
         }
       ],
       "license": "Apache-2.0",
-      "identifier": "https://doi.org/10.48546/workflowhub.workflow.281.3",
-      "url": "https://workflowhub.eu/workflows/281/ro_crate?version=3",
-      "name": "Research Object Crate for Python Protein Ligand Complex MD Setup tutorial",
-      "description": "# Protein Ligand Complex MD Setup tutorial using BioExcel Building Blocks (biobb)\r\n\r\n**Based on the official [GROMACS tutorial](http://www.mdtutorials.com/gmx/complex/index.html).**\r\n\r\n***\r\n\r\nThis tutorial aims to illustrate the process of **setting up a simulation system** containing a **protein in complex with a ligand**, step by step, using the **BioExcel Building Blocks library (biobb)**. The particular example used is the **T4 lysozyme** L99A/M102Q protein (PDB code 3HTB), in complex with the **2-propylphenol** small molecule (3-letter Code JZ4). \r\n\r\n***\r\n\r\n## Copyright &amp; Licensing\r\nThis software has been developed in the [MMB group](http://mmb.irbbarcelona.org) at the [BSC](http://www.bsc.es/) &amp; [IRB](https://www.irbbarcelona.org/) for the [European BioExcel](http://bioexcel.eu/), funded by the European Commission (EU H2020 [823830](http://cordis.europa.eu/projects/823830), EU H2020 [675728](http://cordis.europa.eu/projects/675728)).\r\n\r\n* (c) 2015-2023 [Barcelona Supercomputing Center](https://www.bsc.es/)\r\n* (c) 2015-2023 [Institute for Research in Biomedicine](https://www.irbbarcelona.org/)\r\n\r\nLicensed under the\r\n[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), see the file LICENSE for details.\r\n\r\n![](https://bioexcel.eu/wp-content/uploads/2019/04/Bioexcell_logo_1080px_transp.png \"Bioexcel\")",
-      "isBasedOn": "https://github.com/bioexcel/biobb_workflows/tree/master/biobb_wf_protein_complex_md_setup/python",
-      "sdDatePublished": "2024-10-16 12:06:30 +0100",
+      "identifier": "https://doi.org/10.48546/workflowhub.workflow.280.4",
+      "url": "https://workflowhub.eu/workflows/280/ro_crate?version=4",
+      "name": "Research Object Crate for Python GMX Automatic Ligand Parameterization tutorial",
+      "description": "# Automatic Ligand parameterization tutorial using BioExcel Building Blocks (biobb)\r\n\r\n***\r\n\r\nThis tutorial aims to illustrate the process of **ligand parameterization** for a **small molecule**, step by step, using the **BioExcel Building Blocks library (biobb)**. The particular example used is the **Sulfasalazine** protein (3-letter code SAS), used to treat rheumatoid arthritis, ulcerative colitis, and Crohn's disease.\r\n\r\n**OpenBabel and ACPype** packages are used to **add hydrogens, energetically minimize the structure**, and **generate parameters** for the **GROMACS** package. With *Generalized Amber Force Field (GAFF) forcefield and AM1-BCC* charges.\r\n\r\n***\r\n\r\n## Copyright &amp; Licensing\r\nThis software has been developed in the [MMB group](http://mmb.irbbarcelona.org) at the [BSC](http://www.bsc.es/) &amp; [IRB](https://www.irbbarcelona.org/) for the [European BioExcel](http://bioexcel.eu/), funded by the European Commission (EU H2020 [823830](http://cordis.europa.eu/projects/823830), EU H2020 [675728](http://cordis.europa.eu/projects/675728)).\r\n\r\n* (c) 2015-2023 [Barcelona Supercomputing Center](https://www.bsc.es/)\r\n* (c) 2015-2023 [Institute for Research in Biomedicine](https://www.irbbarcelona.org/)\r\n\r\nLicensed under the\r\n[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), see the file LICENSE for details.\r\n\r\n![](https://bioexcel.eu/wp-content/uploads/2019/04/Bioexcell_logo_1080px_transp.png \"Bioexcel\")",
+      "isBasedOn": "https://github.com/bioexcel/biobb_workflows/tree/master/biobb_wf_ligand_parameterization/python",
+      "sdDatePublished": "2024-10-16 14:47:58 +0100",
       "creativeWorkStatus": "Stable",
       "hasPart": [
         {
           "@id": "workflow.py"
         },
         {
-          "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/README.md"
+          "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_ligand_parameterization/python/workflow.yml"
         },
         {
-          "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/workflow.yml"
+          "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_ligand_parameterization/python/README.md"
         },
         {
-          "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/ions.pdb"
+          "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_ligand_parameterization/python/ligand.pdb"
         },
         {
-          "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/ligand.gro"
-        },
-        {
-          "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/ligand.itp"
-        },
-        {
-          "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/structure.pdb"
-        },
-        {
-          "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/workflow.env.yml"
+          "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_ligand_parameterization/python/workflow.env.yml"
         }
       ]
     },
@@ -82,16 +73,16 @@
         "SoftwareSourceCode",
         "ComputationalWorkflow"
       ],
-      "url": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/workflow.py",
-      "contentSize": 8792,
+      "url": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_ligand_parameterization/python/workflow.py",
+      "contentSize": 1728,
       "programmingLanguage": {
         "@id": "#python"
       },
       "dct:conformsTo": "https://bioschemas.org/profiles/ComputationalWorkflow/1.0-RELEASE/",
-      "description": "# Protein Ligand Complex MD Setup tutorial using BioExcel Building Blocks (biobb)\r\n\r\n**Based on the official [GROMACS tutorial](http://www.mdtutorials.com/gmx/complex/index.html).**\r\n\r\n***\r\n\r\nThis tutorial aims to illustrate the process of **setting up a simulation system** containing a **protein in complex with a ligand**, step by step, using the **BioExcel Building Blocks library (biobb)**. The particular example used is the **T4 lysozyme** L99A/M102Q protein (PDB code 3HTB), in complex with the **2-propylphenol** small molecule (3-letter Code JZ4). \r\n\r\n***\r\n\r\n## Copyright &amp; Licensing\r\nThis software has been developed in the [MMB group](http://mmb.irbbarcelona.org) at the [BSC](http://www.bsc.es/) &amp; [IRB](https://www.irbbarcelona.org/) for the [European BioExcel](http://bioexcel.eu/), funded by the European Commission (EU H2020 [823830](http://cordis.europa.eu/projects/823830), EU H2020 [675728](http://cordis.europa.eu/projects/675728)).\r\n\r\n* (c) 2015-2023 [Barcelona Supercomputing Center](https://www.bsc.es/)\r\n* (c) 2015-2023 [Institute for Research in Biomedicine](https://www.irbbarcelona.org/)\r\n\r\nLicensed under the\r\n[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), see the file LICENSE for details.\r\n\r\n![](https://bioexcel.eu/wp-content/uploads/2019/04/Bioexcell_logo_1080px_transp.png \"Bioexcel\")",
-      "name": "Python Protein Ligand Complex MD Setup tutorial",
+      "description": "# Automatic Ligand parameterization tutorial using BioExcel Building Blocks (biobb)\r\n\r\n***\r\n\r\nThis tutorial aims to illustrate the process of **ligand parameterization** for a **small molecule**, step by step, using the **BioExcel Building Blocks library (biobb)**. The particular example used is the **Sulfasalazine** protein (3-letter code SAS), used to treat rheumatoid arthritis, ulcerative colitis, and Crohn's disease.\r\n\r\n**OpenBabel and ACPype** packages are used to **add hydrogens, energetically minimize the structure**, and **generate parameters** for the **GROMACS** package. With *Generalized Amber Force Field (GAFF) forcefield and AM1-BCC* charges.\r\n\r\n***\r\n\r\n## Copyright &amp; Licensing\r\nThis software has been developed in the [MMB group](http://mmb.irbbarcelona.org) at the [BSC](http://www.bsc.es/) &amp; [IRB](https://www.irbbarcelona.org/) for the [European BioExcel](http://bioexcel.eu/), funded by the European Commission (EU H2020 [823830](http://cordis.europa.eu/projects/823830), EU H2020 [675728](http://cordis.europa.eu/projects/675728)).\r\n\r\n* (c) 2015-2023 [Barcelona Supercomputing Center](https://www.bsc.es/)\r\n* (c) 2015-2023 [Institute for Research in Biomedicine](https://www.irbbarcelona.org/)\r\n\r\nLicensed under the\r\n[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), see the file LICENSE for details.\r\n\r\n![](https://bioexcel.eu/wp-content/uploads/2019/04/Bioexcell_logo_1080px_transp.png \"Bioexcel\")",
+      "name": "Python GMX Automatic Ligand Parameterization tutorial",
       "keywords": "",
-      "version": 3,
+      "version": 4,
       "license": "https://spdx.org/licenses/Apache-2.0",
       "creator": [
         {
@@ -104,12 +95,12 @@
       "producer": {
         "@id": "https://workflowhub.eu/projects/11"
       },
-      "dateCreated": "2023-04-14T08:07:07Z",
-      "dateModified": "2023-04-14T08:08:08Z",
+      "dateCreated": "2023-04-14T07:55:42Z",
+      "dateModified": "2023-04-14T07:56:58Z",
       "isPartOf": [
 
       ],
-      "isBasedOn": "https://workflowhub.eu/workflows/281?version=2",
+      "isBasedOn": "https://workflowhub.eu/workflows/280?version=3",
       "input": [
 
       ],
@@ -121,31 +112,19 @@
       }
     },
     {
-      "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/README.md",
+      "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_ligand_parameterization/python/workflow.yml",
       "@type": "File"
     },
     {
-      "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/workflow.yml",
+      "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_ligand_parameterization/python/README.md",
       "@type": "File"
     },
     {
-      "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/ions.pdb",
+      "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_ligand_parameterization/python/ligand.pdb",
       "@type": "File"
     },
     {
-      "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/ligand.gro",
-      "@type": "File"
-    },
-    {
-      "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/ligand.itp",
-      "@type": "File"
-    },
-    {
-      "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/structure.pdb",
-      "@type": "File"
-    },
-    {
-      "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_protein_complex_md_setup/python/workflow.env.yml",
+      "@id": "https://github.com/bioexcel/biobb_workflows/blob/master/biobb_wf_ligand_parameterization/python/workflow.env.yml",
       "@type": "File"
     },
     {
