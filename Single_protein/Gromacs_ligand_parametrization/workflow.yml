@@ -2,17 +2,25 @@ working_dir_path: wf_gmx_ligand_parameterization
 can_write_console_log: False
 run_md: False
 
+step1_heteroatom_extraction:
+  tool: extract_heteroatoms
+  paths:
+    input_structure_path: /path/to/input
+    output_heteroatom_path: ligand.pdb
+  properties:
+    heteroatom: xxx
+
 
 step2_babel_minimize:
   tool: babel_minimize
   paths:
-    input_path:  /path/to/inputs/ligand.pdb
+    input_path:  dependency/step1_heteroatom_extraction/output_heteroatom_path
     output_path: ligand.H.min.mol2
   properties:
     criteria: 1e-10
     method: sd
     force_field: GAFF
-    hydrogens: false
+    hydrogens: true
 
 step3_acpype_params_gmx:
   tool: acpype_params_gmx
@@ -23,4 +31,3 @@ step3_acpype_params_gmx:
     output_path_top: output.params.top
   properties:
     basename: biobb_GMX_LP
-    charge: -1
