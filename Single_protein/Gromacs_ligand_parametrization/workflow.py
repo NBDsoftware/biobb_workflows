@@ -6,14 +6,22 @@ from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 from biobb_chemistry.babelm.babel_minimize import babel_minimize
 from biobb_chemistry.acpype.acpype_params_gmx import acpype_params_gmx
+from biobb_structure_utils.utils.extract_heteroatoms import extract_heteroatoms
 
-def main(config, system=None):
+def main(config, system=None, ligand = None, input_pdb = None):
     start_time = time.time()
     conf = settings.ConfReader(config, system)
     global_log, _ = fu.get_logs(path=conf.get_working_dir_path(), light_format=True)
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
-
+    
+    global_log.info("step1_heteroatom_extraction: Extract the ligand")
+    if input_pdb:
+        global_paths["step1_heteroatom_extraction"]["input_structure_path"]=input_pdb
+    if ligand:
+        global_prop["step1_heteroatom_extraction"]["heteroatom"]=ligand
+    extract_heteroatoms(**global_paths["step1_heteroatom_extraction"], properties=global_prop["step1_heteroatom_extraction"])
+    
     global_log.info("step2_babel_minimize: Energetically minimize hydrogen atoms")
     babel_minimize(**global_paths["step2_babel_minimize"], properties=global_prop["step2_babel_minimize"])
 
@@ -36,5 +44,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Automatic Ligand parameterization tutorial using BioExcel Building Blocks")
     parser.add_argument('--config', required=True)
     parser.add_argument('--system', required=False)
+    parser.add_argument('--ligand', required=False)
+    parser.add_argument('--input_pdb', required=False)
     args = parser.parse_args()
-    main(args.config, args.system)
+    main(args.config, args.system, args.ligand, args.input_pdb)
