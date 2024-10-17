@@ -642,6 +642,8 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         if nsteps is not None:
             traj_prop['step17_grompp_md']['mdp']['nsteps']=int(nsteps)
             
+        total_simulation_timesteps = traj_prop['step17_grompp_md']['mdp']['nsteps']
+            
         # Simulations are replicas
         if num_replicas:
             
@@ -705,6 +707,11 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
             global_log.info("step23_trjcat: Concatenate trajectories")
             fu.zip_list(zip_file=global_paths["step23_trjcat"]['input_trj_zip_path'], file_list=traj_list)
             trjcat(**global_paths["step23_trjcat"], properties=global_prop["step23_trjcat"])
+            
+            # Update properties to dry the full merged trajectory
+            global_prop["step24_dry_trj"]["start"] = 0                                                                                           # The initial time of the merged trajectory in ps
+            global_prop["step24_dry_trj"]["end"] = total_simulation_timesteps*traj_prop['step17_grompp_md']['mdp']['dt']                         # The total time of the merged trajectory in ps
+            global_prop["step24_dry_trj"]["dt"] =  traj_prop['step17_grompp_md']['mdp']['dt']*traj_prop['step17_grompp_md']['mdp']['nstxout']    # The saving frequency of the trajectory # NOTE: here we are hardcoding again the kind of trajectory
             
             # STEP 24: obtain dry the merged trajectory
             global_log.info("step24_dry_trj: Obtain dry trajectory")
