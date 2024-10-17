@@ -55,35 +55,45 @@ This workflow has several steps. The input for the workflow can be (1) a pdb fil
     Steps to fix different possible defects in the input pdb structure. See below.
 
     A. **Fix alternative locations** 
-    Provide a list with the choices of alternative locations to keep in the final structure. If no list is given (_null_ value) it will select the alternative location with the highest occupancy. 
+    Provide a list with the choices of alternative locations to keep in the final structure. If no list is given (_null_ value) it will select the alternative location with the highest occupancy (the workflow will use Biopython to do so). 
 
     B. **Mutate initial pdb structure** 
     Mutations can be requested through the mutation_list property of the YAML configuration file as a single string of mutations separated by commas (no spaces). Where each mutation is defined by string with the following format: "Chain:Wild_type_residue_name Residue_number Mutated_type_residue_name". The residue name should be a 3 letter code starting with capital letters, e.g. "A:Arg220Ala". Alternatively, they can be given through the mutation_list command line argument. If no mutation is desired leave an empty string ("") or comment the mutation_list property.
 
     C. **Obtain the Sequence in FASTA format** 
-    The sequence is then used to model missing backbone atoms in the next step. The workflow first tries to download the canonical FASTA (including all residues for that protein) from the Protein Data Bank. If there is no internet connection, it will try to obtain the sequence from the _SEQRES_ records in the PDB. If there are no _SEQRES_, then only the residues that contain at least one atom in the structure will be included.   
+    The sequence is then used to model missing backbone atoms in the next step. The workflow first tries to download the canonical FASTA (including all residues for that protein) from the Protein Data Bank. If there is no internet connection, it will try to obtain the sequence from the _SEQRES_ records in the PDB. If there are no _SEQRES_, then only the residues that contain at least one atom in the structure will be included. This step can be skipped including the ```--skip_fix_backbone``` option.  
 
     D. **Model missing backbone atoms**
-    Add missing backbone heavy atoms using biobb_structure_checking and Modeller suite. A modeller license key and the previous FASTA file are required for this step.   
+    Add missing backbone heavy atoms using _biobb_structure_checking_ and Modeller suite. A modeller license key and the previous FASTA file are required for this step. This step can be skipped including the ```--skip_fix_backbone``` option.  
 
     E. **Model missing side chain atoms**
-    Add missing side chain atoms using biobb_structure_checking (and Modeller suite if a license key is provided).
+    Add missing side chain atoms using _biobb_structure_checking_ (and Modeller suite if a license key is provided).
 
     F. **Add missing disulfide bonds**
-    It changes CYS for CYX to mark cysteines residues pertaining to a [di-sulfide bond](https://en.wikipedia.org/wiki/Disulfide). It uses a distance criteria to determine if nearby cysteines are part of a di-sulfide bridge (_check_structure getss_). Use carefully. This step is executed only if "--fix_ss" is used in the command line arguments. 
+    It changes CYS for CYX to mark cysteines residues pertaining to a [di-sulfide bond](https://en.wikipedia.org/wiki/Disulfide). It uses a distance criteria to determine if nearby cysteines are part of a di-sulfide bridge (_check_structure getss_). Use carefully. This step is executed only if the "--fix_ss" option is used. 
 
     G. **Relieve clashes flipping amide groups**
     It flips the clashing amide groups to relieve clashes.
 
     H. **Fix chirality of residues**
-    Creates a new PDB file fixing stereochemical errors in residue side-chains changing It's chirality.
+    Creates a new PDB file fixing stereochemical errors in residue side-chains changing it's chirality when needed.
 
     I. **Renumber atomic indices**
+    So they start at 1.
 
 **Steps 3 - 7**: preparation of the system for minimization and MD with GROMACS.
 
 3. **pdb2gmx** 
-Uses pdb2gmx to obtain a gromacs structure file (.gro) and topology file from the prepared structure file in step 2. Hydrogen atoms will be added in this step. A force field and water model are chosen here. 
+Uses pdb2gmx to obtain a gromacs structure file (.gro) and topology file from the fixed PDB. Hydrogen atoms will be added in this step, one can choose to ignore the hydrogens in the original structure or not (```ignh``` property). The protonation state of histidines can be provided (```his``` property) in the form of a list of numbers see below. A force field and water model are chosen here.
+    
+    For the ```his``` property include a string with the protonation states '0 0 1 1 0 0 0', where:
+
+        - 0 : H on ND1 only (HID)
+        - 1 : H on NE2 only (HIE)
+        - 2 : H on ND1 and NE2 (HIP)
+        - 3 : Coupled to Heme (HIS1)
+    
+    NOTE: this will be automatized within the workflow in the future, right now pdb4amber can be used externally to obtain a guess
 
 4. **Generate simulation box** 
 Generate a simulation box around the structure. Some box types are more efficient than others (octahedron for globular proteins)
