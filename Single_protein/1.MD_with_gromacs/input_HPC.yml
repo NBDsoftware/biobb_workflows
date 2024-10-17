@@ -324,8 +324,6 @@ step18_mdrun_md:
     output_log_path: md.log
     output_cpt_path: md.cpt
 
-# NOTE: include here the RMSD wrt first frame, RMSD wrt modeled experimental structure, Radius of Gyration and RMSF calculation (for each replica or part) - if replicas, it doesn't make sense to compute it over the concatenated trajectory
-
 step19_rmsd_equilibrated:
   tool: gmx_rms
   paths:
@@ -368,11 +366,7 @@ step22_rmsf:
     steps: 1
     mask: "!@H=" # by default cpptraj already strips solvent atoms
 
-# NOTE: Then, if these are parts -> join them in a single file - if replicas it's not necessary
-
-# NOTE: Then if these are parts -> concatenate the trajectories - if replicas it's not necessary
-
-step19_trjcat:
+step23_trjcat:
   tool: trjcat
   paths:
     input_trj_zip_path: all_trajectories_trr.zip
@@ -380,26 +374,23 @@ step19_trjcat:
 
 # NOTE: Dry, image and fit the trajectory (parts) or the trajectories (replicas) - if parts we need to do this here, after the concatenation
 
-step20_dry_trj:
+step24_dry_trj:
   tool: gmx_trjconv_trj
   paths: 
-    input_traj_path: dependency/step19_trjcat/output_trj_path
+    input_traj_path: dependency/step23_trjcat/output_trj_path
     input_top_path: dependency/step15_mdrun_npt/output_gro_path
-    output_traj_path: dry_traj.xtc
     input_index_path: dependency/step9B_make_ndx/output_ndx_path
+    output_traj_path: dry_traj.xtc
   properties:
     selection: Protein
-    center: True
-    pbc: mol
-    ur: compact
 
-step21_dry_str:
+step25_dry_str:
   tool: gmx_trjconv_str
   paths: 
-    input_top_path: dependency/step14_grompp_npt/output_tpr_path
     input_structure_path: dependency/step15_mdrun_npt/output_gro_path
-    output_str_path: dry_structure.gro
+    input_top_path: dependency/step15_mdrun_npt/output_gro_path
     input_index_path: dependency/step9B_make_ndx/output_ndx_path
+    output_str_path: dry_structure.gro
   properties:
     selection: Protein
     center: True
@@ -409,8 +400,8 @@ step21_dry_str:
 step26_image_traj:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/step20_dry_trj/output_traj_path
-    input_top_path: dependency/step21_dry_str/output_str_path
+    input_traj_path: dependency/step24_dry_trj/output_traj_path
+    input_top_path: dependency/step25_dry_str/output_str_path
     input_index_path: dependency/step9B_make_ndx/output_ndx_path
     output_traj_path: imaged_traj.xtc
   properties:
@@ -424,7 +415,7 @@ step27_fit_traj:
   tool: gmx_image
   paths:
     input_traj_path: dependency/step26_image_traj/output_traj_path
-    input_top_path: dependency/step21_dry_str/output_str_path
+    input_top_path: dependency/step25_dry_str/output_str_path
     input_index_path: dependency/step9B_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc
   properties:
