@@ -2,7 +2,7 @@
 ##### Number of tasks
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=12
-#SBATCH -t 0-01:00:00
+#SBATCH -t 1-00:00:00
 #####Output and error log files
 #SBATCH -e gmx_%j.e
 #SBATCH -o gmx_%j.o
