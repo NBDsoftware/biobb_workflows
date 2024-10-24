@@ -161,7 +161,6 @@ step3B_cofactors_topology:
     output_crd_path: cofactors.inpcrd
   properties:
     forcefield: ["protein.ff14SB"]
-    binary_path: /eb/x86_64/software/Amber/20.13-foss-2022a-AmberTools-22.5-CUDA-11.7.0/bin/tleap
 
 step3C_amber_to_gmx:
   tool: acpype_convert_amber_to_gmx
