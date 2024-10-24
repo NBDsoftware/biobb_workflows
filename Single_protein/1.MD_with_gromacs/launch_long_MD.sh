@@ -6,11 +6,12 @@
 
 INPUT_PDB="/path/to/input.pdb"
 OUTPUT_DIR="/path/to/output"
-SYSTEM_NAME="name"                # System name 
-TOTAL_NUM_STEPS=20000             # Number of steps for the MD simulation - unit is defined by the timestep
-STEPS_PER_PART=10000              # Number of steps per part - to respect the HPC queue time limit
+LIGAND_PARAMETERS="/path/to/ligand_parameters/folder"
+SYSTEM_NAME="name"              # System name 
+TOTAL_NUM_STEPS=20000           # Number of steps for the MD simulation - unit is defined by the timestep
+STEPS_PER_PART=10000            # Number of steps per part - to respect the HPC queue time limit
 SLURM_SCRIPT="run_HPC_HIS.sl"   # SLURM script to be used for the HPC job
-PDB_CHAIN="A, B"                  # Chain to be used from the input PDB file, e.g. "A" or "A, B"
+PDB_CHAIN="A"                   # Chain to be used from the input PDB file, e.g. "A" or "A, B"
 
 # Review as well the input_HPC.yml to check equilibration time for example! - this will be improved in the future
 
@@ -34,20 +35,24 @@ fi
 NUM_PARTS=$((TOTAL_NUM_STEPS / STEPS_PER_PART))
 echo "Number of parts: $NUM_PARTS"
 
-# Launch first part of the MD simulation (no dependency)
-JOB_ID=$(sbatch -q normal --job-name=$SYSTEM_NAME-1 $SLURM_SCRIPT $INPUT_PDB "$PDB_CHAIN" $OUTPUT_DIR 1 $STEPS_PER_PART 0 | awk '{print $4}')
+# Control final analysis execution
+DO_FINAL_ANALYSIS=false
+
+# Launch part 1 of the MD simulation (no dependency)
+JOB_ID=$(sbatch -q normal --job-name=$SYSTEM_NAME-1 $SLURM_SCRIPT $INPUT_PDB "$PDB_CHAIN" $OUTPUT_DIR $LIGAND_PARAMETERS 1 $STEPS_PER_PART $DO_FINAL_ANALYSIS | awk '{print $4}')
 echo "Job 1 launched with ID: $JOB_ID"
 PREVIOUS_JOB_ID=$JOB_ID
 
-# Launch the rest of the parts of the MD simulation
-for i in $(seq 2 $NUM_PARTS)
+# Launch all other parts of the MD simulation
+for PART in $(seq 2 $NUM_PARTS)
 do
-    ACCUMULATED_STEPS=$((STEPS_PER_PART * i))
-    JOB_ID=$(sbatch -q normal --job-name=$SYSTEM_NAME-$i --dependency=afterany:$PREVIOUS_JOB_ID $SLURM_SCRIPT $INPUT_PDB "$PDB_CHAIN" $OUTPUT_DIR $i $ACCUMULATED_STEPS 0 | awk '{print $4}')
-    echo "Job $i launched with ID: $JOB_ID"
+    ACCUMULATED_STEPS=$((STEPS_PER_PART * PART))
+    JOB_ID=$(sbatch -q normal --job-name=$SYSTEM_NAME-$PART --dependency=afterany:$PREVIOUS_JOB_ID $SLURM_SCRIPT $INPUT_PDB "$PDB_CHAIN" $OUTPUT_DIR $LIGAND_PARAMETERS $PART $ACCUMULATED_STEPS $DO_FINAL_ANALYSIS | awk '{print $4}')
+    echo "Job $PART launched with ID: $JOB_ID"
     PREVIOUS_JOB_ID=$JOB_ID
 done
 
 # Launch the final analysis
-JOB_ID=$(sbatch -q normal --job-name=$SYSTEM_NAME-$(($NUM_PARTS+1)) --dependency=afterany:$PREVIOUS_JOB_ID $SLURM_SCRIPT $INPUT_PDB "$PDB_CHAIN" $OUTPUT_DIR $NUM_PARTS $TOTAL_NUM_STEPS 1 | awk '{print $4}')
+DO_FINAL_ANALYSIS=true
+JOB_ID=$(sbatch -q normal --job-name=$SYSTEM_NAME-$(($NUM_PARTS+1)) --dependency=afterany:$PREVIOUS_JOB_ID $SLURM_SCRIPT $INPUT_PDB "$PDB_CHAIN" $OUTPUT_DIR $LIGAND_PARAMETERS $NUM_PARTS $TOTAL_NUM_STEPS $DO_FINAL_ANALYSIS | awk '{print $4}')
 echo "Job $((NUM_PARTS+1)) (analysis) launched with ID: $JOB_ID"
