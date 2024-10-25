@@ -120,10 +120,14 @@ def highest_occupancy_altlocs(pdb_file, global_log) -> List[str]:
 def get_available_ligands(pdb_file: str, chains_id: List, ligand_parameters: Union[str, None], 
                           output_frcmod_zip: str, output_prep_zip: str, global_log) -> List[Dict[str, str]]:
     """
-    Retrieve the heteroatoms (ligands) present in the chains of interest in a PDB file. 
-    Check if the ligands have .frcmod and .prep files available in the ligand_parameters folder.
+    - Retrieve the heteroatoms (ligands) present in the chains of interest in a PDB file. 
+    
+    - Check if the ligands have .frcmod and .prep files available in the ligand_parameters folder.
+    
     Issue warnings for ligands without any of these files, as they will not be included in 
-    the simulation. Zip all the .frcmod files and all the .prep files into two compressed files 
+    the simulation. 
+    
+    - Zip all the .frcmod files and all the .prep files into two compressed files 
     to be used in the leap_gen_top step.
     
     NOTE: we might have problems if initial PDB has different MODELs
@@ -767,6 +771,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         
         # NOTE: Histidine protonation states come from external call to pdb4amber, should be done within the WF!
         # NOTE: if we have a gap that we are not modeling (e.g. a missing loop), pdb2gmx will find terminal atoms OXT in non-terminal residues and will return an error
+        # NOTE: Look at HIS protonation states with pdb2gmx - checking h bonds, etc. CMIP - with BioBB (high cost)
         # STEP 3A: add H atoms, generate coordinate (.gro) and topology (.top) file for the system
         global_log.info("step3A_structure_topology: Generate the topology")
         if his:

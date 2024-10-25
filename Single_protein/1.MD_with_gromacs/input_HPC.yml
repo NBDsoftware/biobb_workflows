@@ -266,6 +266,8 @@ step3N_gro2pdb:
 # Section 4 (Steps A-I): Minimize and equilibrate the initial configuration #
 #############################################################################
 
+# NOTE: Leverage hierarchy when creating new eq steps without restraints
+
 step4A_grompp_min:
   tool: grompp
   paths:
