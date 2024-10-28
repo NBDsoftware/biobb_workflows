@@ -309,7 +309,7 @@ def set_gromacs_path(properties: dict, binary_path: str) -> None:
 
     list_of_steps = ['step3A_structure_topology', 'step3J_editconf', 'step3K_solvate', 'step3L_grompp_genion', 'step3M_genion',
                         'step4A_grompp_min', 'step4B_mdrun_min', 'step4E_grompp_nvt', 'step4F_mdrun_nvt',
-                        'step4H_grompp_npt', 'step4I_mdrun_npt', 'step17_grompp_md', 'step18_mdrun_md']
+                        'step4H_grompp_npt', 'step4I_mdrun_npt', 'step5A_grompp_md', 'step5B_mdrun_md']
 
     for step in list_of_steps:
         properties[step]['binary_path'] = binary_path
@@ -326,7 +326,7 @@ def set_mpi_path(properties: dict, mpi_bin: str, mpi_np: int) -> None:
         mpi_np (int): Number of processors to be used.
     """
 
-    list_of_steps = ['step4B_mdrun_min', 'step4F_mdrun_nvt', 'step4I_mdrun_npt', 'step18_mdrun_md']
+    list_of_steps = ['step4B_mdrun_min', 'step4F_mdrun_nvt', 'step4I_mdrun_npt', 'step5B_mdrun_md']
 
     for step in list_of_steps:
         properties[step]['mpi_bin'] = mpi_bin
@@ -343,7 +343,7 @@ def set_gpu_use(properties: dict, gpu_use: bool) -> None:
         gpu_use (bool): Whether to use GPU or not.
     """
 
-    list_of_steps = ['step4F_mdrun_nvt', 'step4I_mdrun_npt', 'step18_mdrun_md']
+    list_of_steps = ['step4F_mdrun_nvt', 'step4I_mdrun_npt', 'step5B_mdrun_md']
 
     for step in list_of_steps:
         properties[step]['use_gpu'] = gpu_use
@@ -557,7 +557,7 @@ def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
     """
     
     # Construct a dictionary with the paths to the analysis files
-    gmx_analysis_steps = ['step19_rmsd_equilibrated', 'step20_rmsd_experimental', 'step21_rgyr']
+    gmx_analysis_steps = ['step6A_rmsd_equilibrated', 'step6B_rmsd_experimental', 'step6C_rgyr']
     analysis_files = {step: [] for step in gmx_analysis_steps}        
     for simulation in simulation_folders:
         traj_paths = conf.get_paths_dic(prefix=simulation)
@@ -924,71 +924,71 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         set_general_properties(traj_prop, conf, global_log)
 
         # Update previous global paths needed by simulation-specific steps
-        traj_paths['step17_grompp_md']['input_gro_path'] = global_paths["step17_grompp_md"]['input_gro_path']
-        traj_paths['step17_grompp_md']['input_cpt_path'] = global_paths["step17_grompp_md"]['input_cpt_path']
-        traj_paths['step17_grompp_md']['input_top_zip_path'] = global_paths["step17_grompp_md"]['input_top_zip_path']
-        traj_paths['step17_grompp_md']['input_ndx_path'] = global_paths["step17_grompp_md"]['input_ndx_path']
-        traj_paths['step19_rmsd_equilibrated']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
-        traj_paths['step20_rmsd_experimental']['input_structure_path'] = global_paths["step4A_grompp_min"]['input_gro_path']
-        traj_paths['step21_rgyr']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
-        traj_paths['step22_rmsf']['input_top_path'] = global_paths["step3N_gro2pdb"]['output_str_path']
+        traj_paths['step5A_grompp_md']['input_gro_path'] = global_paths["step5A_grompp_md"]['input_gro_path']
+        traj_paths['step5A_grompp_md']['input_cpt_path'] = global_paths["step5A_grompp_md"]['input_cpt_path']
+        traj_paths['step5A_grompp_md']['input_top_zip_path'] = global_paths["step5A_grompp_md"]['input_top_zip_path']
+        traj_paths['step5A_grompp_md']['input_ndx_path'] = global_paths["step5A_grompp_md"]['input_ndx_path']
+        traj_paths['step6A_rmsd_equilibrated']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
+        traj_paths['step6B_rmsd_experimental']['input_structure_path'] = global_paths["step4A_grompp_min"]['input_gro_path']
+        traj_paths['step6C_rgyr']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
+        traj_paths['step6D_rmsf']['input_top_path'] = global_paths["step3N_gro2pdb"]['output_str_path']
         
         # Enforce nsteps if provided
         if nsteps is not None:
-            traj_prop['step17_grompp_md']['mdp']['nsteps']=int(nsteps)
-        total_simulation_timesteps = traj_prop['step17_grompp_md']['mdp']['nsteps']
+            traj_prop['step5A_grompp_md']['mdp']['nsteps']=int(nsteps)
+        total_simulation_timesteps = traj_prop['step5A_grompp_md']['mdp']['nsteps']
             
         # Simulations are replicas
         if num_replicas:
             
             # Change seed and velocities for each replica
-            traj_prop['step17_grompp_md']['mdp']['ld-seed'] = random.randint(1, 1000000)
-            traj_prop['step17_grompp_md']['mdp']['continuation'] = 'no'
-            traj_prop['step17_grompp_md']['mdp']['gen-vel'] = 'yes'
+            traj_prop['step5A_grompp_md']['mdp']['ld-seed'] = random.randint(1, 1000000)
+            traj_prop['step5A_grompp_md']['mdp']['continuation'] = 'no'
+            traj_prop['step5A_grompp_md']['mdp']['gen-vel'] = 'yes'
 
         # Simulations are parts of a single trajectory
         if num_parts:
             
             # Divide the number of steps by the number of parts
-            traj_prop['step17_grompp_md']['mdp']['nsteps']=int(traj_prop['step17_grompp_md']['mdp']['nsteps']/int(num_parts))
+            traj_prop['step5A_grompp_md']['mdp']['nsteps']=int(traj_prop['step5A_grompp_md']['mdp']['nsteps']/int(num_parts))
             
             # For all parts except the first one, use the previous gro and cpt files
             if simulation != simulation_folders[0]:
-                traj_paths['step17_grompp_md']['input_gro_path'] = previous_gro_path
-                traj_paths['step17_grompp_md']['input_cpt_path'] = previous_cpt_path
+                traj_paths['step5A_grompp_md']['input_gro_path'] = previous_gro_path
+                traj_paths['step5A_grompp_md']['input_cpt_path'] = previous_cpt_path
 
         # STEP 17: free NPT production run pre-processing
         if ligands_to_extract:
-            traj_prop["step17_grompp_md"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(ligand_names)} Water_and_ions"
-        global_log.info(f"{simulation} >  step17_grompp_md: Preprocess free dynamics")
-        grompp(**traj_paths['step17_grompp_md'], properties=traj_prop["step17_grompp_md"])
+            traj_prop["step5A_grompp_md"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(ligand_names)} Water_and_ions"
+        global_log.info(f"{simulation} >  step5A_grompp_md: Preprocess free dynamics")
+        grompp(**traj_paths['step5A_grompp_md'], properties=traj_prop["step5A_grompp_md"])
 
         # STEP 18: free NPT production run
-        global_log.info(f"{simulation} >  step18_mdrun_md: Execute free molecular dynamics simulation")
-        mdrun(**traj_paths['step18_mdrun_md'], properties=traj_prop['step18_mdrun_md'])
+        global_log.info(f"{simulation} >  step5B_mdrun_md: Execute free molecular dynamics simulation")
+        mdrun(**traj_paths['step5B_mdrun_md'], properties=traj_prop['step5B_mdrun_md'])
         
         # Append the trajectory to the list
-        traj_list.append(traj_paths['step18_mdrun_md']['output_trr_path'])
+        traj_list.append(traj_paths['step5B_mdrun_md']['output_trr_path'])
         
         # Update the previous gro and cpt files
-        previous_gro_path = traj_paths['step18_mdrun_md']['output_gro_path']
-        previous_cpt_path = traj_paths['step18_mdrun_md']['output_cpt_path']
+        previous_gro_path = traj_paths['step5B_mdrun_md']['output_gro_path']
+        previous_cpt_path = traj_paths['step5B_mdrun_md']['output_cpt_path']
         
         # STEP 19: compute the RMSD with respect to equilibrated structure
-        global_log.info("step19_rmsd_equilibrated: Compute Root Mean Square deviation against equilibrated structure")
-        gmx_rms(**traj_paths['step19_rmsd_equilibrated'], properties=traj_prop['step19_rmsd_equilibrated'])
+        global_log.info("step6A_rmsd_equilibrated: Compute Root Mean Square deviation against equilibrated structure")
+        gmx_rms(**traj_paths['step6A_rmsd_equilibrated'], properties=traj_prop['step6A_rmsd_equilibrated'])
         
         # STEP 20: compute the RMSD with respect to minimized structure
-        global_log.info("step20_rmsd_experimental: Compute Root Mean Square deviation against minimized structure (exp)")
-        gmx_rms(**traj_paths['step20_rmsd_experimental'], properties=traj_prop['step20_rmsd_experimental'])
+        global_log.info("step6B_rmsd_experimental: Compute Root Mean Square deviation against minimized structure (exp)")
+        gmx_rms(**traj_paths['step6B_rmsd_experimental'], properties=traj_prop['step6B_rmsd_experimental'])
         
         # STEP 21: compute the Radius of gyration
-        global_log.info("step21_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
-        gmx_rgyr(**traj_paths['step21_rgyr'], properties=traj_prop['step21_rgyr'])
+        global_log.info("step6C_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
+        gmx_rgyr(**traj_paths['step6C_rgyr'], properties=traj_prop['step6C_rgyr'])
 
         # STEP 22: compute the RMSF
-        global_log.info("step22_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
-        cpptraj_rmsf(**traj_paths['step22_rmsf'], properties=traj_prop['step22_rmsf'])
+        global_log.info("step6D_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
+        cpptraj_rmsf(**traj_paths['step6D_rmsf'], properties=traj_prop['step6D_rmsf'])
         
     # Do the final analysis with all the previous parts or replicas
     if final_analysis:
@@ -1000,39 +1000,39 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
             concatenate_gmx_analysis(conf, simulation_folders, output_path)
         
             # STEP 23: concatenate trajectories
-            global_log.info("step23_trjcat: Concatenate trajectories")
-            fu.zip_list(zip_file=global_paths["step23_trjcat"]['input_trj_zip_path'], file_list=traj_list)
-            trjcat(**global_paths["step23_trjcat"], properties=global_prop["step23_trjcat"])
+            global_log.info("step7A_trjcat: Concatenate trajectories")
+            fu.zip_list(zip_file=global_paths["step7A_trjcat"]['input_trj_zip_path'], file_list=traj_list)
+            trjcat(**global_paths["step7A_trjcat"], properties=global_prop["step7A_trjcat"])
             
             # Update properties to dry the full merged trajectory
-            global_prop["step24_dry_trj"]["start"] = 0                                                                                           # The initial time of the merged trajectory in ps
-            global_prop["step24_dry_trj"]["end"] = total_simulation_timesteps*traj_prop['step17_grompp_md']['mdp']['dt']                         # The total time of the merged trajectory in ps
-            global_prop["step24_dry_trj"]["dt"] =  traj_prop['step17_grompp_md']['mdp']['dt']*traj_prop['step17_grompp_md']['mdp']['nstxout']    # The saving frequency of the trajectory # NOTE: here we are hardcoding again the kind of trajectory
+            global_prop["step7B_dry_trj"]["start"] = 0                                                                                           # The initial time of the merged trajectory in ps
+            global_prop["step7B_dry_trj"]["end"] = total_simulation_timesteps*traj_prop['step5A_grompp_md']['mdp']['dt']                         # The total time of the merged trajectory in ps
+            global_prop["step7B_dry_trj"]["dt"] =  traj_prop['step5A_grompp_md']['mdp']['dt']*traj_prop['step5A_grompp_md']['mdp']['nstxout']    # The saving frequency of the trajectory # NOTE: here we are hardcoding again the kind of trajectory
             
             # STEP 24: obtain dry the merged trajectory
-            global_log.info("step24_dry_trj: Obtain dry trajectory")
-            gmx_trjconv_trj(**global_paths["step24_dry_trj"], properties=global_prop["step24_dry_trj"])
+            global_log.info("step7B_dry_trj: Obtain dry trajectory")
+            gmx_trjconv_trj(**global_paths["step7B_dry_trj"], properties=global_prop["step7B_dry_trj"])
         
             #Remove unused trajectory
-            os.remove(global_paths["step23_trjcat"]["output_trj_path"])
+            os.remove(global_paths["step7A_trjcat"]["output_trj_path"])
             
             # STEP 25: obtain dry structure
-            global_log.info("step25_dry_str: Obtain dry structure")
-            gmx_trjconv_str(**global_paths["step25_dry_str"], properties=global_prop["step25_dry_str"])
+            global_log.info("step7C_dry_str: Obtain dry structure")
+            gmx_trjconv_str(**global_paths["step7C_dry_str"], properties=global_prop["step7C_dry_str"])
 
             # STEP 26: image the trajectory
-            global_log.info("step26_image_traj: Imaging the trajectory")
-            gmx_image(**global_paths['step26_image_traj'], properties=global_prop['step26_image_traj'])
+            global_log.info("step7D_image_traj: Imaging the trajectory")
+            gmx_image(**global_paths['step7D_image_traj'], properties=global_prop['step7D_image_traj'])
             
             #Remove unused trajectory
-            os.remove(global_paths["step24_dry_trj"]["output_traj_path"])
+            os.remove(global_paths["step7B_dry_trj"]["output_traj_path"])
 
             # STEP 27: fit the trajectory
-            global_log.info("step27_fit_traj: Fit the trajectory")
-            gmx_image(**global_paths['step27_fit_traj'], properties=global_prop['step27_fit_traj'])
+            global_log.info("step7E_fit_traj: Fit the trajectory")
+            gmx_image(**global_paths['step7E_fit_traj'], properties=global_prop['step7E_fit_traj'])
             
             #Remove unused trajectory
-            os.remove(global_paths["step26_image_traj"]["output_traj_path"])
+            os.remove(global_paths["step7D_image_traj"]["output_traj_path"])
             
         # If simulations are replicas
         if num_replicas:
@@ -1049,36 +1049,36 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
                 
                 # NOTE: we are hard-coding the kind of traj that we are using with these paths: output_trr_path
                 # Update previous global paths needed by simulation-specific steps
-                traj_paths['step24_dry_trj']['input_traj_path'] = traj_paths['step18_mdrun_md']['output_trr_path']
-                traj_paths['step24_dry_trj']['input_top_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
-                traj_paths['step24_dry_trj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
-                traj_paths['step25_dry_str']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
-                traj_paths['step25_dry_str']['input_top_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
-                traj_paths['step25_dry_str']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
-                traj_paths['step26_image_traj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
-                traj_paths['step27_fit_traj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
+                traj_paths['step7B_dry_trj']['input_traj_path'] = traj_paths['step5B_mdrun_md']['output_trr_path']
+                traj_paths['step7B_dry_trj']['input_top_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
+                traj_paths['step7B_dry_trj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
+                traj_paths['step7C_dry_str']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
+                traj_paths['step7C_dry_str']['input_top_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
+                traj_paths['step7C_dry_str']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
+                traj_paths['step7D_image_traj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
+                traj_paths['step7E_fit_traj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
                 
                 # STEP 24: obtain dry the trajectory
-                global_log.info(f"{simulation} > step24_dry_trj: Obtain dry trajectory")
-                gmx_trjconv_trj(**traj_paths["step24_dry_trj"], properties=traj_prop["step24_dry_trj"])
+                global_log.info(f"{simulation} > step7B_dry_trj: Obtain dry trajectory")
+                gmx_trjconv_trj(**traj_paths["step7B_dry_trj"], properties=traj_prop["step7B_dry_trj"])
                 
                 # STEP 25: obtain dry structure
-                global_log.info(f"{simulation} > step25_dry_str: Obtain dry structure")
-                gmx_trjconv_str(**traj_paths["step25_dry_str"], properties=traj_prop["step25_dry_str"])
+                global_log.info(f"{simulation} > step7C_dry_str: Obtain dry structure")
+                gmx_trjconv_str(**traj_paths["step7C_dry_str"], properties=traj_prop["step7C_dry_str"])
                 
                 # STEP 26: image the trajectory
-                global_log.info(f"{simulation} > step26_image_traj: Imaging the trajectory")
-                gmx_image(**traj_paths['step26_image_traj'], properties=traj_prop['step26_image_traj'])
+                global_log.info(f"{simulation} > step7D_image_traj: Imaging the trajectory")
+                gmx_image(**traj_paths['step7D_image_traj'], properties=traj_prop['step7D_image_traj'])
                 
                 #Remove unused trajectory
-                os.remove(traj_paths["step24_dry_trj"]["output_traj_path"])
+                os.remove(traj_paths["step7B_dry_trj"]["output_traj_path"])
                 
                 # STEP 27: fit the trajectory
-                global_log.info(f"{simulation} > step27_fit_traj: Fit the trajectory")
-                gmx_image(**traj_paths['step27_fit_traj'], properties=traj_prop['step27_fit_traj'])
+                global_log.info(f"{simulation} > step7E_fit_traj: Fit the trajectory")
+                gmx_image(**traj_paths['step7E_fit_traj'], properties=traj_prop['step7E_fit_traj'])
                 
                 #Remove unused trajectory
-                os.remove(traj_paths["step26_image_traj"]["output_traj_path"])
+                os.remove(traj_paths["step7D_image_traj"]["output_traj_path"])
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -1096,7 +1096,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser("Simple MD Protein Setup")
+    parser = argparse.ArgumentParser("MD Simulation with GROMACS")
 
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)",

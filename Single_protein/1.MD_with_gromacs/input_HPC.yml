@@ -19,7 +19,7 @@ step1A_extractAtoms:
   tool: extract_molecule
   paths:
     input_structure_path: /path/to/input                            # Overwritten by command line
-    output_molecule_path: protein.pdb
+    output_molecule_path: main_structure.pdb
   properties:
     molecule_type: chains                                           # type of molecule to extract. Options: all, protein, na, dna, rna, chains
     chains: [A]                                                     # if "chains" is selected in molecule_type. Options: None, [A], [A, B], ...
@@ -266,7 +266,7 @@ step3N_gro2pdb:
 # Section 4 (Steps A-I): Minimize and equilibrate the initial configuration #
 #############################################################################
 
-# NOTE: Leverage hierarchy when creating new eq steps without restraints
+# NOTE: Leverage hierarchy in mdp when creating new eq steps without restraints - you can overwrite the default mdp config from the type of simulation
 
 step4A_grompp_min:
   tool: grompp
@@ -378,10 +378,10 @@ step4J_density_npt:
     xvg: xmgr 
 
 ############################################
-# Section 5 (Steps A-I): MD production run #
+# Section 5 (Steps A-B): MD production run #
 ############################################
 
-step17_grompp_md:
+step5A_grompp_md:
   tool: grompp
   paths:
     input_gro_path: dependency/step4I_mdrun_npt/output_gro_path
@@ -405,51 +405,55 @@ step17_grompp_md:
       gen-temp: 300   
       ld-seed: 1
 
-step18_mdrun_md:
+step5B_mdrun_md:
   tool: mdrun
   paths:
-    input_tpr_path: dependency/step17_grompp_md/output_tpr_path
+    input_tpr_path: dependency/step5A_grompp_md/output_tpr_path
     output_trr_path: md.trr
     output_gro_path: md.gro
     output_edr_path: md.edr
     output_log_path: md.log
     output_cpt_path: md.cpt
 
-step19_rmsd_equilibrated:
+#########################################
+# Section 6 (Steps A-D): Basic analysis #
+#########################################
+
+step6A_rmsd_equilibrated:
   tool: gmx_rms
   paths:
     input_structure_path: dependency/step4I_mdrun_npt/output_gro_path
-    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
     output_xvg_path: md_rmsdfirst.xvg
   properties:
     selection: Backbone
     xvg: xmgr 
 
-step20_rmsd_experimental:
+step6B_rmsd_experimental:
   tool: gmx_rms
   paths:
     input_structure_path: dependency/step4A_grompp_min/input_gro_path
-    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
     output_xvg_path: md_rmsdexp.xvg
   properties:
     selection: Backbone
     xvg: xmgr 
   
-step21_rgyr:
+step6C_rgyr:
   tool: gmx_rgyr
   paths:
     input_structure_path: dependency/step4I_mdrun_npt/output_gro_path
-    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
     output_xvg_path: md_rgyr.xvg
   properties:
     selection: Backbone
     xvg: xmgr 
 
-step22_rmsf:
+step6D_rmsf:
   tool: cpptraj_rmsf
   paths:
     input_top_path: dependency/step3N_gro2pdb/output_str_path
-    input_traj_path: dependency/step18_mdrun_md/output_trr_path
+    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
     output_cpptraj_path: md_rmsf.xmgr   # .dat, .agr, .xmgr, .gnu
   properties:
     start: 1
@@ -457,7 +461,11 @@ step22_rmsf:
     steps: 1
     mask: "!@H=" # by default cpptraj already strips solvent atoms
 
-step23_trjcat:
+#####################################################
+# Section 7 (Steps A-D): Trajectory post-processing #
+#####################################################
+
+step7A_trjcat:
   tool: trjcat
   paths:
     input_trj_zip_path: all_trajectories_trr.zip
@@ -465,12 +473,10 @@ step23_trjcat:
   properties:
     concatenate: True
 
-# NOTE: Dry, image and fit the trajectory (parts) or the trajectories (replicas) - if parts we need to do this here, after the concatenation
-
-step24_dry_trj:
+step7B_dry_trj:
   tool: gmx_trjconv_trj
   paths: 
-    input_traj_path: dependency/step23_trjcat/output_trj_path
+    input_traj_path: dependency/step7A_trjcat/output_trj_path
     input_top_path: dependency/step4I_mdrun_npt/output_gro_path
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
     output_traj_path: dry_traj.xtc
@@ -480,7 +486,7 @@ step24_dry_trj:
     end: -1
     dt: 1
 
-step25_dry_str:
+step7C_dry_str:
   tool: gmx_trjconv_str
   paths: 
     input_structure_path: dependency/step4I_mdrun_npt/output_gro_path
@@ -493,11 +499,11 @@ step25_dry_str:
     pbc: mol
     ur: compact
 
-step26_image_traj:
+step7D_image_traj:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/step24_dry_trj/output_traj_path
-    input_top_path: dependency/step25_dry_str/output_str_path
+    input_traj_path: dependency/step7B_dry_trj/output_traj_path
+    input_top_path: dependency/step7C_dry_str/output_str_path
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
     output_traj_path: imaged_traj.xtc
   properties:
@@ -507,11 +513,11 @@ step26_image_traj:
     ur: compact
     pbc: mol
 
-step27_fit_traj:
+step7E_fit_traj:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/step26_image_traj/output_traj_path
-    input_top_path: dependency/step25_dry_str/output_str_path
+    input_traj_path: dependency/step7D_image_traj/output_traj_path
+    input_top_path: dependency/step7C_dry_str/output_str_path
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc
   properties:
