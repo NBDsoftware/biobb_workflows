@@ -531,7 +531,7 @@ def check_arguments(global_log, traj_path, top_path, clustering_path):
         raise SystemExit
 
 
-def main_wf(configuration_path, traj_path, top_path, clustering_path, prepare_traj, filtering_selection, output_path):
+def main_wf(configuration_path, traj_path, top_path, clustering_path, distance_threshold, prepare_traj, filtering_selection, output_path):
     '''
     Main clustering and cavity analysis workflow. This workflow clusters a given trajectory and analyzes the cavities of the most representative
     structures. Then filters the cavities according to a pre-defined criteria and outputs the pockets that passed the filter.
@@ -545,6 +545,7 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, prepare_tr
         clustering_path      (str): (Optional) path to the folder with the most representative structures in pdb format from an external clustering 
         prepare_traj        (bool): (Optional) flag to prepare the trajectory for clustering
         filtering_selection  (str): (Optional) residue selection to filter pockets by distance to center of mass
+        distance_threshold (float): (Optional) distance threshold to filter pockets by distance to center of mass
         output_path          (str): (Optional) path to output folder
 
     Outputs
@@ -675,7 +676,12 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, prepare_tr
     else:
 
         # Obtain the full sorted list of pdb files from clustering path
-        pdb_paths = sorted(glob.glob(os.path.join(clustering_path,"*.pdb")))
+        # If the clustering path is a file, we assume it is a single pdb file
+        if os.path.isfile(clustering_path):
+            global_log.info("External clustering file provided")
+            pdb_paths = [clustering_path]
+        else:
+            pdb_paths = sorted(glob.glob(os.path.join(clustering_path,"*.pdb")))
 
         # Population information will not be available in this case
         cluster_populations = None
@@ -725,6 +731,10 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, prepare_tr
         # STEP 7: Filtering cavities
         global_log.info("step7_filter_cavities: Filter found cavities")
         fpocket_filter(**cluster_paths['step7_filter_cavities'], properties=cluster_prop["step7_filter_cavities"])
+        
+        # Enforce distance threshold
+        if distance_threshold:
+            cluster_prop['step8_filter_residue_com']['distance_threshold'] = distance_threshold
 
         # STEP 8: Filter by pocket center of mass 
         global_log.info("step8_filter_residue_com: Filter cavities by center of mass distance to a group of residues") 
@@ -783,6 +793,10 @@ if __name__ == '__main__':
                         help="Residue selection to filter pockets by distance to center of mass",
                         required=False)
     
+    parser.add_argument('--distance_threshold', dest='distance_threshold', type=float,
+                        help="Distance threshold to filter pockets by distance to center of mass",
+                        required=False)
+    
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
@@ -795,4 +809,5 @@ if __name__ == '__main__':
             clustering_path = args.clustering_path,
             prepare_traj = args.prepare_traj,
             filtering_selection = args.filtering_selection,
+            distance_threshold = args.distance_threshold,
             output_path = args.output_path)
