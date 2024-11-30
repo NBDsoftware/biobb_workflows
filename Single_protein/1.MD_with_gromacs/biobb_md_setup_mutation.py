@@ -296,14 +296,14 @@ def get_pdb_code(pdb_file: str) -> Union[str, None]:
 
 
 # Set additional general properties not considered by the configuration reader
-def set_gromacs_path(properties: dict, binary_path: str) -> None:
+def set_gromacs_path(global_properties: dict, binary_path: str) -> None:
     """
     Set the path to the GROMACS binary for all steps using GROMACS.
 
     Inputs
     ------
 
-        properties (dict): Dictionary containing the properties.
+        global_properties (dict): Dictionary containing the global_properties.
         binary_path (str): Path to the GROMACS binary.
     """
 
@@ -312,16 +312,16 @@ def set_gromacs_path(properties: dict, binary_path: str) -> None:
                         'step4H_grompp_npt', 'step4I_mdrun_npt', 'step5A_grompp_md', 'step5B_mdrun_md']
 
     for step in list_of_steps:
-        properties[step]['binary_path'] = binary_path
+        global_properties[step]['binary_path'] = binary_path
 
-def set_mpi_path(properties: dict, mpi_bin: str, mpi_np: int) -> None:
+def set_mpi_path(global_properties: dict, mpi_bin: str, mpi_np: int) -> None:
     """
     Set the path to the MPI binary for all steps using MPI.
 
     Inputs
     ------
 
-        properties (dict): Dictionary containing the properties.
+        global_properties (dict): Dictionary containing the global_properties.
         mpi_bin (str): Path to the MPI binary.
         mpi_np (int): Number of processors to be used.
     """
@@ -329,51 +329,52 @@ def set_mpi_path(properties: dict, mpi_bin: str, mpi_np: int) -> None:
     list_of_steps = ['step4B_mdrun_min', 'step4F_mdrun_nvt', 'step4I_mdrun_npt', 'step5B_mdrun_md']
 
     for step in list_of_steps:
-        properties[step]['mpi_bin'] = mpi_bin
-        properties[step]['mpi_np'] = mpi_np
+        global_properties[step]['mpi_bin'] = mpi_bin
+        global_properties[step]['mpi_np'] = mpi_np
 
-def set_gpu_use(properties: dict, gpu_use: bool) -> None:
+def set_gpu_use(global_properties: dict, gpu_use: bool) -> None:
     """
     Set the use of GPU for all steps using GROMACS that support it.
 
     Inputs
     ------
 
-        properties (dict): Dictionary containing the properties.
+        global_properties (dict): Dictionary containing the global_properties.
         gpu_use (bool): Whether to use GPU or not.
     """
 
     list_of_steps = ['step4F_mdrun_nvt', 'step4I_mdrun_npt', 'step5B_mdrun_md']
 
     for step in list_of_steps:
-        properties[step]['use_gpu'] = gpu_use
+        global_properties[step]['use_gpu'] = gpu_use
 
-def set_general_properties(properties: dict, conf, global_log) -> None:
+def set_gmx_properties(global_properties: dict, gmx_properties: dict, global_log) -> None:
     """
-    Set all the additional global properties of this workflow, i.e. those properties included at the beginning of the YAML configuration file that
-    are general to all steps and are not included already when the global properties are parsed.
+    Set all the gmx global properties of this workflow, i.e. those global properties included at the beginning of the YAML configuration file that
+    are general to some gmx steps.
     
     Inputs
     ------
     
-        properties (dict): Dictionary containing the properties.
-        conf (class settings.ConfReader): Configuration file reader.
+        global_properties (dict): Dictionary containing the global_properties.
+        gmx_properties (dict): Dictionary containing the gmx properties.
+        global_log (Logger): Logger object for logging messages.
     """
     
     # Enforce gromacs binary path for all steps using gromacs
-    if conf.properties.get('binary_path'):
-        global_log.info(f"Using GROMACS binary path: {conf.properties['binary_path']}")
-        set_gromacs_path(properties, conf.properties['binary_path'])
+    if gmx_properties.get('binary_path'):
+        global_log.info(f"Using GROMACS binary path: {gmx_properties['binary_path']}")
+        set_gromacs_path(global_properties, gmx_properties['binary_path'])
 
     # Enforce mpi binary path for all steps using mpi
-    if conf.properties.get('mpi_bin'):
-        global_log.info(f"Using MPI binary path: {conf.properties['mpi_bin']}")
-        set_mpi_path(properties, conf.properties['mpi_bin'], conf.properties.get('mpi_np'))
+    if gmx_properties.get('mpi_bin'):
+        global_log.info(f"Using MPI binary path: {gmx_properties['mpi_bin']}")
+        set_mpi_path(global_properties, gmx_properties['mpi_bin'], gmx_properties.get('mpi_np'))
 
     # Enforce gpu use for all steps using gromacs that support it
-    if conf.properties.get('use_gpu'):
+    if gmx_properties.get('use_gpu'):
         global_log.info(f"Using GPU for GROMACS steps")
-        set_gpu_use(properties, conf.properties['use_gpu'])
+        set_gpu_use(global_properties, gmx_properties['use_gpu'])
 
 
 # Process topology - temporal solution 
@@ -621,9 +622,12 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
     # Enforce output_path if provided
     if output_path is not None:
         output_path = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))
-        conf.properties['working_dir_path'] = output_path
+        conf.properties['global_properties']['working_dir_path'] = output_path
     else:
         output_path = conf.get_working_dir_path()
+        
+    # Remove gmx-specific properties from global properties - otherwise they will be applied to all steps
+    gmx_properties = conf.global_properties.pop('gmx', None)
 
     # Initializing a global log file
     global_log, _ = fu.get_logs(path=output_path, light_format=True)
@@ -641,8 +645,8 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
 
-    # Set general properties for all steps
-    set_general_properties(global_prop, conf, global_log)
+    # Set properties for gmx steps
+    set_gmx_properties(global_prop, gmx_properties, global_log)
 
     ##############################################
     # Extract atoms and prepare structure for MD #
@@ -921,7 +925,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         traj_paths = conf.get_paths_dic(prefix=simulation)
 
         # Set general properties for all steps
-        set_general_properties(traj_prop, conf, global_log)
+        set_gmx_properties(traj_prop, gmx_properties, global_log)
 
         # Update previous global paths needed by simulation-specific steps
         traj_paths['step5A_grompp_md']['input_gro_path'] = global_paths["step5A_grompp_md"]['input_gro_path']
@@ -1045,7 +1049,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
                 traj_paths = conf.get_paths_dic(prefix=simulation)
                 
                 # Set general properties for all steps
-                set_general_properties(traj_prop, conf, global_log)
+                set_gmx_properties(traj_prop, gmx_properties, global_log)
                 
                 # NOTE: we are hard-coding the kind of traj that we are using with these paths: output_trr_path
                 # Update previous global paths needed by simulation-specific steps
