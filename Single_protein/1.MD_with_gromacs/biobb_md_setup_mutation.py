@@ -622,7 +622,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
     # Enforce output_path if provided
     if output_path is not None:
         output_path = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))
-        conf.properties['global_properties']['working_dir_path'] = output_path
+        conf.working_dir_path = output_path
     else:
         output_path = conf.get_working_dir_path()
         
