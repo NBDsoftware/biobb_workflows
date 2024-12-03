@@ -25,7 +25,7 @@ module load slurm
 module load GROMACS
 
 # Activate previously created conda environment from environment.yml
-source activate /shared/work/BiobbWorkflows/envs/biobb_sp_md
+source activate /shared/work/BiobbWorkflows/envs/biobb_md
 
 # Path to the workflow
 REPO_PATH=/path/to/repo/biobb_workflows
@@ -36,4 +36,4 @@ INPUT_PDB=/path/to/input/folder/structure.pdb
 OUTPUT_PATH=/path/to/output/folder
 
 # Launch workflow
-python $WF_PATH/biobb_md_setup_mutation.py --config input_HPC.yml --num_trajs 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --pdb_chains A 
+python $WF_PATH/biobb_md_setup_mutation.py --config input_HPC.yml --num_parts 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --pdb_chains A 

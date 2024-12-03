@@ -2,7 +2,7 @@
 ##### Number of tasks
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=12
-#SBATCH -t 0-01:00:00
+#SBATCH -t 1-00:00:00
 #####Output and error log files
 #SBATCH -e gmx_%j.e
 #SBATCH -o gmx_%j.o
@@ -20,15 +20,23 @@ source activate /shared/work/BiobbWorkflows/envs/biobb_md
 
 # Path to the workflow
 REPO_PATH=/shared/work/BiobbWorkflows/src/biobb_workflows
-WF_PATH=$REPO_PATH/euCanSHare/Single_protein_wfs/1.MD_with_mutation
+WF_PATH=$REPO_PATH/Single_protein/1.MD_with_gromacs/
 
 # Input arguments
 INPUT_PDB=$1
 PDB_CHAIN=$2
 OUTPUT_DIR=$3
-NUM_PARTS=$4
-NSTEPS=$5
-ANALYSIS=$6
+LIGAND_PARAMETERS=$4
+NUM_PARTS=$5
+NSTEPS=$6
+DO_FINAL_ANALYSIS=$7
+
+# Read the condition to do the final analysis
+if [ "$DO_FINAL_ANALYSIS" == "true" ]; then
+    FINAL_ANALYSIS="--final_analysis"
+else
+    FINAL_ANALYSIS=""
+fi
 
 # Create folder for the HIS protonation
 mkdir -p $OUTPUT_DIR/his_protonation
@@ -57,7 +65,7 @@ if [ ${#histidine_residues[@]} -eq 0 ]; then
 
     echo "No histidine residues found. Launching the workflow."
 
-    python $WF_PATH/biobb_md_setup_mutation.py --config input_HPC.yml --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_DIR --pdb_chains $PDB_CHAIN --nsteps $NSTEPS --analysis $ANALYSIS
+    python $WF_PATH/biobb_md_setup_mutation.py --config input_HPC.yml --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_DIR --pdb_chains $PDB_CHAIN --nsteps $NSTEPS $FINAL_ANALYSIS --ligand_parameters $LIGAND_PARAMETERS
 
 elif [ ${#histidine_residues[@]} -ne 0 ]; then
 
@@ -84,5 +92,5 @@ elif [ ${#histidine_residues[@]} -ne 0 ]; then
         esac
     done
 
-    python $WF_PATH/biobb_md_setup_mutation.py --config input_HPC.yml --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_DIR --pdb_chains $PDB_CHAIN --nsteps $NSTEPS --analysis $ANALYSIS --his "$histidine_numbers"
+    python $WF_PATH/biobb_md_setup_mutation.py --config input_HPC.yml --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_DIR --pdb_chains $PDB_CHAIN --nsteps $NSTEPS $FINAL_ANALYSIS --his "$histidine_numbers" --ligand_parameters $LIGAND_PARAMETERS
 fi
