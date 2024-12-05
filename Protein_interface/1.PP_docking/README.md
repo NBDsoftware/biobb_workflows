@@ -16,13 +16,13 @@ To install it in an HPC environment, do the same after loading the corresponding
 See options for worklow:
 
 ```bash
-vi input_HPC.yml
+vi input.yml
 python biobb_pp_docking.py --help
 ```
 
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
 
-To run in an HPC environment adapt the run_HPC.sl and input_HPC.yml scripts and send a job to the slurm queue:
+To run in an HPC environment adapt the run_HPC.sl and input.yml scripts and send a job to the slurm queue:
 
 ```bash
 sbatch run_HPC.sl

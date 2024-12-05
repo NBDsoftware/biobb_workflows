@@ -15,7 +15,7 @@ See options for worklow:
 
 ```bash
 vi input.yml
-python biobb_docking_htvs.py --help
+python workflow.py --help
 ```
 
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in input.yml.

@@ -39,7 +39,7 @@ To run a long MD simulation while respecting the time limit of the HPC jobs use:
 Take a look at the YAML configuration file to see the different properties that can be set.
 
 ```bash
-vi input_HPC.yml
+vi input.yml
 ```
 
 Specially important are: the binary path of GROMACS and the MODELLER key. Make sure the binary path specified and the module loaded in the run file (HPC only) agree between them.
@@ -49,7 +49,7 @@ Specially important are: the binary path of GROMACS and the MODELLER key. Make s
 The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
 
 ```bash
-python biobb_md_setup_mutation.py --help
+python workflow.py --help
 ```
 
 ```

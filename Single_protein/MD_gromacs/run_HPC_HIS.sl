@@ -65,7 +65,7 @@ if [ ${#histidine_residues[@]} -eq 0 ]; then
 
     echo "No histidine residues found. Launching the workflow."
 
-    python $WF_PATH/biobb_md_setup_mutation.py --config input_HPC.yml --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_DIR --pdb_chains $PDB_CHAIN --nsteps $NSTEPS $FINAL_ANALYSIS --ligand_parameters $LIGAND_PARAMETERS
+    python $WF_PATH/workflow.py --config input.yml --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_DIR --pdb_chains $PDB_CHAIN --nsteps $NSTEPS $FINAL_ANALYSIS --ligand_parameters $LIGAND_PARAMETERS
 
 elif [ ${#histidine_residues[@]} -ne 0 ]; then
 
@@ -92,5 +92,5 @@ elif [ ${#histidine_residues[@]} -ne 0 ]; then
         esac
     done
 
-    python $WF_PATH/biobb_md_setup_mutation.py --config input_HPC.yml --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_DIR --pdb_chains $PDB_CHAIN --nsteps $NSTEPS $FINAL_ANALYSIS --his "$histidine_numbers" --ligand_parameters $LIGAND_PARAMETERS
+    python $WF_PATH/workflow.py --config input.yml --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_DIR --pdb_chains $PDB_CHAIN --nsteps $NSTEPS $FINAL_ANALYSIS --his "$histidine_numbers" --ligand_parameters $LIGAND_PARAMETERS
 fi

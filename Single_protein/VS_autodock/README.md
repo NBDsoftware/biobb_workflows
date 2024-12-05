@@ -11,7 +11,7 @@ conda env create -f environment.yml
 conda activate biobb_sp_virtual_screening
 ```
 
-See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the input_HPC.yml.
+See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the input.yml.
 
 To run in an HPC environment adapt the run_HPC.sl script and send a job to the slurm queue:
 
@@ -28,7 +28,7 @@ By default, the output will be generated in the `working_dir_path` folder select
 Take a look at the YAML configuration file to see the different properties that can be set.
 
 ```bash
-vi input_HPC.yml
+vi input.yml
 ```
 
 Specially important are: the selection of the cavity or residue defining the pocket, the box size around the residue selection or cavity and the settings for Autodock Vina (cpus and exhaustiveness). Make sure the binary path specified and the module loaded in the run file agree between them. Note that, selecting too many residues to define the cavity or choosing a large box size can increase the computational cost of the docking.
@@ -38,13 +38,13 @@ Specially important are: the selection of the cavity or residue defining the poc
 The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
 
 ```bash
-python biobb_docking_htvs.py --help
+python workflow.py --help
 ```
 
 Specially important are: the configuration file path, the path to the ligand library, the path to the target structure, the output path, the number of top ligands to keep in the final summary, the flag to keep the poses of the best ligands and the flag to dock to a box created around a residue selection instead of a pocket found with Fpocket (a zip file containing pockets from an Fpocket analysis). See al options here:
 
 ```
-usage: biobb_docking_htvs.py [-h] -c CONFIG_PATH -lib LIGAND_LIB [-s STRUCTURE_PATH] [-pz INPUT_POCKETS_ZIP] [-p POCKET] [-o OUTPUT_PATH] [-nl NUM_TOP_LIGANDS] [-kp] [-dr] [-cpus CPUS] [-ex EXHAUSTIVENESS] [-d]
+usage: workflow.py [-h] -c CONFIG_PATH -lib LIGAND_LIB [-s STRUCTURE_PATH] [-pz INPUT_POCKETS_ZIP] [-p POCKET] [-o OUTPUT_PATH] [-nl NUM_TOP_LIGANDS] [-kp] [-dr] [-cpus CPUS] [-ex EXHAUSTIVENESS] [-d]
 
 Simple High-throughput virtual screening (HTVS) pipeline using BioExcel Building Blocks
 

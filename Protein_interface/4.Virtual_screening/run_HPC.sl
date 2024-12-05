@@ -24,4 +24,4 @@ INPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanSh
 STRUCTURE_PATH=$INPUT_PATH/13_refined_pose.pdb
 INPUT_POCKETS_ZIP=$INPUT_PATH/filtered_pockets.zip
 OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Protein_interface_wfs/4.Virtual_screening/output4
-python biobb_docking_htvs.py --config input_HPC.yml --ligand_lib input/ligand_lib.smi --structure_path $STRUCTURE_PATH --input_pockets_zip $INPUT_POCKETS_ZIP --output $OUTPUT_PATH --num_top_ligands 10 --keep_poses
+python workflow.py --config input.yml --ligand_lib input/ligand_lib.smi --structure_path $STRUCTURE_PATH --input_pockets_zip $INPUT_POCKETS_ZIP --output $OUTPUT_PATH --num_top_ligands 10 --keep_poses

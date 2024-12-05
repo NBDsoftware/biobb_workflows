@@ -13,7 +13,7 @@ conda activate biobb_sp_cavity_analysis
 
 See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
 
-To run in an HPC environment adapt the run_HPC.sl and input_HPC.yml scripts and send a job to the slurm queue:
+To run in an HPC environment adapt the run_HPC.sl and input.yml scripts and send a job to the slurm queue:
 
 ```bash
 sbatch run_HPC.sl
@@ -28,7 +28,7 @@ By default, the output will be generated in the "working_dir_path" folder select
 Take a look at the YAML configuration file to see the different properties that can be set.
 
 ```bash
-vi input_HPC.yml
+vi input.yml
 ```
 Specially important are: the filtering settings in the last two steps. If a trajectory file is given as input, also take a look to the total number of most populated clusters to analyze, the definition of the rmsd group to do the clustering and the path to the GROMACS binary file in the global properties of the configuration file. Make sure the binary path specified and the module loaded in the run file agree between them. If the "--prepare_traj" flag is used, take a look at the selection group definition to trim the trajectory and the start, end and dt values to sub-sample the trajectory if needed.
 

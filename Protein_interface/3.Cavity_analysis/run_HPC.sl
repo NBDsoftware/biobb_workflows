@@ -22,10 +22,10 @@ module load slurm/slurm/21.08.6
 source activate /home/pnavarro/.conda/envs/protein_protein_wf3
 
 # Launch workflow
-# python biobb_cavity_analysis.py --config input_HPC.yml 
+# python biobb_cavity_analysis.py --config input.yml 
 
 # Launch workflow 2
 INPUT_ZIP=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Protein_interface_wfs/3.Cavity_analysis/input/top_refined_poses.zip
 OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Protein_interface_wfs/3.Cavity_analysis/output2
 OUTPUT_SUMMARY=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Protein_interface_wfs/3.Cavity_analysis/output2/summary_cavities.yml
-python biobb_cavity_analysis.py --config input_HPC.yml --input_zip $INPUT_ZIP --output $OUTPUT_PATH --output_summary $OUTPUT_SUMMARY
+python biobb_cavity_analysis.py --config input.yml --input_zip $INPUT_ZIP --output $OUTPUT_PATH --output_summary $OUTPUT_SUMMARY

@@ -22,10 +22,10 @@ source activate /home/pnavarro/.conda/envs/biobb_pydock
 PYTHON_INTERPRETER_PATH='/home/pnavarro/.conda/envs/biobb_pydock/bin'
 
 # Launch workflow
-# python biobb_pp_docking.py --config input_HPC.yml 
+# python biobb_pp_docking.py --config input.yml 
 
 # Launch workflow 2
 REC_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Protein_interface_wfs/1.PP_docking/input/receptor.pdb
 LIG_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Protein_interface_wfs/1.PP_docking/input/ligand.pdb
 OUTPUT_PATH=/shared/scratch/jobs/pnavarro/2023_EUCANSHARE/biobb_workflows/euCanShare/Protein_interface_wfs/1.PP_docking/output4
-python biobb_pp_docking.py --config input_HPC.yml --receptor_pdb $REC_PATH --ligand_pdb $LIG_PATH --output $OUTPUT_PATH
+python biobb_pp_docking.py --config input.yml --receptor_pdb $REC_PATH --ligand_pdb $LIG_PATH --output $OUTPUT_PATH

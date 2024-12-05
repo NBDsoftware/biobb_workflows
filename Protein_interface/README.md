@@ -39,7 +39,7 @@ conda env list
 conda activate <environment_name>
 ```
 
-5. Provide necessary inputs and configuration through the YAML configuration file (see input.yml or input_HPC.yml) or through the command line arguments (see run_local.sh or run_HPC.sl). Then execute either in locally:
+5. Provide necessary inputs and configuration through the YAML configuration file (see input.yml or input.yml) or through the command line arguments (see run_local.sh or run_HPC.sl). Then execute either in locally:
 
 ```bash
 ./run.sh

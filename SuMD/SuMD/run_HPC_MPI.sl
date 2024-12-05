@@ -31,5 +31,5 @@ STRUCTURE=$INPUT_FOLDER/complex.gro
 TOPOLOGY=$INPUT_FOLDER/topology.zip
 INDEX=$INPUT_FOLDER/index.ndx
 
-python biobb_SuMD.py -structure $STRUCTURE -topology $TOPOLOGY -config input_HPC.yml -index $INDEX
+python biobb_SuMD.py -structure $STRUCTURE -topology $TOPOLOGY -config input.yml -index $INDEX
 

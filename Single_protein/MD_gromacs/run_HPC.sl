@@ -1,8 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=single_protein_wf2
-#SBATCH --ntasks=1                                      # total number of tasks across all nodes
-#SBATCH --time=01:00:00
-#SBATCH --mem-per-cpu=2000
+#SBATCH --job-name=single_protein_wf1
+#SBATCH --nodes=1                 # node count
+#SBATCH --ntasks=8                                  # total number of tasks across all nodes
+#SBATCH --time=00:30:00
+#SBATCH --mem-per-cpu=1000
+# #SBATCH --constraint=gpu
+# #SBATCH --gres=gpu:1
 #SBATCH --output=report_%j.out
 #SBATCH --error=report_%j.err
 # #SBATCH --mail-type=begin                              # send email when job begins
@@ -15,19 +18,22 @@ module purge
 # Load conda / miniconda module
 module load Miniconda3
 
+# Load slurm to call srun in the computation node
+module load slurm
+
 # Load GROMACS module
 module load GROMACS
 
 # Activate previously created conda environment from environment.yml
-source activate /shared/work/BiobbWorkflows/envs/biobb_sp_cavity_analysis
+source activate /shared/work/BiobbWorkflows/envs/biobb_md
 
 # Path to the workflow
 REPO_PATH=/path/to/repo/biobb_workflows
-WF_PATH=$REPO_PATH/euCanShare/Single_protein_wfs/2.Clustering_and_cavity_analysis
+WF_PATH=$REPO_PATH/Single_protein/MD_gromacs
 
 # Input files
-INPUT=/path/to/input/folder
+INPUT_PDB=/path/to/input/folder/structure.pdb
 OUTPUT_PATH=/path/to/output/folder
 
 # Launch workflow
-python $WF_PATH/biobb_clustering_cavity_analysis.py --config input_HPC.yml --clustering_path $INPUT --output $OUTPUT_PATH
+python $WF_PATH/workflow.py --config input.yml --num_parts 1 --input_pdb $INPUT_PDB --output $OUTPUT_PATH --pdb_chains A 

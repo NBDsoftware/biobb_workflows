@@ -29,4 +29,4 @@ STRUCTURE_PATH=$INPUT_PATH/path/to/structure.pdb
 INPUT_POCKETS_ZIP=$INPUT_PATH/path/to/pockets.zip  # Alternatively, provide the numbers of the residues forming the pocket
 
 # Launch workflow 
-python  $WF_PATH/biobb_docking_htvs.py --config input_HPC.yml --ligand_lib input/ligand_lib.smi --structure_path $STRUCTURE_PATH --input_pockets_zip $INPUT_POCKETS_ZIP --num_top_ligands 5
+python  $WF_PATH/workflow.py --config input.yml --ligand_lib input/ligand_lib.smi --structure_path $STRUCTURE_PATH --input_pockets_zip $INPUT_POCKETS_ZIP --num_top_ligands 5

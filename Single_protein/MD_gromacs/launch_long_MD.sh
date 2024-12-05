@@ -13,7 +13,7 @@ STEPS_PER_PART=10000            # Number of steps per part - to respect the HPC 
 SLURM_SCRIPT="run_HPC_HIS.sl"   # SLURM script to be used for the HPC job
 PDB_CHAIN="A"                   # Chain to be used from the input PDB file, e.g. "A" or "A, B"
 
-# Review as well the input_HPC.yml to check equilibration time for example! - this will be improved in the future
+# Review as well the input.yml to check equilibration time for example! - this will be improved in the future
 
 ###############
 # MAIN SCRIPT #
