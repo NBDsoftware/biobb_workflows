@@ -117,114 +117,86 @@ def highest_occupancy_altlocs(pdb_file, global_log) -> List[str]:
         
     return altloc_residues
 
-def get_available_ligands(pdb_file: str, chains_id: List, ligand_parameters: Union[str, None], 
-                          output_frcmod_zip: str, output_prep_zip: str, global_log) -> List[Dict[str, str]]:
+def get_ligands(ligands_folder: Union[str, None], global_log) -> List[Dict[str, str]]:
     """
-    - Retrieve the heteroatoms (ligands) present in the chains of interest in a PDB file. 
-    
-    - Check if the ligands have .frcmod and .prep files available in the ligand_parameters folder.
-    
-    Issue warnings for ligands without any of these files, as they will not be included in 
-    the simulation. 
-    
-    - Zip all the .frcmod files and all the .prep files into two compressed files 
-    to be used in the leap_gen_top step.
-    
-    NOTE: we might have problems if initial PDB has different MODELs
-    NOTE: include a more general selection from the PDB
+    Get a list of available ligands in the ligands folder. The function searches for all the .itp and .gro files in the ligands folder
+    If the ligands folder is provided but doesn't exist or any of the ligands is missing the topology or coordinate file, an error is raised.
     
     Inputs
     ------
     
-        pdb_file (str): Path to the PDB file.
-        chains_id (List): Chains ID to be analyzed.
-        ligand_parameters (str): Path to the ligand parameters folder.
-        output_frcmod_zip (str): Path to the output zip file containing all the frcmod files.
-        output_prep_zip (str): Path to the output zip file containing all the prep files.
+        ligands_folder (str): Path to the folder with the ligand .itp and .gro files.
         global_log: Logger object for logging messages.
     
     Returns
     -------
     
-        list: List with dictionaries defining the ligands present in the chains of interest, 
-        empty if no parameterized ligand is found. Each dictionary has the following keys:
+        ligands: Dictionary with the ligand names, topology and coordinate file paths. Empty dict if no ligands are found. 
         
             Example 
-            
-                ligands = [
-                    {
-                        'name': 'ZZ7',
-                        'res_id': '302',
-                        'chain': 'A'
-                    },
-                    {
-                        'name': 'ZZ8',
-                        'res_id': '303',
-                        'chain': 'A'
+                    ligands = {
+                        'ZZ7': {
+                            'topology': 'path/to/ZZ7.itp',
+                            'coordinates': 'path/to/ZZ7.gro'
+                        },
+                        'ZZ8': {
+                            'topology': 'path/to/ZZ8.itp',
+                            'coordinates': 'path/to/ZZ8.gro'
+                        }
                     }
-                ]
     """
     
     # Initialize the list of ligands
-    ligands = []
-    frcmod_files = []
-    prep_files = []
-    
-    # Check if the PDB file exists
-    if not os.path.exists(pdb_file):
-        global_log.error(f"File {pdb_file} not found")
-        return ligands
+    ligands = {}
 
-    # If the ligand parameter folder is provided, check if it exists
-    if ligand_parameters:
-        if not os.path.exists(ligand_parameters):
-            global_log.error(f"Folder {ligand_parameters} not found")
-            return ligands
+    # If ligands folder is not provided, return an empty list
+    if ligands_folder is None:
+        return ligands
     
-    # Search for ligands in the chain of interest
-    parser = PDBParser(QUIET=True)
-    structure = parser.get_structure('structure', pdb_file)
-    for model in structure:
-        for chain in model:
-            if chain.get_id() in chains_id:
-                for residue in chain:
-                    # If residue is made of heteroatoms -> ligand, E.g. ('H_HEM', 500, ' ')
-                    # Heteroatom residues have a hetero flag in their ID  (e.g. H_XXX for a ligand XXX)
-                    heteroatom_id = residue.id[0]
-                    if heteroatom_id.startswith('H_'):
-                        
-                        ligand_name = residue.get_resname()
-                        res_id = str(residue.id[1])
-                        
-                        ligand_info = {
-                            'name': ligand_name,
-                            'res_id': str(res_id),
-                            'chain': chain.get_id()
-                        }
-                        
-                        # Add ligand if it is parameterized
-                        if ligand_parameters:
-                            frcmod_file = os.path.join(ligand_parameters, f"{ligand_name}.frcmod")
-                            prep_file = os.path.join(ligand_parameters, f"{ligand_name}.prep")
-                            if os.path.exists(frcmod_file) and os.path.exists(prep_file):
-                                ligands.append(ligand_info)
-                                frcmod_files.append(frcmod_file)
-                                prep_files.append(prep_file)
-                                global_log.info(f"    Found topology file for ligand {ligand_name} (res_id: {res_id}) in {ligand_parameters}")
-                            else:
-                                global_log.warning(f"    Topology file for ligand {ligand_name} (res_id: {res_id}) not found in {ligand_parameters}")
-                        else:
-                            global_log.warning(f"    Topology file for ligand {ligand_name} (res_id: {res_id}) not found. To include this ligand in the simulation, provide the --ligand_parameters folder.")
+    # Check if the ligands folder exists
+    if not os.path.exists(ligands_folder):
+        global_log.error(f"Folder {ligands_folder} not found")
+        return ligands
     
-    # Zip all the frcmod files if there are any
-    if frcmod_files:
-        fu.zip_list(output_frcmod_zip, frcmod_files)
-        global_log.info(f"    Zipped all frcmod files into {output_frcmod_zip}")
+    # Search for ligands in the ligands folder
+    for file in os.listdir(ligands_folder):
         
-    # Zip all the prep files if there are any
-    if prep_files:
-        fu.zip_list(output_prep_zip, prep_files)
-        global_log.info(f"    Zipped all prep files into {output_prep_zip}")
+        # Check if the file is a .itp or .gro file
+        if file.endswith(".itp") or file.endswith(".gro"):
+            
+            # Get the file name without extension
+            ligand_name = Path(file).stem   
+            
+            # Get the file extension
+            file_extension = Path(file).suffix
+            
+            # Check if the ligand name is already in the dictionary
+            if ligand_name in ligands:
+                if file_extension == ".itp":
+                    ligands[ligand_name]['topology'] = os.path.join(ligands_folder, file)
+                elif file_extension == ".gro":
+                    ligands[ligand_name]['coordinates'] = os.path.join(ligands_folder, file)
+            else:
+                if file_extension == ".itp":
+                    ligands[ligand_name] = {'topology': os.path.join(ligands_folder, file)}
+                elif file_extension == ".gro":
+                    ligands[ligand_name] = {'coordinates': os.path.join(ligands_folder, file)}
+    
+    # Check if all ligands have both topology and coordinate files
+    for ligand, files in ligands.items():
+        if 'topology' not in files:
+            global_log.error(f"Topology file for ligand {ligand} not found")
+            
+            # Remove ligand from the dictionary
+            ligands.pop(ligand)
+            continue
+        
+        if 'coordinates' not in files:
+            global_log.error(f"Coordinate file for ligand {ligand} not found")
+            
+            # Remove ligand from the dictionary
+            ligands.pop(ligand)
+            continue
         
     return ligands
       
@@ -307,7 +279,7 @@ def set_gromacs_path(global_properties: dict, binary_path: str) -> None:
         binary_path (str): Path to the GROMACS binary.
     """
 
-    list_of_steps = ['step3A_structure_topology', 'step3J_editconf', 'step3K_solvate', 'step3L_grompp_genion', 'step3M_genion',
+    list_of_steps = ['step3A_structure_topology', 'step3H_editconf', 'step3I_solvate', 'step3J_grompp_genion', 'step3K_genion',
                         'step4A_grompp_min', 'step4B_mdrun_min', 'step4E_grompp_nvt', 'step4F_mdrun_nvt',
                         'step4H_grompp_npt', 'step4I_mdrun_npt', 'step5A_grompp_md', 'step5B_mdrun_md']
 
@@ -378,9 +350,9 @@ def set_gmx_properties(global_properties: dict, gmx_properties: dict, global_log
 
 
 # Process topology - temporal solution 
-def process_cofactor_top(input_path, output_path) -> None:
+def process_ligand_top(input_path, output_path) -> None:
     """
-    Read the input topology from the cofactors. 
+    Read the input topology from the ligand. 
     Removes any [ defaults ] directive present.
     Removes any [ molecules ] directive present. 
     Copies the input topology to the output path.
@@ -575,7 +547,7 @@ def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
 
 def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path = None, input_pdb_path = None, pdb_chains = None,
             mutation_list = None, input_gro_path = None, input_top_path = None, skip_fix_backbone = None, fix_ss = None, fix_amide_clashes = None, 
-            his = None, nsteps = None, final_analysis = None, ligand_parameters = None):
+            his = None, nsteps = None, final_analysis = None, ligands_folder = None):
     '''
     Main setup, mutation and MD run workflow with GROMACS. Can be used to retrieve a PDB, fix some defects of the structure,
     add specific mutations, prepare the system, minimize it, equilibrate it and finally do N production runs (either replicas or parts).
@@ -589,17 +561,17 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         num_replicas       (int): (Optional) number of replicas of the trajectory
         output_path        (str): (Optional) path to output folder
         input_pdb_path     (str): (Optional) path to input PDB file
-        pdb_chains         (str): (Optional) chains to be extracted from the input PDB file
+        pdb_chains         (str): (Optional) list of chains to be extracted from the PDB file and fixed
         mutation_list      (str): (Optional) list of mutations to be introduced in the structure
-        input_gro_path     (str): (Optional) path to input structure file (.gro)
-        input_top_path     (str): (Optional) path to input topology file (.zip)
+        input_gro_path     (str): (Optional) path to already-prepared input structure file (.gro)
+        input_top_path     (str): (Optional) path to already-prepared input topology file (.zip)
         skip_fix_backbone (bool): (Optional) whether to skip the fix of the backbone atoms
         fix_ss            (bool): (Optional) wether to add disulfide bonds
         fix_amide_clashes (bool): (Optional) wether to flip clashing amides to relieve the clashes
-        his               (str): (Optional) histidine protonation states list
-        nsteps            (int): (Optional) Total number of steps of the production simulation
+        his                (str): (Optional) histidine protonation states list
+        nsteps             (int): (Optional) Total number of steps of the production simulation
         final_analysis    (bool): (Optional) whether to perform the final analysis or not
-        ligand_parameters (str): (Optional) path to ligand parameters folder containing the topologies of the ligands.
+        ligands_folder     (str): (Optional) path to the folder containing the ligand .itp and .gro files
         
     Outputs
     -------
@@ -661,23 +633,12 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
 
         # If chains are given as argument
         if pdb_chains is not None:
+            global_prop["step1A_extractAtoms"]["molecule_type"] = "chains"
             global_prop["step1A_extractAtoms"]["chains"] = pdb_chains
         
         # STEP 1A: extract main structure of interest while removing water and ligands (heteroatoms)
         global_log.info("step1A_extractAtoms: extract chain of interest")
         extract_molecule(**global_paths["step1A_extractAtoms"], properties=global_prop["step1A_extractAtoms"])
-        
-        # Look for parameterized ligands in the structure of interest # NOTE: what if we are not selecting a chain in that step? But something else
-        output_frcmod_zip = os.path.join(global_prop["step3B_cofactors_topology"]["path"], "cofactors_frcmod.zip")
-        output_prep_zip = os.path.join(global_prop["step3B_cofactors_topology"]["path"], "cofactors_prep.zip")
-        ligands_to_extract = get_available_ligands(global_paths["step1A_extractAtoms"]["input_structure_path"], global_prop["step1A_extractAtoms"]["chains"], 
-                                                   ligand_parameters, output_frcmod_zip, output_prep_zip, global_log)
-
-        # STEP 1B: Extract parameterized ligands from the original PDB file # NOTE: we could add list of waters to keep
-        global_log.info("step1B_extractHeteroatoms: extract parameterized ligands from initial PDB")
-        global_prop["step1B_extractHeteroatoms"]["heteroatoms"] = ligands_to_extract
-        global_paths["step1B_extractHeteroatoms"]["input_structure_path"] = global_paths["step1A_extractAtoms"]["input_structure_path"]
-        extract_heteroatoms(**global_paths["step1B_extractHeteroatoms"], properties=global_prop["step1B_extractHeteroatoms"])
         
         # STEP 2A: Fix alternative locations
         global_log.info("step2A_fixaltlocs: Fix alternative locations")
@@ -722,7 +683,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
                 # Update the input file path
                 global_paths['step2C_pdb_tofasta']['input_file_path'] = global_paths["step1A_extractAtoms"]["input_structure_path"]
                 
-                # NOTE: this is not the canonical, only existing residues in the PDB file are included
+                # Only existing residues in the PDB file are included
                 biobb_pdb_tofasta(**global_paths["step2C_pdb_tofasta"], properties=global_prop["step2C_pdb_tofasta"])
                 
                 # Update fix backbone input
@@ -774,81 +735,98 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         ###########################################
         
         # NOTE: Histidine protonation states come from external call to pdb4amber, should be done within the WF!
-        # NOTE: if we have a gap that we are not modeling (e.g. a missing loop), pdb2gmx will find terminal atoms OXT in non-terminal residues and will return an error
         # NOTE: Look at HIS protonation states with pdb2gmx - checking h bonds, etc. CMIP - with BioBB (high cost)
+        # This goes here before the pdb2gmx step
+        
+        # NOTE: if we have a gap that we are not modeling (e.g. a missing loop), pdb2gmx will find terminal atoms OXT in non-terminal residues and will return an error
         # STEP 3A: add H atoms, generate coordinate (.gro) and topology (.top) file for the system
         global_log.info("step3A_structure_topology: Generate the topology")
         if his:
             global_prop["step3A_structure_topology"]["his"]=his
         pdb2gmx(**global_paths["step3A_structure_topology"], properties=global_prop["step3A_structure_topology"])
 
-        if ligands_to_extract:
+        ligands_dict = get_ligands(ligands_folder, global_log)
+        
+        if ligands_dict:
             
-            # STEP 3B: Generate cofactors amber topology 
-            global_log.info("step3B_cofactors_topology: Generate the topology for the ligands")
-            global_paths["step3B_cofactors_topology"]["input_frcmod_path"] = output_frcmod_zip
-            global_paths["step3B_cofactors_topology"]["input_prep_path"] = output_prep_zip
-            leap_gen_top(**global_paths["step3B_cofactors_topology"], properties=global_prop["step3B_cofactors_topology"])
+            ligand_names = list(ligands_dict.keys())
             
-            # STEP 3C: Convert cofactors topology from amber to gromacs
-            global_log.info("step3C_amber_to_gmx: Convert cofactor topology from AMBER to GROMACS")
-            acpype_convert_amber_to_gmx(**global_paths["step3C_amber_to_gmx"], properties=global_prop["step3C_amber_to_gmx"])
+            # STEP 3B: Convert gro of main structure to pdb - to concatenate with ligands
+            global_log.info("step3B_structure_pdb: Convert GRO to PDB")
+            gmx_trjconv_str(**global_paths["step3B_structure_pdb"], properties=global_prop["step3B_structure_pdb"])
             
-            # STEP 3D: Convert gro of main structure to pdb - to concatenate with cofactors
-            global_log.info("step3D_structure_pdb: Convert GRO to PDB")
-            gmx_trjconv_str(**global_paths["step3D_structure_pdb"], properties=global_prop["step3D_structure_pdb"])
+            complex_pdb_path = global_paths["step3B_structure_pdb"]["output_str_path"]
+            complex_topology_path = global_paths["step3A_structure_topology"]["output_top_zip_path"]
             
-            # STEP 3E: Convert cofactors coordinates from gro to pdb - to concatenate with structure
-            global_log.info("step3E_cofactors_pdb: Convert GRO to PDB")
-            gmx_trjconv_str(**global_paths["step3E_cofactors_pdb"], properties=global_prop["step3E_cofactors_pdb"])
+            # For each ligand in the ligands folder
+            for ligand_name, ligand_files in ligands_dict.items():
+                
+                prefix = f"step3_{ligand_name}"
+                ligand_prop = conf.get_prop_dic(prefix=prefix)
+                ligand_paths = conf.get_paths_dic(prefix=prefix)
+                
+                ligand_gro_path = ligand_files["coordinates"]
+                ligand_itp_path = ligand_files["topology"]
             
-            # STEP 3F: Create complex pdb file concatenating the main structure and the ligands
-            global_log.info("step3F_complex_pdb: Create complex PDB file")
-            cat_pdb(**global_paths["step3F_complex_pdb"], properties=global_prop["step3F_complex_pdb"])
-            
-            # STEP 3G: Make ndx file for cofactor heavy atoms
-            global_log.info("step3G_make_cofactors_ndx: Create index file for cofactors")
-            make_ndx(**global_paths["step3G_make_cofactors_ndx"], properties=global_prop["step3G_make_cofactors_ndx"])
-            
-            # STEP 3H: Generate restraints for the cofactor heavy atoms
-            global_log.info("step3H_cofactor_restraints: Generate restraints for cofactors")
-            genrestr(**global_paths["step3H_cofactor_restraints"], properties=global_prop["step3H_cofactor_restraints"])
-            
-            # STEP 3I: Append parameterized cofactors to the topology zip file   
-            # Copy top_file to itp_file removing the [ defaults ] directive
-            cofactors_top_file = global_paths["step3C_amber_to_gmx"]["output_path_top"]
-            cofactors_itp_file = str(Path(cofactors_top_file).with_suffix(".itp"))
-            process_cofactor_top(cofactors_top_file, cofactors_itp_file)
-            global_paths["step3I_append_ligand"]["input_itp_path"] = cofactors_itp_file
-            global_log.info(f"step3I_append_ligand: Append ligand to the topology")
-            append_ligand(**global_paths["step3I_append_ligand"], properties=global_prop["step3I_append_ligand"])
-            
+                # STEP 3C: Convert ligand coordinates from gro to pdb
+                global_log.info(f"{ligand_name} > Convert ligand GRO to PDB")
+                ligand_paths["step3C_ligand_pdb"]["input_structure_path"] = ligand_gro_path
+                ligand_paths["step3C_ligand_pdb"]["input_top_path"] = ligand_gro_path
+                gmx_trjconv_str(**ligand_paths["step3C_ligand_pdb"], properties=ligand_prop["step3C_ligand_pdb"])
+                
+                # STEP 3D: Create complex pdb file concatenating the current complex and the new ligand
+                global_log.info(f"{ligand_name} > Create complex PDB file")
+                ligand_paths["step3D_complex_pdb"]["input_structure1"] = complex_pdb_path
+                cat_pdb(**ligand_paths["step3D_complex_pdb"], properties=ligand_prop["step3D_complex_pdb"])
+                
+                # Update complex pdb path for the next ligands
+                complex_pdb_path = ligand_paths["step3D_complex_pdb"]["output_structure_path"]
+                
+                # STEP 3E: Make ndx file for the ligand's heavy atoms
+                global_log.info(f"{ligand_name} > Create index file for the ligand's heavy atoms")
+                ligand_paths["step3E_make_ligand_ndx"]["input_structure_path"] = ligand_gro_path
+                make_ndx(**ligand_paths["step3E_make_ligand_ndx"], properties=ligand_prop["step3E_make_ligand_ndx"])
+                
+                # STEP 3F: Generate restraints for the ligand heavy atoms
+                global_log.info(f"{ligand_name} > Generate restraints for ligand")
+                ligand_paths["step3F_ligand_restraints"]["input_structure_path"] = ligand_gro_path
+                genrestr(**ligand_paths["step3F_ligand_restraints"], properties=ligand_prop["step3F_ligand_restraints"])
+                
+                # STEP 3G: Append parameterized ligand to the current complex topology zip file
+                ligand_paths["step3G_append_ligand"]["input_top_zip_path"] = complex_topology_path
+                ligand_paths["step3G_append_ligand"]["input_itp_path"] = ligand_itp_path
+                global_log.info(f"{ligand_name} > Append ligand to the topology")
+                append_ligand(**ligand_paths["step3G_append_ligand"], properties=ligand_prop["step3G_append_ligand"])
+                
+                # Update complex topology path for the next ligands
+                complex_topology_path = ligand_paths["step3G_append_ligand"]["output_top_zip_path"]
+                
             # Modify paths for the next steps
-            global_paths["step3J_editconf"]["input_gro_path"] = global_paths["step3F_complex_pdb"]["output_structure_path"]
-            global_paths["step3K_solvate"]["input_top_zip_path"] = global_paths["step3I_append_ligand"]["output_top_zip_path"]
+            global_paths["step3H_editconf"]["input_gro_path"] = complex_pdb_path
+            global_paths["step3I_solvate"]["input_top_zip_path"] = complex_topology_path
             
-        # STEP 3E: Create simulation box
-        global_log.info("step3J_editconf: Create the solvent box")
-        editconf(**global_paths["step3J_editconf"], properties=global_prop["step3J_editconf"])
+        # STEP 3H: Create simulation box
+        global_log.info("step3H_editconf: Create the solvent box")
+        editconf(**global_paths["step3H_editconf"], properties=global_prop["step3H_editconf"])
         
-        # STEP 3F: Add solvent molecules
-        global_log.info("step3K_solvate: Fill the solvent box with water molecules")
-        solvate(**global_paths["step3K_solvate"], properties=global_prop["step3K_solvate"])
+        # STEP 3I: Add solvent molecules
+        global_log.info("step3I_solvate: Fill the solvent box with water molecules")
+        solvate(**global_paths["step3I_solvate"], properties=global_prop["step3I_solvate"])
 
-        # STEP 3G: ion generation pre-processing
-        global_log.info("step3L_grompp_genion: Preprocess ion generation")
-        grompp(**global_paths["step3L_grompp_genion"], properties=global_prop["step3L_grompp_genion"])
+        # STEP 3J: ion generation pre-processing
+        global_log.info("step3J_grompp_genion: Preprocess ion generation")
+        grompp(**global_paths["step3J_grompp_genion"], properties=global_prop["step3J_grompp_genion"])
 
-        # STEP 3H: ion generation
-        global_log.info("step3M_genion: Ion generation")
-        genion(**global_paths["step3M_genion"], properties=global_prop["step3M_genion"])
+        # STEP 3K: ion generation
+        global_log.info("step3K_genion: Ion generation")
+        genion(**global_paths["step3K_genion"], properties=global_prop["step3K_genion"])
         
-        # Step 3I: conversion of topology from gro to pdb
-        global_log.info("step3N_gro2pdb: Convert topology from GRO to PDB")
-        gmx_trjconv_str(**global_paths["step3N_gro2pdb"], properties=global_prop["step3N_gro2pdb"])
+        # Step 3L: conversion of topology from gro to pdb
+        global_log.info("step3L_gro2pdb: Convert topology from GRO to PDB")
+        gmx_trjconv_str(**global_paths["step3L_gro2pdb"], properties=global_prop["step3L_gro2pdb"])
 
         if setup_only:
-            global_log.info("setup_only: setup_only flag is set to True, exiting...")
+            global_log.info("Set up only: setup_only flag is set to True! Exiting...")
             return
 
     else:
@@ -866,8 +844,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
     mdrun(**global_paths["step4B_mdrun_min"], properties=global_prop["step4B_mdrun_min"])
 
     # STEP 4C: create index file
-    if ligands_to_extract:
-        ligand_names = [ligand["name"] for ligand in ligands_to_extract]
+    if ligands_dict:
         global_prop["step4C_make_ndx"]["selection"] = f'"Protein" | r {" | r ".join(ligand_names)}'
     global_log.info("step4C_make_ndx: Create index file")
     make_ndx(**global_paths["step4C_make_ndx"], properties=global_prop["step4C_make_ndx"])
@@ -877,7 +854,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
     gmx_energy(**global_paths["step4D_energy_min"], properties=global_prop["step4D_energy_min"])
 
     # STEP 4E: NVT equilibration pre-processing
-    if ligands_to_extract:
+    if ligands_dict:
         global_prop["step4E_grompp_nvt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(ligand_names)} Water_and_ions"
     global_log.info("step4E_grompp_nvt: Preprocess system temperature equilibration")
     grompp(**global_paths["step4E_grompp_nvt"], properties=global_prop["step4E_grompp_nvt"])
@@ -891,7 +868,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
     gmx_energy(**global_paths["step4G_temp_nvt"], properties=global_prop["step4G_temp_nvt"])
 
     # STEP 4H: NPT equilibration pre-processing
-    if ligands_to_extract:
+    if ligands_dict:
         global_prop["step4H_grompp_npt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(ligand_names)} Water_and_ions"
     global_log.info("step4H_grompp_npt: Preprocess system pressure equilibration")
     grompp(**global_paths["step4H_grompp_npt"], properties=global_prop["step4H_grompp_npt"])
@@ -935,7 +912,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         traj_paths['step6A_rmsd_equilibrated']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
         traj_paths['step6B_rmsd_experimental']['input_structure_path'] = global_paths["step4A_grompp_min"]['input_gro_path']
         traj_paths['step6C_rgyr']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
-        traj_paths['step6D_rmsf']['input_top_path'] = global_paths["step3N_gro2pdb"]['output_str_path']
+        traj_paths['step6D_rmsf']['input_top_path'] = global_paths["step3L_gro2pdb"]['output_str_path']
         
         # Enforce nsteps if provided
         if nsteps is not None:
@@ -962,7 +939,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
                 traj_paths['step5A_grompp_md']['input_cpt_path'] = previous_cpt_path
 
         # STEP 17: free NPT production run pre-processing
-        if ligands_to_extract:
+        if ligands_dict:
             traj_prop["step5A_grompp_md"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(ligand_names)} Water_and_ions"
         global_log.info(f"{simulation} >  step5A_grompp_md: Preprocess free dynamics")
         grompp(**traj_paths['step5A_grompp_md'], properties=traj_prop["step5A_grompp_md"])
@@ -1107,23 +1084,19 @@ if __name__ == "__main__":
                         required=True)
 
     parser.add_argument('--setup_only', action='store_true',
-                        help="Only setup the system (default: False)",
-                        required=False)
+                        help="Only setup the system. Default: False",
+                        required=False, default=False)
 
     parser.add_argument('--num_parts', dest='num_parts',
-                        help="Number of parts of the trajectorie (default: 1)",
-                        required=False)
+                        help="Number of parts to divide the simulation into. Default: 1",
+                        required=False, default=1)
     
     parser.add_argument('--num_replicas', dest='num_replicas',
-                        help="Number of replicas (default: 1)",
-                        required=False)
-
-    parser.add_argument('--output', dest='output_path',
-                        help="Output path (default: working_dir_path in YAML config file)",
-                        required=False)
+                        help="Number of replicas with different seeds to run the simulation. Default: 1",
+                        required=False, default=1)
 
     parser.add_argument('--input_pdb', dest='input_pdb_path',
-                        help="Input PDB file (default: input_structure_path in step 1 of configuration file)",
+                        help="Input PDB file. Default: input_structure_path in step 1 of configuration file.",
                         required=False)
 
     parser.add_argument('--his', dest='his',
@@ -1131,8 +1104,8 @@ if __name__ == "__main__":
                         required=False, type = str)
 
     parser.add_argument('--pdb_chains', nargs='+', dest='pdb_chains',
-                        help="PDB chains to be extracted from PDB file (default: chains in properties of step 1)",
-                        required=False)
+                        help="Protein PDB chains to be extracted from PDB file and fixed. Default: A.",
+                        required=False, default=['A'])
 
     parser.add_argument('--mutation_list', nargs='+', dest='mutation_list',
                         help="List of mutations to be introduced in the protein (default: None, ex: A:Arg220Ala)",
@@ -1163,11 +1136,15 @@ if __name__ == "__main__":
                         required=False)
 
     parser.add_argument('--final_analysis', action='store_true', dest='final_analysis',
-                        help="Run the final analysis of the trajectory/ies. Concatenation of the analysis and trajectory, trajectory drying, imaging and fitting (default: False)",
-                        required=False)
+                        help="Run the final analysis of the trajectory/ies. Concatenation of the analysis and trajectory, trajectory drying, imaging and fitting. Default: False",
+                        required=False, default=False)
     
-    parser.add_argument('--ligand_parameters', dest='ligand_parameters',
-                        help="Folder with .itp files for the ligand topology and heavy-atom constraints (default: None). If there is a ligand in the selected chain with a topology in the ligand_parameters folder, it will be included in the simulation.",
+    parser.add_argument('--ligands_folder', dest='ligands_folder',
+                        help="Folder with .itp and .gro files for the ligands that should be included in the simulation. Default: None",
+                        required=False)
+
+    parser.add_argument('--output', dest='output_path',
+                        help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
 
     args = parser.parse_args()
@@ -1183,4 +1160,4 @@ if __name__ == "__main__":
     main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_parts=args.num_parts, num_replicas=args.num_replicas, output_path=args.output_path,
             input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list,
             input_gro_path=args.input_gro_path, input_top_path=args.input_top_path, skip_fix_backbone=args.skip_fix_backbone,
-            fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, his=args.his, nsteps=args.nsteps, final_analysis=args.final_analysis, ligand_parameters=args.ligand_parameters)
+            fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, his=args.his, nsteps=args.nsteps, final_analysis=args.final_analysis, ligands_folder=args.ligands_folder)
