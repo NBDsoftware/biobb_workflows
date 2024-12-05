@@ -352,6 +352,7 @@ def main(configuration_path: str, input_pdb: str, ligand_names: Union[List[str],
             # If format is gromacs, make conversion
             if format == 'gromacs':
                 global_log.info("step3A_amber_to_gmx: Convert topology from AMBER to GROMACS")
+                ligand_prop["step3A_amber_to_gmx"]["basename"] = ligand_name
                 acpype_convert_amber_to_gmx(**ligand_paths["step3A_amber_to_gmx"], properties=ligand_prop["step3A_amber_to_gmx"])
                 out_files = [ligand_paths["step3A_amber_to_gmx"]["output_path_gro"], ligand_paths["step3A_amber_to_gmx"]["output_path_top"]]
                 
@@ -397,12 +398,14 @@ def main(configuration_path: str, input_pdb: str, ligand_names: Union[List[str],
             # Create gromacs topology and coordinate files
             if format == 'gromacs':
                 global_log.info("step4B_acpype_params_gmx: Generating GROMACS ligand parameters")
+                ligand_prop["step4B_acpype_params_gmx"]["basename"] = ligand_name
                 acpype_params_gmx(**ligand_paths["step4B_acpype_params_gmx"], properties=ligand_prop["step4B_acpype_params_gmx"])
                 out_files = [ligand_paths["step4B_acpype_params_gmx"]["output_path_gro"], ligand_paths["step4B_acpype_params_gmx"]["output_path_itp"]]
             
             # Create amber topology and coordinate files
             if format == 'amber':
                 global_log.info("step4B_acpype_params_ac: Generating AMBER ligand parameters")
+                ligand_prop["step4B_acpype_params_ac"]["basename"] = ligand_name
                 acpype_params_ac(**ligand_paths["step4B_acpype_params_ac"], properties=ligand_prop["step4B_acpype_params_ac"])
                 out_files = [ligand_paths["step4B_acpype_params_ac"]["output_path_inpcrd"], ligand_paths["step4B_acpype_params_ac"]["output_path_prmtop"]]
                 
