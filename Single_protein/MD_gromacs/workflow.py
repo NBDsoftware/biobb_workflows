@@ -784,10 +784,11 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
                 ligand_paths["step3E_make_ligand_ndx"]["input_structure_path"] = ligand_gro_path
                 make_ndx(**ligand_paths["step3E_make_ligand_ndx"], properties=ligand_prop["step3E_make_ligand_ndx"])
                 
-                # STEP 3F: Generate restraints for the ligand heavy atoms
+                # STEP 3F: Generate restraints for the ligand's heavy atoms
                 global_log.info(f"{ligand_name} > Generate restraints for ligand")
                 ligand_paths["step3F_ligand_restraints"]["input_structure_path"] = ligand_gro_path
-                genrestr(**ligand_paths["step3F_ligand_restraints"], properties=ligand_prop["step3F_ligand_restraints"])
+                ligand_paths["step3F_ligand_restraints"]["output_itp_path"] = f"{ligand_name}_restraints.itp"
+                genrestr(**ligand_paths["step3F_ligand_restraints"], properties=ligand_prop["step3F_ligand_restraints"]) # NOTE: should we modify the name of the POSRES too? - see properties
                 
                 # STEP 3G: Append parameterized ligand to the current complex topology zip file
                 ligand_paths["step3G_append_ligand"]["input_top_zip_path"] = complex_topology_path

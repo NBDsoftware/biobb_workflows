@@ -179,7 +179,7 @@ step3F_ligand_restraints:
   paths:
     input_structure_path: path/to/ligand.gro  # Will be set by the workflow
     input_index_path: dependency/step3E_make_ligand_ndx/output_ndx_path
-    output_itp_path: ligand_restraints.itp
+    output_itp_path: ligand_restraints.itp    # Will be set by the workflow
 
 step3G_append_ligand:
   tool: append_ligand
