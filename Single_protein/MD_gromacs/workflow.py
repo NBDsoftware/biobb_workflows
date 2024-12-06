@@ -44,11 +44,8 @@ from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 from biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf
 from biobb_structure_utils.utils.cat_pdb import cat_pdb
 from biobb_structure_utils.utils.extract_molecule import extract_molecule
-from biobb_structure_utils.utils.extract_heteroatoms import extract_heteroatoms
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 from biobb_pdb_tools.pdb_tools.biobb_pdb_tofasta import biobb_pdb_tofasta
-from biobb_amber.leap.leap_gen_top import leap_gen_top
-from biobb_chemistry.acpype.acpype_convert_amber_to_gmx import acpype_convert_amber_to_gmx
 
 
 # Biopython helpers
