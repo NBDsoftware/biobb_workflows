@@ -21,7 +21,7 @@ from biobb_chemistry.acpype.acpype_convert_amber_to_gmx import acpype_convert_am
 
 def get_selected_ligands(pdb_path: str, selected_ligand_names:  Union[List[str], None], selected_chains: List[str], selected_model: int, global_log) -> List[Dict[str, str]]:
     """
-    Retrieve the selected ligands from the chains and model of interest of a PDB file. 
+    Retrieve the selected ligands from the chains and model of interest of a PDB file. If selected_ligand_names is None, all ligands are extracted.
     
     Inputs
     ------
@@ -236,9 +236,9 @@ def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str):
         else:
             new_file_path = os.path.join(output_folder, f"{ligand_name}{file_extension}")
             shutil.copyfile(path, new_file_path)
-        
-def main(configuration_path: str, input_pdb: str, ligand_names: Union[List[str], None] = None, chains: List[str] = ['A'],
-         model: int = 0, format: Literal['gromacs', 'amber'] = 'gromacs', custom_parameters: Union[str, None] = None,
+
+def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['protein.ff14SB', 'DNA.bsc1', 'gaff'], ligand_names: Union[List[str], None] = None, 
+         chains: List[str] = ['A'], model: int = 0, format: Literal['gromacs', 'amber'] = 'gromacs', custom_parameters: Union[str, None] = None,
          protonation_tool: Literal['ambertools', 'obabel', 'none'] = 'ambertools', skip_min: bool = False, 
          output_top_path: Union[str, None] = None, output_path: Union[str, None] = None):
     '''
@@ -249,6 +249,7 @@ def main(configuration_path: str, input_pdb: str, ligand_names: Union[List[str],
     
         configuration_path : Path to the configuration file (YAML).
         input_pdb          : Path to the input PDB file with the ligands to parameterize.
+        forcefields        : (Optional) List of paths or file names of force fields to use in the parameterization. Only used within LEaP if custom parameters are also provided.
         ligand_names       : (Optional) List of ligand names in the PDB file to parameterize. By default, all ligands are parameterized.
         chains             : (Optional) Chain ID of the ligands to parameterize. Default: A.
         model              : (Optional) Model number of the ligands to parameterize. Default: 1.
@@ -295,7 +296,7 @@ def main(configuration_path: str, input_pdb: str, ligand_names: Union[List[str],
     global_paths = conf.get_paths_dic()
     
     # Extract the ligands from the input PDB file
-    global_log.info(f"Finding selected ligands in the input PDB file: {' '.join(ligand_names)}")
+    global_log.info(f"Searching selected ligands in the input PDB file: {' '.join(ligand_names)}")
     selected_ligands = get_selected_ligands(input_pdb, ligand_names, chains, model, global_log)
     global_log.info(f"Found {len(selected_ligands)} ligands in the input PDB file: {', '.join([ligand['name'] for ligand in selected_ligands])}")
     
@@ -338,6 +339,8 @@ def main(configuration_path: str, input_pdb: str, ligand_names: Union[List[str],
         # Parameter set available 
         if ligand_name in parameter_sets:
             
+            global_log.info(f"Parameterizing {ligand_name} with custom parameter set")
+            
             # Zip the custom parameter set in the step2A folder
             frcmod_zip_path = os.path.join(ligand_prop["step2A_leap_gen_top"]["path"], f"{ligand_name}_frcmod.zip")
             prep_zip_path = os.path.join(ligand_prop["step2A_leap_gen_top"]["path"], f"{ligand_name}_prep.zip")
@@ -347,10 +350,14 @@ def main(configuration_path: str, input_pdb: str, ligand_names: Union[List[str],
             # STEP 2A: Use leap to generate the topology and coordinate files from the custom parameter set
             ligand_paths["step2A_leap_gen_top"]["input_frcmod_path"] = frcmod_zip_path
             ligand_paths["step2A_leap_gen_top"]["input_prep_path"] = prep_zip_path
+            ligand_paths["step2A_leap_gen_top"]["forcefield"] = forcefields
+            global_log.info("step2A_leap_gen_top: Generate topology and coordinate files with custom parameter set")
             leap_gen_top(**ligand_paths["step2A_leap_gen_top"], properties=ligand_prop["step2A_leap_gen_top"]) # NOTE: Does leap add hydrogens?
                         
             # If format is gromacs, make conversion
             if format == 'gromacs':
+                global_log.info("step3A_amber_to_gmx: Convert topology from AMBER to GROMACS")
+                ligand_prop["step3A_amber_to_gmx"]["basename"] = ligand_name
                 global_log.info("step3A_amber_to_gmx: Convert topology from AMBER to GROMACS")
                 acpype_convert_amber_to_gmx(**ligand_paths["step3A_amber_to_gmx"], properties=ligand_prop["step3A_amber_to_gmx"])
                 out_files = [ligand_paths["step3A_amber_to_gmx"]["output_path_gro"], ligand_paths["step3A_amber_to_gmx"]["output_path_top"]]
@@ -360,6 +367,8 @@ def main(configuration_path: str, input_pdb: str, ligand_names: Union[List[str],
                 
         # Parameter set not available - generate topology from scratch
         else: 
+            
+            global_log.info(f"Parameterizing {ligand_name} using GAFF through acpype")
     
             if protonation_tool == 'ambertools':
                 
@@ -378,7 +387,7 @@ def main(configuration_path: str, input_pdb: str, ligand_names: Union[List[str],
             
             elif protonation_tool == 'none':
                 
-                # STEP 2B: Skip adding hydrogens to the ligand
+                # STEP 2B: Skip ligand protonation
                 global_log.info("Skipping step2B: No hydrogens added to the ligand. Make sure the ligand is correctly protonated.")
                 
                 # Modify minimize path
@@ -396,12 +405,14 @@ def main(configuration_path: str, input_pdb: str, ligand_names: Union[List[str],
             
             # Create gromacs topology and coordinate files
             if format == 'gromacs':
+                ligand_prop["step4B_acpype_params_gmx"]["basename"] = ligand_name
                 global_log.info("step4B_acpype_params_gmx: Generating GROMACS ligand parameters")
                 acpype_params_gmx(**ligand_paths["step4B_acpype_params_gmx"], properties=ligand_prop["step4B_acpype_params_gmx"])
                 out_files = [ligand_paths["step4B_acpype_params_gmx"]["output_path_gro"], ligand_paths["step4B_acpype_params_gmx"]["output_path_itp"]]
             
             # Create amber topology and coordinate files
             if format == 'amber':
+                ligand_prop["step4B_acpype_params_ac"]["basename"] = ligand_name
                 global_log.info("step4B_acpype_params_ac: Generating AMBER ligand parameters")
                 acpype_params_ac(**ligand_paths["step4B_acpype_params_ac"], properties=ligand_prop["step4B_acpype_params_ac"])
                 out_files = [ligand_paths["step4B_acpype_params_ac"]["output_path_inpcrd"], ligand_paths["step4B_acpype_params_ac"]["output_path_prmtop"]]
@@ -434,12 +445,16 @@ if __name__ == '__main__':
                         help='Path to the input PDB file with the ligands to parameterize.', 
                         required=True)
     
+    parser.add_argument('--forcefields', dest='forcefields', nargs='+',
+                        help='List of paths or file names of force fields to use in the parameterization. Only used within LEaP if custom parameters are also provided. Look in the $AMBERHOME/dat/leap/cmd/ directory for available force fields.',
+                        required=False, default=['protein.ff14SB', 'DNA.bsc1', 'gaff'])
+    
     parser.add_argument('--ligands', dest='ligand_names', nargs='+',
                         help='List of ligand names in the PDB file to parameterize. By default, all ligands are parameterized.', 
                         required=False, default=None)
     
     parser.add_argument('--chains', dest='chains', nargs='+',
-                        help='Chain IDs of the PDB to extract ligands from. Default: A.',
+                        help='Chain IDs of the PDB to extract ligands from. Default: ["A"].',
                         required=False, default=['A'])
 
     parser.add_argument('--model', dest='model',
@@ -472,6 +487,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     
-    main(configuration_path = args.config_path, input_pdb = args.input_pdb, ligand_names = args.ligand_names, chains = args.chains, model = args.model, 
-         format = args.format, custom_parameters = args.custom_parameters, protonation_tool = args.protonation_tool, skip_min = args.skip_min, 
+    main(configuration_path = args.config_path, input_pdb = args.input_pdb, forcefields=args.forcefields, ligand_names = args.ligand_names, chains = args.chains, 
+         model = args.model, format = args.format, custom_parameters = args.custom_parameters, protonation_tool = args.protonation_tool, skip_min = args.skip_min, 
          output_top_path = args.output_top_path, output_path=args.output_path)

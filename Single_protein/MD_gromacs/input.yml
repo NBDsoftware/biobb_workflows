@@ -12,9 +12,9 @@ global_properties:
   restart: True                                                                                     # Skip steps already performed
   remove_tmp: True                                                                                  # Remove temporal files
 
-############################################################
-# Section 1 (Steps A-B): extract atoms from input PDB file #
-############################################################
+#########################################################
+# Section 1 (Step A): extract atoms from input PDB file #
+#########################################################
 
 # Step 1A: extract atoms from input PDB file
 step1A_extractAtoms:
@@ -25,13 +25,6 @@ step1A_extractAtoms:
   properties:
     molecule_type: chains                                           # type of molecule to extract. Options: all, protein, na, dna, rna, chains
     chains: [A]                                                     # if "chains" is selected in molecule_type. Options: None, [A], [A, B], ...
-
-# Step 1B: extract heteroatoms from input PDB file
-step1B_extractHeteroatoms:
-  tool: extract_heteroatoms
-  paths:
-    input_structure_path: dependency/step1A_extractAtoms/input_structure_path  # Overwritten by command line
-    output_heteroatom_path: ligands.pdb
 
 ########################################################
 # Section 2 (Steps A-I): prepare main structure for MD #
@@ -65,7 +58,7 @@ step2C_canonical_fasta:
   paths:
     output_fasta_path: canonicalFasta.fasta
   properties:
-    pdb_code: HERE YOUR PDB CODE
+    pdb_code: HERE YOUR PDB CODE                                         
 
 # Step 2 C: Extract the residue sequence from the PDB file to FASTA format
 step2C_pdb_tofasta:
@@ -138,6 +131,15 @@ step2I_renumberstructure:
 # Section 3 (Steps A-I): Prepare topology and coordinates for MD #
 ##################################################################
 
+# Step 3 A: Use amber Reduce to guess protonation states of HIS residues
+step3A_amber_reduce:
+  tool: pdb4amber_run
+  paths:
+    input_pdb_path: dependency/step2I_renumberstructure/output_structure_path
+    output_pdb_path: reduced.pdb
+  properties:
+    reduce: True
+
 # Step 3 A: Generate the topology of the structure with pdb2gmx
 step3A_structure_topology:
   tool: pdb2gmx
@@ -146,79 +148,56 @@ step3A_structure_topology:
     output_gro_path: structure.gro
     output_top_zip_path: structure_top.zip
   properties:
-    force_field: amber99sb-ildn   # gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut
+    force_field: amber99sb-ildn   # Will be set by the workflow
     water_type: tip3p             # spc, spce, tip3p, tip4p, tip5p, tips3p
     ignh: False                   # Ignore hydrogens in the input structure
     merge: False                  # Merge all chains into one molecule
-    # his: '1 1'                  # HIS protonation state array
 
-step3B_cofactors_topology:
-  tool: leap_gen_top
-  paths:
-    input_pdb_path: dependency/step1B_extractHeteroatoms/output_heteroatom_path
-    input_frcmod_path: path/to/frcmod.zip
-    input_prep_path: path/to/prep.zip
-    output_pdb_path: cofactors.pdb
-    output_top_path: cofactors.prmtop
-    output_crd_path: cofactors.inpcrd
-  properties:
-    forcefield: ["protein.ff14SB"]
-
-step3C_amber_to_gmx:
-  tool: acpype_convert_amber_to_gmx
-  paths:
-    input_crd_path: dependency/step3B_cofactors_topology/output_crd_path
-    input_top_path: dependency/step3B_cofactors_topology/output_top_path
-    output_path_gro: cofactors.gro
-    output_path_top: cofactors.top # Error if we try to name it .itp
-  properties:
-    basename: cofactors
-
-step3D_structure_pdb:
+step3B_structure_pdb:
   tool: gmx_trjconv_str
   paths: 
     input_top_path: dependency/step3A_structure_topology/output_gro_path
     input_structure_path: dependency/step3A_structure_topology/output_gro_path
     output_str_path: structure.pdb
 
-step3E_cofactors_pdb:
+step3C_ligand_pdb:
   tool: gmx_trjconv_str
   paths: 
-    input_top_path: dependency/step3C_amber_to_gmx/output_path_gro
-    input_structure_path: dependency/step3C_amber_to_gmx/output_path_gro
-    output_str_path: cofactors.pdb   
+    input_top_path: path/to/ligand.gro        # Will be set by the workflow
+    input_structure_path: path/to/ligand.gro  # Will be set by the workflow
+    output_str_path: ligand.pdb   
 
-step3F_complex_pdb:
+step3D_complex_pdb:
   tool: cat_pdb
-  paths:
-    input_structure1: dependency/step3D_structure_pdb/output_str_path
-    input_structure2: dependency/step3E_cofactors_pdb/output_str_path
+  paths: 
+    input_structure1: dependency/step3B_structure_pdb/output_str_path  # Will be set by the workflow
+    input_structure2: dependency/step3C_ligand_pdb/output_str_path
     output_structure_path: complex.pdb
 
-step3G_make_cofactors_ndx:
+step3E_make_ligand_ndx:
   tool: make_ndx
   paths:
-    input_structure_path: dependency/step3C_amber_to_gmx/output_path_gro
-    output_ndx_path: cofactors_heavy_atoms.ndx
+    input_structure_path: path/to/ligand.gro  # Will be set by the workflow
+    output_ndx_path: ligand_heavy_atoms.ndx
   properties:
     selection: "0 & ! a H*"
 
-step3H_cofactor_restraints:
+step3F_ligand_restraints:
   tool: genrestr
   paths:
-    input_structure_path: dependency/step3C_amber_to_gmx/output_path_gro
-    input_index_path: dependency/step3G_make_cofactors_ndx/output_ndx_path
-    output_itp_path: cofactors_restraints.itp
+    input_structure_path: path/to/ligand.gro  # Will be set by the workflow
+    input_index_path: dependency/step3E_make_ligand_ndx/output_ndx_path
+    output_itp_path: ligand_restraints.itp    # Will be set by the workflow
 
-step3I_append_ligand:
+step3G_append_ligand:
   tool: append_ligand
   paths:
-    input_top_zip_path: dependency/step3A_structure_topology/output_top_zip_path  # Path to structure topology zip file
-    input_itp_path: dependency/step3C_amber_to_gmx/output_path_top                # Path to ligand topology file - itp
-    input_posres_itp_path: dependency/step3H_cofactor_restraints/output_itp_path  # Path to ligand position restraint topology file
+    input_top_zip_path: dependency/step3A_structure_topology/output_top_zip_path  # Will be set by the workflow
+    input_itp_path: path/to/ligand.itp                                            # Will be set by the workflow
+    input_posres_itp_path: dependency/step3F_ligand_restraints/output_itp_path    # Path to ligand position restraint topology file
     output_top_zip_path: complex_top.zip
 
-step3J_editconf:
+step3H_editconf:
   tool: editconf
   paths:
     input_gro_path: dependency/step3A_structure_topology/output_gro_path
@@ -227,40 +206,40 @@ step3J_editconf:
     box_type: octahedron         # cubic, triclinic, octahedron, dodecahedron
     distance_to_molecule: 1.0    # Distance of the box from the outermost atom in nm
 
-step3K_solvate:
+step3I_solvate:
   tool: solvate
   paths:
-    input_solute_gro_path: dependency/step3J_editconf/output_gro_path
+    input_solute_gro_path: dependency/step3H_editconf/output_gro_path
     input_top_zip_path: dependency/step3A_structure_topology/output_top_zip_path
     output_top_zip_path: solvate_top.zip
     output_gro_path: solvate.gro
     
-step3L_grompp_genion:
+step3J_grompp_genion:
   tool: grompp
   paths:
-    input_gro_path: dependency/step3K_solvate/output_gro_path
-    input_top_zip_path: dependency/step3K_solvate/output_top_zip_path
+    input_gro_path: dependency/step3I_solvate/output_gro_path
+    input_top_zip_path: dependency/step3I_solvate/output_top_zip_path
     output_tpr_path: gppion.tpr
   properties:
     simulation_type: minimization
-    maxwarn: 10                      # NOTE: this will be cofactor dependent!! :o - the warning is for each atom with redefined parameters
+    maxwarn: 10                      # NOTE: this will be ligand dependent!! :o - the warning is for each atom with redefined parameters
 
-step3M_genion:
+step3K_genion:
   tool: genion
   paths:
-    input_tpr_path: dependency/step3L_grompp_genion/output_tpr_path
-    input_top_zip_path: dependency/step3K_solvate/output_top_zip_path
+    input_tpr_path: dependency/step3J_grompp_genion/output_tpr_path
+    input_top_zip_path: dependency/step3I_solvate/output_top_zip_path
     output_top_zip_path: genion_top.zip
     output_gro_path: genion.gro
   properties:
     neutral: True             # Neutralize charge of the system
     concentration: 0.15       # Concentration of ions in mols/L
 
-step3N_gro2pdb:
+step3L_gro2pdb:
   tool: gmx_trjconv_str
   paths: 
-    input_top_path: dependency/step3M_genion/output_gro_path
-    input_structure_path: dependency/step3M_genion/output_gro_path
+    input_top_path: dependency/step3K_genion/output_gro_path
+    input_structure_path: dependency/step3K_genion/output_gro_path
     output_str_path: topology.pdb
 
 #############################################################################
@@ -272,8 +251,8 @@ step3N_gro2pdb:
 step4A_grompp_min:
   tool: grompp
   paths:
-    input_gro_path: dependency/step3M_genion/output_gro_path
-    input_top_zip_path: dependency/step3M_genion/output_top_zip_path
+    input_gro_path: dependency/step3K_genion/output_gro_path
+    input_top_zip_path: dependency/step3K_genion/output_top_zip_path
     output_tpr_path: gppmin.tpr
   properties:
     simulation_type: minimization
@@ -314,7 +293,7 @@ step4E_grompp_nvt:
   paths:
     input_gro_path: dependency/step4B_mdrun_min/output_gro_path
     input_ndx_path: dependency/step4C_make_ndx/output_ndx_path
-    input_top_zip_path: dependency/step3M_genion/output_top_zip_path
+    input_top_zip_path: dependency/step3K_genion/output_top_zip_path
     output_tpr_path: gppnvt.tpr
   properties:
     simulation_type: nvt
@@ -348,7 +327,7 @@ step4H_grompp_npt:
   paths:
     input_gro_path: dependency/step4F_mdrun_nvt/output_gro_path
     input_ndx_path: dependency/step4C_make_ndx/output_ndx_path
-    input_top_zip_path: dependency/step3M_genion/output_top_zip_path
+    input_top_zip_path: dependency/step3K_genion/output_top_zip_path
     input_cpt_path: dependency/step4F_mdrun_nvt/output_cpt_path
     output_tpr_path: gppnpt.tpr
   properties:
@@ -388,7 +367,7 @@ step5A_grompp_md:
     input_gro_path: dependency/step4I_mdrun_npt/output_gro_path
     input_cpt_path: dependency/step4I_mdrun_npt/output_cpt_path 
     input_ndx_path: dependency/step4C_make_ndx/output_ndx_path
-    input_top_zip_path: dependency/step3M_genion/output_top_zip_path
+    input_top_zip_path: dependency/step3K_genion/output_top_zip_path
     output_tpr_path: gppmd.tpr
   properties:
     simulation_type: free
@@ -453,7 +432,7 @@ step6C_rgyr:
 step6D_rmsf:
   tool: cpptraj_rmsf
   paths:
-    input_top_path: dependency/step3N_gro2pdb/output_str_path
+    input_top_path: dependency/step3L_gro2pdb/output_str_path
     input_traj_path: dependency/step5B_mdrun_md/output_trr_path
     output_cpptraj_path: md_rmsf.xmgr   # .dat, .agr, .xmgr, .gnu
   properties:
