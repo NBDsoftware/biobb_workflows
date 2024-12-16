@@ -35,6 +35,7 @@ from biobb_gromacs.gromacs.mdrun import mdrun
 from biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_gromacs.gromacs.genrestr import genrestr
 from biobb_gromacs.gromacs_extra.append_ligand import append_ligand
+from biobb_amber.pdb4amber.pdb4amber_run import pdb4amber_run
 from biobb_analysis.gromacs.gmx_rms import gmx_rms
 from biobb_analysis.gromacs.gmx_rgyr import gmx_rgyr
 from biobb_analysis.gromacs.gmx_energy import gmx_energy
@@ -263,6 +264,86 @@ def get_pdb_code(pdb_file: str) -> Union[str, None]:
 
     return pdb_code
 
+def find_amber_his(pdb_file: str, global_log) -> List[str]:
+    """
+    Find all histidine residues in the PDB file (AMBER naming convention).
+    Histidine names after pdb4amber should be: HIE (epsilon protonated), HID (delta protonated), 
+    HIP (both protons present).
+    
+    Parameters
+    ----------
+    
+    pdb_file : str
+        Path to the PDB file.
+    
+    global_log : Logger
+        Logger object for logging messages.
+    
+    Returns 
+    -------
+    
+    List[str]:
+        A list of histidine residues in the PDB file.
+    """
+    
+    his_names = ['HIE', 'HID', 'HIP']
+    
+    # Parse the PDB structure
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure('structure', pdb_file)
+    
+    # Initialize the list of histidine residues
+    histidine_residues = {}
+    
+    # Iterate over all residues in the structure
+    for model in structure:
+        for chain in model:
+            for residue in chain:
+                
+                # Find the residue name
+                res_name = residue.get_resname()
+                
+                # Find the residue number
+                res_num = residue.get_id()[1]
+                
+                # Check if the residue is a histidine
+                if res_name in his_names:
+                    histidine_residues[res_num] = res_name
+                    
+    # Log the result
+    if histidine_residues:
+        global_log.info(f"Found histidine residues: {histidine_residues}")
+    else:
+        global_log.info("No histidine residues found")
+
+    return list(histidine_residues.values())
+
+def get_pdb2gmx_his(his_residues: List[str]) -> str:
+    """
+    Transform the histidine residue names from AMBER to a string
+    that can be used as input for the -his flag in the pdb2gmx tool.
+    
+        HID -> 0, HIE -> 1, HIP -> 2 
+        
+    Parameters
+    ----------
+    
+    his_residues : List[str]
+        List of histidine residues in the PDB file.
+    
+    Returns
+    -------
+    
+    str:
+        A string with the histidine residues transformed to the pdb2gmx format.
+    """
+
+    his_dict = {'HID': '0', 'HIE': '1', 'HIP': '2'}
+    
+    his_pdb2gmx = [his_dict[his] for his in his_residues]
+    
+    return " ".join(his_pdb2gmx)
+    
 
 # Set additional general properties not considered by the configuration reader
 def set_gromacs_path(global_properties: dict, binary_path: str) -> None:
@@ -542,9 +623,9 @@ def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
         merge_xvgtimeseries_files(file_paths, output_xvg_path)
     
 
-def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path = None, input_pdb_path = None, pdb_chains = None,
-            mutation_list = None, input_gro_path = None, input_top_path = None, skip_fix_backbone = None, fix_ss = None, fix_amide_clashes = None, 
-            his = None, nsteps = None, final_analysis = None, ligands_folder = None):
+def main_wf(configuration_path, input_pdb_path = None, pdb_chains = None, mutation_list = None, ligands_folder = None, skip_fix_backbone = None, fix_ss = None, fix_amide_clashes = None, 
+            his_protonation_tool = "pdb4amber", his = None, forcefield = 'amber99sb-ildn', setup_only = False, input_gro_path = None, input_top_path = None, 
+            nsteps = None, num_parts = 1, num_replicas = 1, final_analysis = None, output_path = None):
     '''
     Main setup, mutation and MD run workflow with GROMACS. Can be used to retrieve a PDB, fix some defects of the structure,
     add specific mutations, prepare the system, minimize it, equilibrate it and finally do N production runs (either replicas or parts).
@@ -552,24 +633,28 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
     Inputs
     ------
 
-        configuration_path (str): path to YAML configuration file
-        setup_only        (bool): (Optional) whether to only setup the system or also run the simulations
-        num_parts          (int): (Optional) number of parts of the trajectory 
-        num_replicas       (int): (Optional) number of replicas of the trajectory
-        output_path        (str): (Optional) path to output folder
-        input_pdb_path     (str): (Optional) path to input PDB file
-        pdb_chains         (str): (Optional) list of chains to be extracted from the PDB file and fixed
-        mutation_list      (str): (Optional) list of mutations to be introduced in the structure
-        input_gro_path     (str): (Optional) path to already-prepared input structure file (.gro)
-        input_top_path     (str): (Optional) path to already-prepared input topology file (.zip)
-        skip_fix_backbone (bool): (Optional) whether to skip the fix of the backbone atoms
-        fix_ss            (bool): (Optional) wether to add disulfide bonds
-        fix_amide_clashes (bool): (Optional) wether to flip clashing amides to relieve the clashes
-        his                (str): (Optional) histidine protonation states list
-        nsteps             (int): (Optional) Total number of steps of the production simulation
-        final_analysis    (bool): (Optional) whether to perform the final analysis or not
-        ligands_folder     (str): (Optional) path to the folder containing the ligand .itp and .gro files
-        
+        configuration_path   (str): path to YAML configuration file
+        input_pdb_path       (str): (Optional) path to input PDB file
+        pdb_chains           (str): (Optional) list of chains to be extracted from the PDB file and fixed
+        mutation_list        (str): (Optional) list of mutations to be introduced in the structure
+        ligands_folder       (str): (Optional) path to the folder containing the ligand .itp and .gro files
+        skip_fix_backbone   (bool): (Optional) whether to skip the fix of the backbone atoms
+        fix_ss              (bool): (Optional) wether to add disulfide bonds
+        fix_amide_clashes   (bool): (Optional) wether to flip clashing amides to relieve the clashes
+        his_protonation_tool (str): (Optional) histidine protonation tool to be used (pdb4amber or pdb2gmx). Default: pdb4amber.
+        his                  (str): (Optional) histidine protonation states to be used in the simulation. Default: None. See values supported by pdb2gmx
+        forcefield           (str): (Optional) forcefield to be used in the simulation. Default: amber99sb-ildn. See values supported by pdb2gmx 
+                                    (gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, 
+                                    amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut). 
+        setup_only          (bool): (Optional) whether to only setup the system or also run the simulations
+        input_gro_path       (str): (Optional) path to already-prepared input structure file (.gro)
+        input_top_path       (str): (Optional) path to already-prepared input topology file (.zip)
+        nsteps               (int): (Optional) Total number of steps of the production simulation
+        num_parts            (int): (Optional) number of parts of the trajectory 
+        num_replicas         (int): (Optional) number of replicas of the trajectory
+        final_analysis      (bool): (Optional) whether to perform the final analysis or not
+        output_path          (str): (Optional) path to output folder
+
     Outputs
     -------
 
@@ -605,6 +690,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
     if (num_replicas is None) and (num_parts is None):
         # Default behavior: 1 replica
         num_replicas=1
+        global_log.info("Number of replicas not set. Defaulting to 1")
     elif (num_replicas is not None) and (num_parts is not None):
         # Cannot set both num parts and num replicas
         global_log.error("Number of trajectories and replicas cannot be set at the same time")
@@ -731,15 +817,27 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
         # Prepare topology and coordinates for MD #
         ###########################################
         
-        # NOTE: Histidine protonation states come from external call to pdb4amber, should be done within the WF!
-        # NOTE: Look at HIS protonation states with pdb2gmx - checking h bonds, etc. CMIP - with BioBB (high cost)
-        # This goes here before the pdb2gmx step
-        
         # NOTE: if we have a gap that we are not modeling (e.g. a missing loop), pdb2gmx will find terminal atoms OXT in non-terminal residues and will return an error
         # STEP 3A: add H atoms, generate coordinate (.gro) and topology (.top) file for the system
-        global_log.info("step3A_structure_topology: Generate the topology")
-        if his:
+        if (his_protonation_tool == "pdb4amber") and (his is None):
+            
+            global_log.info("step3A_amber_reduce: Determine the protonation states of histidine residues")
+            
+            # Find the histidine protonation states with pdb4amber
+            pdb4amber_run(**global_paths["step3A_amber_reduce"], properties=global_prop["step3A_amber_reduce"])
+            
+            # Read the histidine protonation states from the pdb4amber output residue names
+            his_residues = find_amber_his(global_paths["step3A_amber_reduce"]["output_pdb_path"], global_log)
+            
+            # Convert from histidine names to pdb2gmx numbering convention
+            global_prop["step3A_structure_topology"]["his"]=get_pdb2gmx_his(his_residues)
+            
+        elif his is not None:
+            # Set user-defined histidine protonation states
             global_prop["step3A_structure_topology"]["his"]=his
+            
+        global_log.info("step3A_structure_topology: Generate the topology")
+        global_prop["step3A_structure_topology"]["force_field"]=forcefield
         pdb2gmx(**global_paths["step3A_structure_topology"], properties=global_prop["step3A_structure_topology"])
 
         ligands_dict = get_ligands(ligands_folder, global_log)
@@ -764,6 +862,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
                 
                 ligand_gro_path = ligand_files["coordinates"]
                 ligand_itp_path = ligand_files["topology"]
+                ligand_restraints_path = os.path.join(str(Path(ligand_paths["step3F_ligand_restraints"]["output_itp_path"]).parent), f"{ligand_name}_restraints.itp")
             
                 # STEP 3C: Convert ligand coordinates from gro to pdb
                 global_log.info(f"{ligand_name} > Convert ligand GRO to PDB")
@@ -774,6 +873,7 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
                 # STEP 3D: Create complex pdb file concatenating the current complex and the new ligand
                 global_log.info(f"{ligand_name} > Create complex PDB file")
                 ligand_paths["step3D_complex_pdb"]["input_structure1"] = complex_pdb_path
+                ligand_paths["step3D_complex_pdb"]["output_structure_path"] = os.path.join(str(Path(ligand_paths["step3D_complex_pdb"]["output_structure_path"]).parent), f"{ligand_name}_complex.pdb")
                 cat_pdb(**ligand_paths["step3D_complex_pdb"], properties=ligand_prop["step3D_complex_pdb"])
                 
                 # Update complex pdb path for the next ligands
@@ -787,12 +887,13 @@ def main_wf(configuration_path, setup_only, num_parts, num_replicas, output_path
                 # STEP 3F: Generate restraints for the ligand's heavy atoms
                 global_log.info(f"{ligand_name} > Generate restraints for ligand")
                 ligand_paths["step3F_ligand_restraints"]["input_structure_path"] = ligand_gro_path
-                ligand_paths["step3F_ligand_restraints"]["output_itp_path"] = f"{ligand_name}_restraints.itp"
-                genrestr(**ligand_paths["step3F_ligand_restraints"], properties=ligand_prop["step3F_ligand_restraints"]) # NOTE: should we modify the name of the POSRES too? - see properties
+                ligand_paths["step3F_ligand_restraints"]["output_itp_path"] = ligand_restraints_path
+                genrestr(**ligand_paths["step3F_ligand_restraints"], properties=ligand_prop["step3F_ligand_restraints"]) # NOTE: should we modify the name of the POSRES too? - see properties, maybe not needed, they are in a specific moleculetype block
                 
                 # STEP 3G: Append parameterized ligand to the current complex topology zip file
                 ligand_paths["step3G_append_ligand"]["input_top_zip_path"] = complex_topology_path
                 ligand_paths["step3G_append_ligand"]["input_itp_path"] = ligand_itp_path
+                ligand_paths["step3G_append_ligand"]["input_posres_itp_path"] = ligand_restraints_path
                 global_log.info(f"{ligand_name} > Append ligand to the topology")
                 append_ligand(**ligand_paths["step3G_append_ligand"], properties=ligand_prop["step3G_append_ligand"])
                 
@@ -1081,25 +1182,9 @@ if __name__ == "__main__":
                         help="Configuration file (YAML)",
                         required=True)
 
-    parser.add_argument('--setup_only', action='store_true',
-                        help="Only setup the system. Default: False",
-                        required=False, default=False)
-
-    parser.add_argument('--num_parts', dest='num_parts',
-                        help="Number of parts to divide the simulation into. Default: 1",
-                        required=False, default=1)
-    
-    parser.add_argument('--num_replicas', dest='num_replicas',
-                        help="Number of replicas with different seeds to run the simulation. Default: 1",
-                        required=False, default=1)
-
     parser.add_argument('--input_pdb', dest='input_pdb_path',
                         help="Input PDB file. Default: input_structure_path in step 1 of configuration file.",
                         required=False)
-
-    parser.add_argument('--his', dest='his',
-                        help="Histidine protonation states list.",
-                        required=False, type = str)
 
     parser.add_argument('--pdb_chains', nargs='+', dest='pdb_chains',
                         help="Protein PDB chains to be extracted from PDB file and fixed. Default: A.",
@@ -1109,6 +1194,38 @@ if __name__ == "__main__":
                         help="List of mutations to be introduced in the protein (default: None, ex: A:Arg220Ala)",
                         required=False)
 
+    parser.add_argument('--ligands_folder', dest='ligands_folder',
+                        help="Folder with .itp and .gro files for the ligands that should be included in the simulation. Default: None",
+                        required=False)
+
+    parser.add_argument('--skip_fix_backbone', action='store_true', dest='skip_fix_backbone',
+                        help="Skip the backbone modeling of missing atoms. Default: False",
+                        required=False)
+    
+    parser.add_argument('--fix_ss', action='store_true',
+                        help="Add disulfide bonds to the protein. Use carefully! Default: False",
+                        required=False)
+
+    parser.add_argument('--fix_amides', action='store_true', dest='fix_amide_clashes',
+                        help="Flip clashing amides to relieve the clashes. Default: False",
+                        required=False)
+
+    parser.add_argument('--his_protonation_tool', dest='his_protonation_tool',
+                        help="Tool to use for histidine protonation (pdb4amber or pdb2gmx). Default: pdb4amber",
+                        required=False, default='pdb4amber')
+    
+    parser.add_argument('--his', dest='his',
+                        help="Histidine protonation states with pdb2gmx convention (HID: 0, HIE: 1, HIP:2). Overrides his_protonation_tool. Default: None. Example: '0 1 1'",
+                        required=False)
+    
+    parser.add_argument('--forcefield', dest='forcefield',
+                        help="Forcefield to use. Default: amber99sb-ildn",
+                        required=False, default='amber99sb-ildn')
+
+    parser.add_argument('--setup_only', action='store_true',
+                        help="Only setup the system. Default: False",
+                        required=False, default=False)
+
     parser.add_argument('--input_gro', dest='input_gro_path',
                         help="Input structure file ready to minimize (.gro). To provide an externally prepared system, use together with --input_top (default: None)",
                         required=False)
@@ -1116,30 +1233,22 @@ if __name__ == "__main__":
     parser.add_argument('--input_top', dest='input_top_path',
                         help="Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, use together with --input_gro (default: None)",
                         required=False)
-
-    parser.add_argument('--skip_fix_backbone', action='store_true', dest='skip_fix_backbone',
-                        help="Skip the backbone modeling of missing atoms (default: False)",
-                        required=False)
     
-    parser.add_argument('--fix_ss', action='store_true',
-                        help="Add disulfide bonds to the protein. Use carefully! (default: False)",
-                        required=False)
-
-    parser.add_argument('--fix_amides', action='store_true', dest='fix_amide_clashes',
-                        help="Flip clashing amides to relieve the clashes (default: False)",
-                        required=False)
-
     parser.add_argument('--nsteps', dest='nsteps',
                         help="Number of steps of the simulation",
+                        required=False)
+    
+    parser.add_argument('--num_parts', dest='num_parts',
+                        help="Number of parts to divide the simulation into. Default: 1",
+                        required=False)
+    
+    parser.add_argument('--num_replicas', dest='num_replicas',
+                        help="Number of replicas with different seeds to run the simulation. Default: 1",
                         required=False)
 
     parser.add_argument('--final_analysis', action='store_true', dest='final_analysis',
                         help="Run the final analysis of the trajectory/ies. Concatenation of the analysis and trajectory, trajectory drying, imaging and fitting. Default: False",
                         required=False, default=False)
-    
-    parser.add_argument('--ligands_folder', dest='ligands_folder',
-                        help="Folder with .itp and .gro files for the ligands that should be included in the simulation. Default: None",
-                        required=False)
 
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
@@ -1155,7 +1264,8 @@ if __name__ == "__main__":
     if (args.input_pdb_path is not None and args.input_gro_path is not None):
         raise Exception("Both --input_pdb and --input_gro/--input_top are provided. Please provide only one of them")
 
-    main_wf(configuration_path=args.config_path, setup_only=args.setup_only, num_parts=args.num_parts, num_replicas=args.num_replicas, output_path=args.output_path,
-            input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list,
-            input_gro_path=args.input_gro_path, input_top_path=args.input_top_path, skip_fix_backbone=args.skip_fix_backbone,
-            fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, his=args.his, nsteps=args.nsteps, final_analysis=args.final_analysis, ligands_folder=args.ligands_folder)
+    main_wf(configuration_path=args.config_path, input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list, 
+            ligands_folder=args.ligands_folder, skip_fix_backbone=args.skip_fix_backbone, fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, 
+            his_protonation_tool=args.his_protonation_tool, his=args.his, forcefield=args.forcefield, setup_only=args.setup_only, input_gro_path=args.input_gro_path, 
+            input_top_path=args.input_top_path, nsteps=args.nsteps,  num_parts=args.num_parts, num_replicas=args.num_replicas, final_analysis=args.final_analysis, 
+            output_path=args.output_path)
