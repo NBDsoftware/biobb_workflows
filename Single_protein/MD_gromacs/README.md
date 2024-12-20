@@ -110,7 +110,7 @@ This workflow has several steps. The input for the workflow can be (1) a pdb fil
     Add missing backbone heavy atoms using _biobb_structure_checking_ and Modeller suite. A modeller license key and the previous FASTA file are required for this step. This step can be skipped including the ```--skip_fix_backbone``` option.  
 
     E. **Model missing side chain atoms**
-    Add missing side chain atoms using _biobb_structure_checking_ (and Modeller suite if a license key is provided).
+    Add missing side chain atoms using _biobb_structure_checking_ (and Modeller suite if a license key is provided). NOTE: this step might erase unknown atoms
 
     F. **Add missing disulfide bonds**
     It changes CYS for CYX to mark cysteines residues pertaining to a [di-sulfide bond](https://en.wikipedia.org/wiki/Disulfide). It uses a distance criteria to determine if nearby cysteines are part of a di-sulfide bridge (_check_structure getss_). Use carefully. This step is executed only if the "--fix_ss" option is used. 
@@ -135,6 +135,8 @@ This workflow has several steps. The input for the workflow can be (1) a pdb fil
         - 1 : H on NE2 only (HIE)
         - 2 : H on ND1 and NE2 (HIP)
         - 3 : Coupled to Heme (HIS1)
+    
+    NOTE: default behavior is to add charged termini - if one wants ACE and NME it should be provided already with the correct atom names - look at the force field being used: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/share/gromacs/top/amber99sb-ildn.ff/aminoacids.rtp
     
     NOTE: this will be automatized within the workflow in the future, right now pdb4amber can be used externally to obtain a guess
 
