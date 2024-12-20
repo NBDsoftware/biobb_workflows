@@ -15,4 +15,3 @@ dependencies:
   - biobb_analysis>=5.0.1
   - biobb_chemistry>=5.0.3
   - biobb_pdb_tools>=5.0.0         # Line 81 of pdb_tofasta -> fu.log(' '.join(self.cmd), self.out_log, self.global_log)
-prefix: /shared/work/BiobbWorkflows/envs/biobb_md
