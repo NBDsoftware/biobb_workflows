@@ -3,14 +3,14 @@
 # Global properties (common for all steps)
 global_properties:
   gmx:
-    binary_path: /path/to/gromacs/binary/path                                                       # GROMACS binary path
-    mpi_bin: null                                                                                   # MPI binary path, e.g. mpirun, srun... (should be left as null if gromacs already includes MPI support)
-    mpi_np: 1                                                                                       # Number of processors for MPI selected in the mpi_bin call
-    use_gpu: False                                                                                  # Wether to use GPU support or not
-  working_dir_path: output                                                                          # Workflow default output directory
-  can_write_console_log: False                                                                      # Verbose writing of log information
-  restart: True                                                                                     # Skip steps already performed
-  remove_tmp: True                                                                                  # Remove temporal files
+    binary_path: /path/to/gromacs/binary/path                       # GROMACS binary path
+    mpi_bin: null                                                   # MPI binary path, e.g. mpirun, srun... (should be left as null if gromacs already includes MPI support)
+    mpi_np: 1                                                       # Number of processors for MPI selected in the mpi_bin call
+    use_gpu: False                                                  # Wether to use GPU support or not
+  working_dir_path: output                                          # Workflow default output directory
+  can_write_console_log: False                                      # Verbose writing of log information
+  restart: True                                                     # Skip steps already performed
+  remove_tmp: True                                                  # Remove temporal files
 
 #########################################################
 # Section 1 (Step A): extract atoms from input PDB file #
@@ -37,8 +37,8 @@ step2A_fixaltlocs:
     input_pdb_path: dependency/step1A_extractAtoms/output_molecule_path
     output_pdb_path: fixaltlocs.pdb
   properties:
-    altlocs: null                                                        # Format: ["Chain Residue_number:Altloc"], e.g. # ["A339:A", "A171:B", "A768:A"] 
-    # modeller_key: HERE YOUR MODELLER KEY                               # MODELLER license key
+    altlocs: null                                                    # Format: ["Chain Residue_number:Altloc"], e.g. # ["A339:A", "A171:B", "A768:A"] 
+    # modeller_key: HERE YOUR MODELLER KEY                           # MODELLER license key
 
 # Step 2 B: Mutate residues in the structure if needed
 step2B_mutations:
@@ -47,9 +47,9 @@ step2B_mutations:
     input_pdb_path: dependency/step2A_fixaltlocs/output_pdb_path
     output_pdb_path: mutated.pdb
   properties:
-    # mutation_list: A:Arg220Ala                                         # List of mutations to include. Format: "Chain : Wild_type_residue_name Residue_number Mutated_type_residue_name", e.g. "A:Arg220Ala,A:Arg221Gly,B:Arg220Ala" 
-    use_modeller: False                                                  # Use MODELLER to optimize side chains
-    # modeller_key: HERE YOUR MODELLER KEY                               # MODELLER license key
+    # mutation_list: A:Arg220Ala                                      # List of mutations to include. Format: "Chain : Wild_type_residue_name Residue_number Mutated_type_residue_name", e.g. "A:Arg220Ala,A:Arg221Gly,B:Arg220Ala" 
+    use_modeller: False                                               # Use MODELLER to optimize side chains
+    # modeller_key: HERE YOUR MODELLER KEY                            # MODELLER license key
 
 # Step 2 C: Download a FASTA file with the canonical sequence of the protein
 # It requires internet connection and a PDB code
