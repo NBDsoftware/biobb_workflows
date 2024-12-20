@@ -1,14 +1,10 @@
-name: biobb_sp_virtual_screening
+name: biobb_vs
 channels:
   - conda-forge
   - bioconda
 dependencies:
   - python==3.10
-  - biobb_vs>=4.0.0
-  - biobb_chemistry>=4.2.1
-  - biobb_adapters>=4.0.0
-  - biobb_structure_utils>=4.0.0
-  - biopython<=1.81
-prefix: /shared/work/BiobbWorkflows/envs/biobb_sp_virtual_screening
-
-# After re-installing make sure you add the exhaustiveness parameter to the autodock vina run Biobb or upgrade the biobb_vs package to the latest version
+  - biobb_vs>=5.0.0
+  - biobb_common>=5.0.0
+  - biobb_chemistry>=5.0.3
+  - biobb_structure_utils>=5.0.0

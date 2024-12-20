@@ -6,7 +6,7 @@
 
 SYSTEM_NAME=1r9o                            # System name
 INPUT_PDB=1r9o.pdb                          # Path to the input PDB file
-PDB_CHAINS="A"                              # Chains to be simulated from the input PDB file
+PDB_CHAINS="A"                              # Chains to be simulated from the input PDB file. Ex: "A B"
 
 LIG_SLURM_SCRIPT=run_LP.sl  
 MD_SLURM_SCRIPT=run_MD.sl   

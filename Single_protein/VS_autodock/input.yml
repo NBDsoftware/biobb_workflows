@@ -1,29 +1,30 @@
 # YAML configuration file for the Virtual screening workflow
 
 # Global properties (common for all steps)
-working_dir_path: output
-can_write_console_log: False
-restart: False 
-remove_tmp: True
+global_properties:
+  working_dir_path: output
+  can_write_console_log: False
+  restart: True 
+  remove_tmp: True
 
 # Section 1: Pocket selection and receptor preparation
 
 step1_fpocket_select:
   tool: fpocket_select
   paths:
-    input_pockets_zip: /path/to/input_pockets.zip       # change (also from command line)
+    input_pockets_zip: /path/to/input_pockets.zip       # Will be set by the workflow
     output_pocket_pdb: fpocket_cavity.pdb
     output_pocket_pqr: fpocket_pocket.pqr
   properties:
-    pocket: 1                                           # change (also from command line)
+    pocket: 1                                           # Will be set by the workflow
 
 step1b_extract_residues:
   tool: extract_residues
   paths:
-    input_structure_path: /path/to/input_structure.pdb  # change (also from command line) 
+    input_structure_path: /path/to/input_structure.pdb  # Will be set by the workflow
     output_residues_path: pocket_residues.pdb
   properties:
-    residues: [4,5,6]                                   # change 
+    residues: [{'res_id': '37', 'model':'0'}, {'res_id': '49', 'model':'0'}, {'res_id': '112', 'model':'0'}]
 
 step2_box:
   tool: box
@@ -37,7 +38,7 @@ step2_box:
 step3_str_check_add_hydrogens:
   tool: str_check_add_hydrogens
   paths:
-    input_structure_path: /path/to/input_structure.pdb  # change (also from command line)
+    input_structure_path: /path/to/input_structure.pdb   # Will be set by the workflow
     output_structure_path: prep_receptor.pdbqt
   properties:
     charges: False
@@ -70,8 +71,8 @@ step5_autodock_vina_run:
     output_pdbqt_path: output_vina.pdbqt
     output_log_path: output_vina.log
   properties:
-    exhaustiveness: 8                                    # change - 4: to optimize speed, 8: to optimize accuracy
-    cpu: 1                                               # change - number of CPUs to use for each docking
+    exhaustiveness: 8                                    # Will be set by the workflow
+    cpu: 1                                               # Will be set by the workflow
     binary_path: vina                                    # change - path to the vina binary
 
 step6_babel_prepare_pose:

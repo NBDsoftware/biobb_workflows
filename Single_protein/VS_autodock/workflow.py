@@ -3,11 +3,15 @@
 # Importing all the needed libraries
 import os
 import re
+import sys
 import time
 import shutil
 import argparse
 from openbabel import pybel
 from typing import Dict, List, Pattern, Tuple, Union, Optional
+
+# Load pdb parser from biopython
+from Bio.PDB import PDBParser
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
@@ -303,37 +307,70 @@ def clean_output(ligand_names: List, output_path: str):
         if os.path.exists(ligand_path):
             shutil.rmtree(ligand_path)
     
-def check_arguments(global_log, global_paths, global_prop, ligand_lib_path, structure_path, input_pockets_zip, dock_to_residues):
+def check_arguments(global_log, ligand_lib_path, structure_path, input_pockets_zip, pocket, dock_to_residues):
     """
     Check the arguments provided by the user and values of configuration file
     """
 
     # Check the ligand library path exists and it's a file
     if not os.path.exists(ligand_lib_path):
-        global_log.warning(f"WARNING: Ligand library file {ligand_lib_path} does not exist")
+        global_log.warning(f"Ligand library file {ligand_lib_path} does not exist")
     elif not os.path.isfile(ligand_lib_path):
-        global_log.warning(f"WARNING: Ligand library path {ligand_lib_path} is not a file")
+        global_log.warning(f"Ligand library path {ligand_lib_path} is not a file")
 
     # Check we have a structure file
-    config_structure_path = global_paths['step3_str_check_add_hydrogens']['input_structure_path']
-    if structure_path is None and not os.path.exists(config_structure_path):
-        global_log.warning(f"WARNING: Structure file {config_structure_path} does not exist")
-    elif structure_path is not None and not os.path.exists(structure_path):
-        global_log.warning(f"WARNING: Structure file {structure_path} does not exist")
+    if not os.path.exists(structure_path):
+        global_log.error(f"Structure file {structure_path} does not exist")
+        sys.exit(1)
+    elif not os.path.isfile(structure_path):
+        global_log.error(f"Structure path {structure_path} is not a file")
+        sys.exit(1)
 
-    # Check we have a pockets zip file
-    config_pockets_zip = global_paths['step1_fpocket_select']['input_pockets_zip']
-    if input_pockets_zip is None and not os.path.exists(config_pockets_zip):
-        global_log.warning(f"WARNING: Pockets zip file {config_pockets_zip} does not exist")
-    elif input_pockets_zip is not None and not os.path.exists(input_pockets_zip):
-        global_log.warning(f"WARNING: Pockets zip file {input_pockets_zip} does not exist")
+    if not dock_to_residues:
+        # Check we have a pocket selection file
+        if not os.path.exists(input_pockets_zip):
+            global_log.error(f"Pocket selection file {input_pockets_zip} does not exist")
+            sys.exit(1)
+        elif not os.path.isfile(input_pockets_zip):
+            global_log.error(f"Pocket selection path {input_pockets_zip} is not a file")
+            sys.exit(1)
+            
+        # Check we have a pocket number
+        if pocket is None:
+            global_log.warning(f"Pocket number not provided. Using the first pocket in the pocket selection file")
+    else:
+        if input_pockets_zip is not None:
+            global_log.error(f"Cannot provide both pocket selection file and residues to dock to")
+            sys.exit(1)
 
-    # Check size of box
-    if dock_to_residues:
-        if global_prop['step2_box']['offset'] > 5:
-            global_log.warning(f"WARNING: box offset is {global_prop['step2_box']['offset']} angstroms. This may be unnecessarily large when docking to residues surrounding the binding site. Consider using a smaller value to improve performance.")
-
-def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, input_pockets_zip: str, pocket: str, output_path: str, num_top_ligands: int, keep_poses: bool, dock_to_residues: bool, cpus: int, exhaustiveness: int, debug: bool) -> Tuple[Dict, Dict]:
+def check_pdb(residues_path: str, global_log):
+    """
+    Checks the pdb is not empty and contains residues using biopython
+    """
+    
+    # Check the residue file exists
+    if not os.path.exists(residues_path):
+        global_log.error(f"Residues file {residues_path} does not exist")
+        sys.exit(1)
+        
+    # Load structure
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure('structure', residues_path)
+    
+    residues = 0
+    for model in structure:
+        for chain in model:
+            for residue in chain:
+                residues += 1
+    
+    if residues == 0:
+        global_log.error(f"No residues found in residues file {residues_path}")
+        sys.exit(1)
+    
+    return residues
+    
+def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, input_pockets_zip: str, pocket: str, output_path: str, 
+            num_top_ligands: int, keep_poses: bool, dock_to_residues: bool, cpus: int, exhaustiveness: int, debug: bool) -> Tuple[Dict, Dict]:
     '''
     Main VS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
     and a receptor to screen the cavity using the ligand library (with AutoDock).
@@ -369,7 +406,7 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
     # Enforce output_path if provided
     if output_path is not None:
         output_path = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))
-        conf.properties['working_dir_path'] = output_path
+        conf.working_dir_path = output_path
     else:
         output_path = conf.get_working_dir_path()
 
@@ -382,33 +419,33 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
     global_paths = conf.get_paths_dic()
 
     # Check arguments
-    check_arguments(global_log, global_paths, global_prop, ligand_lib_path, structure_path, input_pockets_zip, dock_to_residues)
-                    
-    # Enforce input_pockets_zip if provided
-    if input_pockets_zip is not None:
-        global_paths['step1_fpocket_select']['input_pockets_zip'] = input_pockets_zip
-    
-    # Enforce pocket selection if provided
-    if pocket is not None:
-        global_prop['step1_fpocket_select']['pocket'] = pocket
+    check_arguments(global_log, ligand_lib_path, structure_path, input_pockets_zip, pocket, dock_to_residues)
 
     # Enforce structure_path if provided
-    if structure_path is not None:
-        global_paths['step1b_extract_residues']['input_structure_path'] = structure_path
-        global_paths['step3_str_check_add_hydrogens']['input_structure_path'] = structure_path
-    else:
-        structure_path = global_paths['step3_str_check_add_hydrogens']['input_structure_path']
+    global_paths['step1b_extract_residues']['input_structure_path'] = structure_path
+    global_paths['step3_str_check_add_hydrogens']['input_structure_path'] = structure_path
 
     # STEP 1: Select pocket or extract residues
     if dock_to_residues:
+        
         # Extract residues from structure
         global_log.info("step1b_extract_residues: Extracting residues from structure")
         extract_residues(**global_paths["step1b_extract_residues"], properties=global_prop["step1b_extract_residues"])
+        
+        # Check the output residues file exists and is not empty
+        check_pdb(global_paths["step1b_extract_residues"]['output_residues_path'], global_log)
 
         # Modify step2_box paths to use residues
         global_paths['step2_box']['input_pdb_path'] = global_paths['step1b_extract_residues']['output_residues_path']
-
+        
+        if global_prop['step2_box']['offset'] > 5:
+            global_log.warning(f"WARNING: box offset is {global_prop['step2_box']['offset']} angstroms. This may be unnecessarily large when docking to residues surrounding the binding site. Consider using a smaller value to improve performance.")
+        
     else:
+
+        global_paths['step1_fpocket_select']['input_pockets_zip'] = input_pockets_zip
+        global_prop['step1_fpocket_select']['pocket'] = pocket
+        
         # Pocket selection from filtered list 
         global_log.info("step1_fpocket_select: Extract pocket cavity")
         fpocket_select(**global_paths["step1_fpocket_select"], properties=global_prop["step1_fpocket_select"])
@@ -435,10 +472,12 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
         ligand_supplier = pybel.readfile('sdf', ligand_lib_path)
 
         for index, ligand in enumerate(ligand_supplier, start=0):
-
+            
+            ligand_title = "".join(x for x in ligand.title if x.isalnum())
+            
             # Create unique name from title and index
-            ligand_name = f"{ligand.title}_{index}" if ligand.title else f"ligand_{index}"
-            ligand_id = ligand.title if ligand.title else ""
+            ligand_name = f"{ligand_title}_{index}" if ligand_title else f"ligand_{index}"
+            ligand_id = ligand_title if ligand_title else ""
 
             # Add ligand name to properties and paths
             ligand_prop = conf.get_prop_dic(prefix=ligand_name)
@@ -471,13 +510,8 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
             # STEP 5: AutoDock vina
             if lastStep_successful:
             
-                # Enforce cpus if specified
-                if cpus is not None:
-                    ligand_prop['step5_autodock_vina_run']['cpu'] = int(cpus)
-                
-                # Enforce exhaustiveness if specified
-                if exhaustiveness is not None:
-                    ligand_prop['step5_autodock_vina_run']['exhaustiveness'] = int(exhaustiveness)
+                ligand_prop['step5_autodock_vina_run']['cpu'] = int(cpus)
+                ligand_prop['step5_autodock_vina_run']['exhaustiveness'] = int(exhaustiveness)
                 
                 # Update common paths
                 ligand_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path'] = global_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path']
@@ -528,13 +562,8 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
             # STEP 5: AutoDock vina
             if lastStep_successful:
 
-                # Enforce cpus if specified
-                if cpus is not None:
-                    ligand_prop['step5_autodock_vina_run']['cpu'] = int(cpus)
-
-                # Enforce exhaustiveness if specified
-                if exhaustiveness is not None:
-                    ligand_prop['step5_autodock_vina_run']['exhaustiveness'] = int(exhaustiveness)
+                ligand_prop['step5_autodock_vina_run']['cpu'] = int(cpus)
+                ligand_prop['step5_autodock_vina_run']['exhaustiveness'] = int(exhaustiveness)
 
                 # Update common paths
                 ligand_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path'] = global_paths['step5_autodock_vina_run']['input_receptor_pdbqt_path']
@@ -640,14 +669,14 @@ if __name__ == '__main__':
     
     parser.add_argument('-s', '--structure_path', dest='structure_path', type=str,
                         help="Path to file with target structure (PDB format)",
-                        required=False)
+                        required=True)
     
     parser.add_argument('-pz', '--input_pockets_zip', dest='input_pockets_zip', type=str,
-                        help="Path to file with pockets in a zip file",
+                        help="Path to file with pockets in a zip file. Provide this path or a list of residues in the configuration file.",
                         required=False)
 
     parser.add_argument('-p', '--pocket', dest='pocket', type=int,
-                        help="Pocket number to be used (default: 1)",
+                        help="Pocket number to be used from the input_pockets_zip. Default: 1",
                         required=False)
 
     parser.add_argument('-o', '--output', dest='output_path', type=str,
@@ -655,27 +684,27 @@ if __name__ == '__main__':
                         required=False)
     
     parser.add_argument('-nl', '--num_top_ligands', dest='num_top_ligands', type=int,
-                        help="Number of top ligands to be saved (default: all successfully docked ligands)",
+                        help="Number of top ligands to be saved. Default: all successfully docked ligands",
                         required=False)
 
     parser.add_argument('-kp', '--keep_poses', dest='keep_poses', action='store_true',
-                        help="Save docking poses for top ligands (default: False)",
+                        help="Save docking poses for top ligands. Default: False",  
                         required=False)
 
     parser.add_argument('-dr', '--dock_to_residues', dest='dock_to_residues', action='store_true',
-                        help="Dock to residues instead of pocket. Define the docking box using a set of residues instead of a pocket. (default: False)",
+                        help="Dock to residues instead of pocket. Define the docking box using a set of residues instead of a pocket. See input.yml to define the residue selection. Default: False",
                         required=False)
     
     parser.add_argument('-cpus', '--cpus', dest='cpus', type=int, 
-                        help="Number of CPUs to use for each docking (default: 1)",
-                        required=False)
+                        help="Number of CPUs to use for each docking. Default: 1",
+                        required=False, default=1)
     
     parser.add_argument('-ex', '--exhaustiveness', dest='exhaustiveness', type=int,
-                        help="Exhaustiveness of the docking (default: 8)",
-                        required=False)
+                        help="Exhaustiveness of the docking. Number of runs for the sampling algorithm. Choose 4 to optimize speed and 8 to optimize accuracy. Default: 8",
+                        required=False, default=8)
     
     parser.add_argument('-d', '--debug', dest='debug', action='store_true',
-                        help="Keep intermediate files for debugging (default: False)",
+                        help="Keep intermediate files for debugging. Default: False",
                         required=False)
     
     args = parser.parse_args()

@@ -50,4 +50,4 @@ fi
 # MD SIMULATION #
 #################
 
-python $WF_PATH/workflow.py --config input_md.yml --forcefield $MD_FF --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_PATH --pdb_chains "$PDB_CHAINS" --nsteps $NSTEPS --ligands_folder $LIGAND_TOP_PATH --his_protonation_tool "pdb4amber" --fix_ss --fix_amides $FINAL_ANALYSIS 
+python $WF_PATH/workflow.py --config input_md.yml --forcefield $MD_FF --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_PATH --pdb_chains $PDB_CHAINS --nsteps $NSTEPS --ligands_folder $LIGAND_TOP_PATH --his_protonation_tool "pdb4amber" --fix_ss --fix_amides $FINAL_ANALYSIS 
