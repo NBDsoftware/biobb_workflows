@@ -623,8 +623,8 @@ def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
         merge_xvgtimeseries_files(file_paths, output_xvg_path)
     
 
-def main_wf(configuration_path, input_pdb_path = None, pdb_chains = None, mutation_list = None, ligands_folder = None, skip_fix_backbone = None, skip_fix_side_chain = None, fix_ss = None, 
-            fix_amide_clashes = None, his_protonation_tool = "pdb4amber", his = None, forcefield = 'amber99sb-ildn', setup_only = False, input_gro_path = None, input_top_path = None, 
+def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chains = None, mutation_list = None, ligands_folder = None, skip_fix_backbone = None, skip_fix_side_chain = None, 
+            fix_ss = None, fix_amide_clashes = None, his_protonation_tool = "pdb4amber", his = None, forcefield = 'amber99sb-ildn', setup_only = False, input_gro_path = None, input_top_path = None, 
             nsteps = None, num_parts = 1, num_replicas = 1, final_analysis = None, output_path = None):
     '''
     Main setup, mutation and MD run workflow with GROMACS. Can be used to retrieve a PDB, fix some defects of the structure,
@@ -635,6 +635,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_chains = None, mutati
 
         configuration_path   (str): path to YAML configuration file
         input_pdb_path       (str): (Optional) path to input PDB file
+        pdb_code             (str): (Optional) PDB code to be used to get the canonical FASTA sequence
         pdb_chains           (str): (Optional) list of chains to be extracted from the PDB file and fixed
         mutation_list        (str): (Optional) list of mutations to be introduced in the structure
         ligands_folder       (str): (Optional) path to the folder containing the ligand .itp and .gro files
@@ -739,15 +740,26 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_chains = None, mutati
         if not skip_fix_backbone:
             
             # STEP 2C: Try to get the FASTA sequence to model the backbone from ...
+            fasta_available = False
             
             # ... an http request to the PDB
             try:
                 global_log.info("step2C_canonical_fasta: Get canonical FASTA")
-                pdbcode_fromfile = get_pdb_code(global_paths["step1A_extractAtoms"]["input_structure_path"])
-                if pdbcode_fromfile:
-                    global_prop["step2C_canonical_fasta"]["pdb_code"] = pdbcode_fromfile
-                canonical_fasta(**global_paths["step2C_canonical_fasta"], properties=global_prop["step2C_canonical_fasta"])
-                fasta_available = True
+                file_pdb_code = get_pdb_code(global_paths["step1A_extractAtoms"]["input_structure_path"])
+                
+                if None not in [pdb_code, file_pdb_code]:
+                    # Make sure the PDB code is the same as the one in the input PDB file
+                    if pdb_code != file_pdb_code:
+                        global_log.warning(f"step2C_canonical_fasta: Provided PDB code ({pdb_code}) is different from the one in the input PDB file ({file_pdb_code}).")
+                        global_log.warning(f"step2C_canonical_fasta: Using the provided PDB code ({pdb_code}).")
+
+                if pdb_code is None:
+                    pdb_code = file_pdb_code
+                
+                if pdb_code is not None:
+                    global_prop["step2C_canonical_fasta"]["pdb_code"] = pdb_code
+                    canonical_fasta(**global_paths["step2C_canonical_fasta"], properties=global_prop["step2C_canonical_fasta"])
+                    fasta_available = True
             except:
                 global_log.warning("step2C_canonical_fasta: Could not get canonical FASTA. Check the internet connection in the machine running the workflow. Trying to get the canonical FASTA from the PDB file...")
                 fasta_available = False
@@ -1194,6 +1206,10 @@ if __name__ == "__main__":
                         help="Input PDB file. Default: input_structure_path in step 1 of configuration file.",
                         required=False)
 
+    parser.add_argument('--pdb_code', dest='pdb_code',
+                        help="PDB code to get the canonical FASTA sequence of the input PDB file. If not given the workflow will look for it in the HEADER of the PDB. Default: None",
+                        required=False)
+
     parser.add_argument('--pdb_chains', nargs='+', dest='pdb_chains',
                         help="Protein PDB chains to be extracted from PDB file and fixed. Default: A.",
                         required=False, default=['A'])
@@ -1276,7 +1292,7 @@ if __name__ == "__main__":
     if (args.input_pdb_path is not None and args.input_gro_path is not None):
         raise Exception("Both --input_pdb and --input_gro/--input_top are provided. Please provide only one of them")
 
-    main_wf(configuration_path=args.config_path, input_pdb_path=args.input_pdb_path, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list, 
+    main_wf(configuration_path=args.config_path, input_pdb_path=args.input_pdb_path, pdb_code=args.pdb_code, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list, 
             ligands_folder=args.ligands_folder, skip_fix_backbone=args.skip_fix_backbone, skip_fix_side_chain=args.skip_fix_side_chain, fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, 
             his_protonation_tool=args.his_protonation_tool, his=args.his, forcefield=args.forcefield, setup_only=args.setup_only, input_gro_path=args.input_gro_path, 
             input_top_path=args.input_top_path, nsteps=args.nsteps,  num_parts=args.num_parts, num_replicas=args.num_replicas, final_analysis=args.final_analysis, 

@@ -58,7 +58,7 @@ step2C_canonical_fasta:
   paths:
     output_fasta_path: canonicalFasta.fasta
   properties:
-    pdb_code: HERE YOUR PDB CODE                                         
+    pdb_code: null                                                    # Will be set by the workflow
 
 # Step 2 C: Extract the residue sequence from the PDB file to FASTA format
 step2C_pdb_tofasta:
