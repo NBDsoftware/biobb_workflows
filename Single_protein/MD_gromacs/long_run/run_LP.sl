@@ -13,7 +13,7 @@ module purge
 # Load conda / miniconda module
 module load Miniconda3
 
-# Activate previously created conda environment from environment.yml
+# Activate conda environment
 source activate /shared/work/BiobbWorkflows/envs/biobb_md
 
 # Path to the workflow

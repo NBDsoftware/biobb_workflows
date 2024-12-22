@@ -1,7 +1,7 @@
 #!/bin/bash
 ##### Number of tasks
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=16
 #SBATCH -t 1-00:00:00
 #####Output and error log files
 #SBATCH -e gmx_%j.e
@@ -12,6 +12,8 @@ module purge
 
 # Load GROMACS module
 ml GROMACS
+
+export OMP_NUM_THREADS=16
 
 # Activate conda environment
 module load Miniconda3
@@ -30,6 +32,10 @@ NUM_PARTS=$5
 NSTEPS=$6
 DO_FINAL_ANALYSIS=$7
 OUTPUT_PATH=$8
+
+if [ $LIGAND_TOP_PATH == "None" ]; then
+    LIGAND_TOP_PATH=""
+fi
 
 echo "Input PDB: $INPUT_PDB"
 echo "PDB Chains: $PDB_CHAINS"
@@ -50,4 +56,8 @@ fi
 # MD SIMULATION #
 #################
 
-python $WF_PATH/workflow.py --config input_md.yml --forcefield $MD_FF --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_PATH --pdb_chains $PDB_CHAINS --nsteps $NSTEPS --ligands_folder $LIGAND_TOP_PATH --his_protonation_tool "pdb4amber" --fix_ss --fix_amides $FINAL_ANALYSIS 
+if [ -n "$LIGAND_TOP_PATH" ]; then
+    python $WF_PATH/workflow.py --config input_md.yml --forcefield $MD_FF --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_PATH --pdb_chains $PDB_CHAINS --nsteps $NSTEPS --his_protonation_tool "pdb4amber" --fix_ss --fix_amides $FINAL_ANALYSIS --ligands_folder $LIGAND_TOP_PATH
+else
+    python $WF_PATH/workflow.py --config input_md.yml --forcefield $MD_FF --num_parts $NUM_PARTS --input_pdb $INPUT_PDB --output $OUTPUT_PATH --pdb_chains $PDB_CHAINS --nsteps $NSTEPS --his_protonation_tool "pdb4amber" --fix_ss --fix_amides $FINAL_ANALYSIS
+fi 
