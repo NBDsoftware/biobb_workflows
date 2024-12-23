@@ -238,7 +238,7 @@ def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str):
             shutil.copyfile(path, new_file_path)
 
 def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['protein.ff14SB', 'DNA.bsc1', 'gaff'], ligand_names: Union[List[str], None] = None, 
-         chains: List[str] = ['A'], model: int = 0, format: Literal['gromacs', 'amber'] = 'gromacs', custom_parameters: Union[str, None] = None,
+         charges: Union[List[str], None] = None, chains: List[str] = ['A'], model: int = 0, format: Literal['gromacs', 'amber'] = 'gromacs', custom_parameters: Union[str, None] = None,
          protonation_tool: Literal['ambertools', 'obabel', 'none'] = 'ambertools', skip_min: bool = False, 
          output_top_path: Union[str, None] = None, output_path: Union[str, None] = None):
     '''
@@ -251,6 +251,7 @@ def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['pro
         input_pdb          : Path to the input PDB file with the ligands to parameterize.
         forcefields        : (Optional) List of paths or file names of force fields to use in the parameterization. Only used within LEaP if custom parameters are also provided.
         ligand_names       : (Optional) List of ligand names in the PDB file to parameterize. By default, all ligands are parameterized.
+        charges            : (Optional) List of charges for the ligands to parameterize. Only used when no custom parameters are given and the ligand is parameterized using GAFF and antechamber through acpype. By default acpype will guess the charge based on the protonation state.
         chains             : (Optional) Chain ID of the ligands to parameterize. Default: A.
         model              : (Optional) Model number of the ligands to parameterize. Default: 1.
         format             : (Optional) Format of the output topology files. Options: gromacs, amber. Default: gromacs.
@@ -318,6 +319,13 @@ def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['pro
     
     # Find the custom parameters if any
     parameter_sets = get_parameter_sets(custom_parameters, global_log)
+    
+    # Find the charges of each ligand if any
+    ligand_charges = {}
+    if charges is not None:
+        for q in charges:
+            ligand_name, ligand_charge = q.split(':')
+            ligand_charges[ligand_name] = int(ligand_charge)
         
     # Process each ligand
     for ligand_info in selected_ligands:
@@ -370,6 +378,7 @@ def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['pro
             
             global_log.info(f"Parameterizing {ligand_name} using GAFF through acpype")
     
+            # NOTE: the charge should be taken into account by protonation tool - to do
             if protonation_tool == 'ambertools':
                 
                 # STEP 2B: Add hydrogens to the ligand using ambertools
@@ -403,6 +412,13 @@ def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['pro
                 ligand_paths["step4B_acpype_params_gmx"]["input_path"] = ligand_paths["step3B_babel_minimize"]["input_path"]
                 ligand_paths["step4B_acpype_params_ac"]["input_path"] = ligand_paths["step3B_babel_minimize"]["input_path"]
             
+            if ligand_name in ligand_charges:
+                ligand_prop["step4B_acpype_params_gmx"]["charge"] = ligand_charges[ligand_name]
+                ligand_prop["step4B_acpype_params_ac"]["charge"] = ligand_charges[ligand_name]
+            else:
+                ligand_prop["step4B_acpype_params_gmx"]["charge"] = None
+                ligand_prop["step4B_acpype_params_ac"]["charge"] = None
+                
             # Create gromacs topology and coordinate files
             if format == 'gromacs':
                 ligand_prop["step4B_acpype_params_gmx"]["basename"] = ligand_name
@@ -453,6 +469,9 @@ if __name__ == '__main__':
                         help='List of ligand names in the PDB file to parameterize. By default, all ligands are parameterized.', 
                         required=False, default=None)
     
+    parser.add_argument('--charges', dest='charges', nargs='+',
+                        help='List of charges for the ligands. Format: "ligand_name:charge". Ex: "JZ4:-2 FLP:1". Only used when no custom parameters are given and the ligand is parameterized using GAFF and antechamber through acpype. By default acpype will guess the charge based on the protonation state.',)
+    
     parser.add_argument('--chains', dest='chains', nargs='+',
                         help='Chain IDs of the PDB to extract ligands from. Default: ["A"].',
                         required=False, default=['A'])
@@ -466,7 +485,7 @@ if __name__ == '__main__':
                         required=False, default='gromacs')
     
     parser.add_argument('--custom_parameters', dest='custom_parameters',
-                        help='Path to folder with custom parameter sets for one or more ligands (.frcmod and .prep files with ligand name).',
+                        help='Path to folder with custom parameter sets for one or more ligands (.frcmod and .prep files with ligand name). LEaP will be used to generate the topology for these ligands. These ligands will rely on the charge given by the custom parameter set and the protonation state of its template.',
                         required=False, default=None)
     
     parser.add_argument('--protonation_tool', dest='protonation_tool', 
@@ -487,6 +506,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     
-    main(configuration_path = args.config_path, input_pdb = args.input_pdb, forcefields=args.forcefields, ligand_names = args.ligand_names, chains = args.chains, 
-         model = args.model, format = args.format, custom_parameters = args.custom_parameters, protonation_tool = args.protonation_tool, skip_min = args.skip_min, 
-         output_top_path = args.output_top_path, output_path=args.output_path)
+    main(configuration_path = args.config_path, input_pdb = args.input_pdb, forcefields=args.forcefields, ligand_names = args.ligand_names, charges = args.charges,  
+         chains = args.chains, model = args.model, format = args.format, custom_parameters = args.custom_parameters, protonation_tool = args.protonation_tool, 
+         skip_min = args.skip_min, output_top_path = args.output_top_path, output_path=args.output_path)
