@@ -1073,6 +1073,9 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
         # If prepared structure is provided, update the global paths
         global_paths['step4A_grompp_min']['input_gro_path'] = input_gro_path
         global_paths['step4A_grompp_min']['input_top_zip_path'] = input_top_path
+        global_paths['step4E_grompp_nvt']['input_top_zip_path'] = input_top_path
+        global_paths['step4H_grompp_npt']['input_top_zip_path'] = input_top_path
+        global_paths['step5A_grompp_md']['input_top_zip_path'] = input_top_path
 
     # STEP 4A: minimization pre-processing
     global_log.info("step4A_grompp_min: Preprocess energy minimization")
