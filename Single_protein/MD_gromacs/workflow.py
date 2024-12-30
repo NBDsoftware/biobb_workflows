@@ -1027,7 +1027,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
                 global_log.info(f"{ligand_id} > Generate restraints for ligand")
                 ligand_paths["step3I_ligand_restraints"]["input_structure_path"] = ligand_gro_path
                 ligand_paths["step3I_ligand_restraints"]["output_itp_path"] = ligand_restraints_path
-                genrestr(**ligand_paths["step3I_ligand_restraints"], properties=ligand_prop["step3I_ligand_restraints"]) # NOTE: should we modify the name of the POSRES too? - see properties, maybe not needed, they are in a specific moleculetype block
+                genrestr(**ligand_paths["step3I_ligand_restraints"], properties=ligand_prop["step3I_ligand_restraints"])
                 
                 # STEP 3G: Append parameterized ligand to the current complex topology zip file
                 ligand_paths["step3J_append_ligand"]["input_top_zip_path"] = complex_topology_path
@@ -1130,7 +1130,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
     global_log.info("step4J_density_npt: Compute Density & Pressure during NPT equilibration")
     gmx_energy(**global_paths["step4J_density_npt"], properties=global_prop["step4J_density_npt"])
     
-    # NOTE: add free equilibration removing those restraints that are not needed in the production run
+    # NOTE: add free equilibration removing those restraints that are not needed in the production run - none by default
 
     ##########################
     # Production simulations #
@@ -1414,6 +1414,8 @@ if __name__ == "__main__":
     parser.add_argument('--output', dest='output_path',
                         help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
+    
+    # NOTE: add flag to determine what should remain restrained during the production run - currently everything is free
 
     args = parser.parse_args()
 
