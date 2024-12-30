@@ -35,6 +35,7 @@ from biobb_gromacs.gromacs.mdrun import mdrun
 from biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_gromacs.gromacs.genrestr import genrestr
 from biobb_gromacs.gromacs_extra.append_ligand import append_ligand
+from biobb_gromacs.gromacs_extra.ndx2resttop import ndx2resttop
 from biobb_amber.pdb4amber.pdb4amber_run import pdb4amber_run
 from biobb_analysis.gromacs.gmx_rms import gmx_rms
 from biobb_analysis.gromacs.gmx_rgyr import gmx_rgyr
@@ -163,22 +164,22 @@ def get_ligands(ligands_folder: Union[str, None], global_log) -> List[Dict[str, 
         if file.endswith(".itp") or file.endswith(".gro"):
             
             # Get the file name without extension
-            ligand_name = Path(file).stem   
+            ligand_id = Path(file).stem   
             
             # Get the file extension
             file_extension = Path(file).suffix
             
             # Check if the ligand name is already in the dictionary
-            if ligand_name in ligands:
+            if ligand_id in ligands:
                 if file_extension == ".itp":
-                    ligands[ligand_name]['topology'] = os.path.join(ligands_folder, file)
+                    ligands[ligand_id]['topology'] = os.path.join(ligands_folder, file)
                 elif file_extension == ".gro":
-                    ligands[ligand_name]['coordinates'] = os.path.join(ligands_folder, file)
+                    ligands[ligand_id]['coordinates'] = os.path.join(ligands_folder, file)
             else:
                 if file_extension == ".itp":
-                    ligands[ligand_name] = {'topology': os.path.join(ligands_folder, file)}
+                    ligands[ligand_id] = {'topology': os.path.join(ligands_folder, file)}
                 elif file_extension == ".gro":
-                    ligands[ligand_name] = {'coordinates': os.path.join(ligands_folder, file)}
+                    ligands[ligand_id] = {'coordinates': os.path.join(ligands_folder, file)}
     
     # Check if all ligands have both topology and coordinate files
     for ligand, files in ligands.items():
@@ -344,6 +345,53 @@ def get_pdb2gmx_his(his_residues: List[str]) -> str:
     
     return " ".join(his_pdb2gmx)
     
+def get_chains_dict(pdb_file: str) -> Dict[str, Dict[str, List[int]]]:
+    """ 
+    Get a dictionary with the chain IDs as keys and a dictionary with the residue intervals as values.
+    
+    HETEROATOM chains are not considered. 
+    
+    Parameters
+    ----------
+    
+    pdb_file : str
+        Path to the PDB file.
+    
+    Returns
+    -------
+    
+    Dict:
+        A dictionary with the chain IDs as keys and a list with the residue numbers as values.
+        
+        Example:
+        
+        {
+            'A': 
+                {
+                    'residues': [1, 100]
+                },
+            'B': 
+                {
+                    'residues': [1, 200]
+                }
+        }
+    """
+    
+    # Parse the PDB structure
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure('structure', pdb_file)
+    
+    # Initialize the dictionary with the chain IDs and residue numbers
+    chains_dict = {}
+    
+    # Iterate over all residues in the structure
+    for model in structure:
+        for chain in model:
+            chain_id = chain.get_id()
+            residue_numbers = [residue.get_id()[1] for residue in chain]
+            chains_dict[chain_id] = {'residues':[min(residue_numbers), max(residue_numbers)]}
+    
+    return chains_dict
 
 # Set additional general properties not considered by the configuration reader
 def set_gromacs_path(global_properties: dict, binary_path: str) -> None:
@@ -357,7 +405,7 @@ def set_gromacs_path(global_properties: dict, binary_path: str) -> None:
         binary_path (str): Path to the GROMACS binary.
     """
 
-    list_of_steps = ['step3A_structure_topology', 'step3H_editconf', 'step3I_solvate', 'step3J_grompp_genion', 'step3K_genion',
+    list_of_steps = ['step3B_structure_topology', 'step3K_editconf', 'step3L_solvate', 'step3M_grompp_genion', 'step3N_genion',
                         'step4A_grompp_min', 'step4B_mdrun_min', 'step4E_grompp_nvt', 'step4F_mdrun_nvt',
                         'step4H_grompp_npt', 'step4I_mdrun_npt', 'step5A_grompp_md', 'step5B_mdrun_md']
 
@@ -833,6 +881,9 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
         global_log.info("step2I_renumberstructure: renumber structure")
         renumber_structure(**global_paths["step2I_renumberstructure"], properties=global_prop["step2I_renumberstructure"])
         
+        # Get the chain residues
+        chains_dict = get_chains_dict(global_paths["step2I_renumberstructure"]["output_structure_path"])
+        
         ###########################################
         # Prepare topology and coordinates for MD #
         ###########################################
@@ -850,99 +901,168 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
             his_residues = find_amber_his(global_paths["step3A_amber_reduce"]["output_pdb_path"], global_log)
             
             # Convert from histidine names to pdb2gmx numbering convention
-            global_prop["step3A_structure_topology"]["his"]=get_pdb2gmx_his(his_residues)
+            global_prop["step3B_structure_topology"]["his"]=get_pdb2gmx_his(his_residues)
             
         elif his is not None:
             # Set user-defined histidine protonation states
-            global_prop["step3A_structure_topology"]["his"]=his
+            global_prop["step3B_structure_topology"]["his"]=his
             
-        global_log.info("step3A_structure_topology: Generate the topology")
-        global_prop["step3A_structure_topology"]["force_field"]=forcefield
-        pdb2gmx(**global_paths["step3A_structure_topology"], properties=global_prop["step3A_structure_topology"])
+        global_log.info("step3B_structure_topology: Generate the topology")
+        global_prop["step3B_structure_topology"]["force_field"]=forcefield
+        pdb2gmx(**global_paths["step3B_structure_topology"], properties=global_prop["step3B_structure_topology"])
+        
+        master_index_file = ""
+        if len(chains_dict) > 1:
+            
+            # Add chain and chain CA groups to a master index file 
+            for chain_id in chains_dict:
+                
+                prefix = f"step3B_Chain_{chain_id}"
+                chain_prop = conf.get_prop_dic(prefix=prefix)
+                chain_paths = conf.get_paths_dic(prefix=prefix)
+                
+                structure_path = global_paths["step3B_structure_topology"]["output_gro_path"]
+                
+                # If not the first chain, we need to append the group to the master index file
+                if master_index_file:
+                    chain_paths["step3C_make_ref_group"]["input_ndx_path"] = master_index_file
+                
+                # STEP 3B: Create index file for chain
+                global_log.info(f"{chain_id} > Create index group for the chain")
+                chain_paths["step3C_make_ref_group"]["input_structure_path"] = structure_path
+                chain_prop["step3C_make_ref_group"]["selection"] = f"ri {chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
+                make_ndx(**chain_paths["step3C_make_ref_group"], properties=chain_prop["step3C_make_ref_group"])
+                
+                global_log.info(f"{chain_id} > Create index group for the chain's C-alpha atoms")
+                chain_paths["step3C_make_rest_group"]["input_structure_path"] = structure_path
+                chain_prop["step3C_make_rest_group"]["selection"] = f"a CA & ri {chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
+                make_ndx(**chain_paths["step3C_make_rest_group"], properties=chain_prop["step3C_make_rest_group"])  
+                
+                # Save group names for each chain
+                chains_dict[chain_id]["reference_group"] = f"r_{chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
+                chains_dict[chain_id]["restrain_group"] = f"CA_&_r_{chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
+                
+                # Save POSRES names for each chain
+                chains_dict[chain_id]["posres_name"] = f"CHAIN_{chain_id}_POSRES"
+                
+                # Update master index file
+                master_index_file = chain_paths["step3C_make_rest_group"]["output_ndx_path"]
 
+            # Reference, restraint and chain triplet list for ndx2resttop
+            ref_rest_chain_triplet_list = ", ".join([f"({chains_dict[chain]['reference_group']}, {chains_dict[chain]['restrain_group']}, {chain})" for chain in chains_dict])
+            
+            # POSRES names for each chain
+            posres_names = " ".join([chains_dict[chain]["posres_name"] for chain in chains_dict])
+        else:
+            
+            chain_id = list(chains_dict.keys())[0]
+            
+            # Add chain and chain CA groups to a master index file
+            global_log.info("step3C_make_ref_group: Create index file")
+            make_ndx(**global_paths["step3C_make_ref_group"], properties=global_prop["step3C_make_ref_group"])
+            
+            # Save POSRES names for each chain
+            chains_dict[chain_id]["posres_name"] = f"CHAIN_{chain_id}_POSRES"
+             
+            # Update master index file
+            master_index_file = global_paths["step3C_make_ref_group"]["output_ndx_path"]
+            
+            # Reference, restraint and chain triplet list for ndx2resttop
+            ref_rest_chain_triplet_list = f"(Protein, C-alpha, {chain_id})"
+            
+            # POSRES names for each chain
+            posres_names = chains_dict[chain_id]["posres_name"]
+        
+        global_log.info(f"step3D_append_posres: Append restraints to the topology")
+        global_prop["step3D_append_posres"]["ref_rest_chain_triplet_list"] = ref_rest_chain_triplet_list
+        global_prop["step3D_append_posres"]["posres_names"] = posres_names
+        global_paths["step3D_append_posres"]["input_ndx_path"] = master_index_file
+        ndx2resttop(**global_paths["step3D_append_posres"], properties=global_prop["step3D_append_posres"])
+        
         ligands_dict = get_ligands(ligands_folder, global_log)
         
         if ligands_dict:
             
-            ligand_names = list(ligands_dict.keys())
-            
             # STEP 3B: Convert gro of main structure to pdb - to concatenate with ligands
-            global_log.info("step3B_structure_pdb: Convert GRO to PDB")
-            gmx_trjconv_str(**global_paths["step3B_structure_pdb"], properties=global_prop["step3B_structure_pdb"])
+            global_log.info("step3E_structure_pdb: Convert GRO to PDB")
+            gmx_trjconv_str(**global_paths["step3E_structure_pdb"], properties=global_prop["step3E_structure_pdb"])
             
-            complex_pdb_path = global_paths["step3B_structure_pdb"]["output_str_path"]
-            complex_topology_path = global_paths["step3A_structure_topology"]["output_top_zip_path"]
+            complex_pdb_path = global_paths["step3E_structure_pdb"]["output_str_path"]
+            complex_topology_path = global_paths["step3D_append_posres"]["output_top_zip_path"]
             
             # For each ligand in the ligands folder
-            for ligand_name, ligand_files in ligands_dict.items():
+            for ligand_id in ligands_dict:
                 
-                prefix = f"step3_{ligand_name}"
+                prefix = f"step3FJ_{ligand_id}"
                 ligand_prop = conf.get_prop_dic(prefix=prefix)
                 ligand_paths = conf.get_paths_dic(prefix=prefix)
                 
-                ligand_gro_path = ligand_files["coordinates"]
-                ligand_itp_path = ligand_files["topology"]
-                ligand_restraints_path = os.path.join(str(Path(ligand_paths["step3F_ligand_restraints"]["output_itp_path"]).parent), f"{ligand_name}_restraints.itp")
+                ligand_gro_path = ligands_dict[ligand_id]["coordinates"]
+                ligand_itp_path = ligands_dict[ligand_id]["topology"]
+                ligand_restraints_path = os.path.join(str(Path(ligand_paths["step3I_ligand_restraints"]["output_itp_path"]).parent), f"{ligand_id}_posre.itp")
+                
+                ligands_dict[ligand_id]["posres_name"] = f"LIGAND_{ligand_id}_POSRES"
             
                 # STEP 3C: Convert ligand coordinates from gro to pdb
-                global_log.info(f"{ligand_name} > Convert ligand GRO to PDB")
-                ligand_paths["step3C_ligand_pdb"]["input_structure_path"] = ligand_gro_path
-                ligand_paths["step3C_ligand_pdb"]["input_top_path"] = ligand_gro_path
-                gmx_trjconv_str(**ligand_paths["step3C_ligand_pdb"], properties=ligand_prop["step3C_ligand_pdb"])
+                global_log.info(f"{ligand_id} > Convert ligand GRO to PDB")
+                ligand_paths["step3F_ligand_pdb"]["input_structure_path"] = ligand_gro_path
+                ligand_paths["step3F_ligand_pdb"]["input_top_path"] = ligand_gro_path
+                gmx_trjconv_str(**ligand_paths["step3F_ligand_pdb"], properties=ligand_prop["step3F_ligand_pdb"])
                 
                 # STEP 3D: Create complex pdb file concatenating the current complex and the new ligand
-                global_log.info(f"{ligand_name} > Create complex PDB file")
-                ligand_paths["step3D_complex_pdb"]["input_structure1"] = complex_pdb_path
-                ligand_paths["step3D_complex_pdb"]["output_structure_path"] = os.path.join(str(Path(ligand_paths["step3D_complex_pdb"]["output_structure_path"]).parent), f"{ligand_name}_complex.pdb")
-                cat_pdb(**ligand_paths["step3D_complex_pdb"], properties=ligand_prop["step3D_complex_pdb"])
+                global_log.info(f"{ligand_id} > Create complex PDB file")
+                ligand_paths["step3G_complex_pdb"]["input_structure1"] = complex_pdb_path
+                ligand_paths["step3G_complex_pdb"]["output_structure_path"] = os.path.join(str(Path(ligand_paths["step3G_complex_pdb"]["output_structure_path"]).parent), f"{ligand_id}_complex.pdb")
+                cat_pdb(**ligand_paths["step3G_complex_pdb"], properties=ligand_prop["step3G_complex_pdb"])
                 
                 # Update complex pdb path for the next ligands
-                complex_pdb_path = ligand_paths["step3D_complex_pdb"]["output_structure_path"]
+                complex_pdb_path = ligand_paths["step3G_complex_pdb"]["output_structure_path"]
                 
                 # STEP 3E: Make ndx file for the ligand's heavy atoms
-                global_log.info(f"{ligand_name} > Create index file for the ligand's heavy atoms")
-                ligand_paths["step3E_make_ligand_ndx"]["input_structure_path"] = ligand_gro_path
-                make_ndx(**ligand_paths["step3E_make_ligand_ndx"], properties=ligand_prop["step3E_make_ligand_ndx"])
+                global_log.info(f"{ligand_id} > Create index file for the ligand's heavy atoms")
+                ligand_paths["step3H_make_ligand_ndx"]["input_structure_path"] = ligand_gro_path
+                make_ndx(**ligand_paths["step3H_make_ligand_ndx"], properties=ligand_prop["step3H_make_ligand_ndx"])
                 
                 # STEP 3F: Generate restraints for the ligand's heavy atoms
-                global_log.info(f"{ligand_name} > Generate restraints for ligand")
-                ligand_paths["step3F_ligand_restraints"]["input_structure_path"] = ligand_gro_path
-                ligand_paths["step3F_ligand_restraints"]["output_itp_path"] = ligand_restraints_path
-                genrestr(**ligand_paths["step3F_ligand_restraints"], properties=ligand_prop["step3F_ligand_restraints"]) # NOTE: should we modify the name of the POSRES too? - see properties, maybe not needed, they are in a specific moleculetype block
+                global_log.info(f"{ligand_id} > Generate restraints for ligand")
+                ligand_paths["step3I_ligand_restraints"]["input_structure_path"] = ligand_gro_path
+                ligand_paths["step3I_ligand_restraints"]["output_itp_path"] = ligand_restraints_path
+                genrestr(**ligand_paths["step3I_ligand_restraints"], properties=ligand_prop["step3I_ligand_restraints"]) # NOTE: should we modify the name of the POSRES too? - see properties, maybe not needed, they are in a specific moleculetype block
                 
                 # STEP 3G: Append parameterized ligand to the current complex topology zip file
-                ligand_paths["step3G_append_ligand"]["input_top_zip_path"] = complex_topology_path
-                ligand_paths["step3G_append_ligand"]["input_itp_path"] = ligand_itp_path
-                ligand_paths["step3G_append_ligand"]["input_posres_itp_path"] = ligand_restraints_path
-                global_log.info(f"{ligand_name} > Append ligand to the topology")
-                append_ligand(**ligand_paths["step3G_append_ligand"], properties=ligand_prop["step3G_append_ligand"])
+                ligand_paths["step3J_append_ligand"]["input_top_zip_path"] = complex_topology_path
+                ligand_paths["step3J_append_ligand"]["input_itp_path"] = ligand_itp_path
+                ligand_paths["step3J_append_ligand"]["input_posres_itp_path"] = ligand_restraints_path
+                ligand_prop["step3J_append_ligand"]["posres_name"] = ligands_dict[ligand_id]["posres_name"]
+                global_log.info(f"{ligand_id} > Append ligand to the topology")
+                append_ligand(**ligand_paths["step3J_append_ligand"], properties=ligand_prop["step3J_append_ligand"])
                 
                 # Update complex topology path for the next ligands
-                complex_topology_path = ligand_paths["step3G_append_ligand"]["output_top_zip_path"]
+                complex_topology_path = ligand_paths["step3J_append_ligand"]["output_top_zip_path"]
                 
             # Modify paths for the next steps
-            global_paths["step3H_editconf"]["input_gro_path"] = complex_pdb_path
-            global_paths["step3I_solvate"]["input_top_zip_path"] = complex_topology_path
+            global_paths["step3K_editconf"]["input_gro_path"] = complex_pdb_path
+            global_paths["step3L_solvate"]["input_top_zip_path"] = complex_topology_path
             
         # STEP 3H: Create simulation box
-        global_log.info("step3H_editconf: Create the solvent box")
-        editconf(**global_paths["step3H_editconf"], properties=global_prop["step3H_editconf"])
+        global_log.info("step3K_editconf: Create the solvent box")
+        editconf(**global_paths["step3K_editconf"], properties=global_prop["step3K_editconf"])
         
         # STEP 3I: Add solvent molecules
-        global_log.info("step3I_solvate: Fill the solvent box with water molecules")
-        solvate(**global_paths["step3I_solvate"], properties=global_prop["step3I_solvate"])
+        global_log.info("step3L_solvate: Fill the solvent box with water molecules")
+        solvate(**global_paths["step3L_solvate"], properties=global_prop["step3L_solvate"])
 
         # STEP 3J: ion generation pre-processing
-        global_log.info("step3J_grompp_genion: Preprocess ion generation")
-        grompp(**global_paths["step3J_grompp_genion"], properties=global_prop["step3J_grompp_genion"])
+        global_log.info("step3M_grompp_genion: Preprocess ion generation")
+        grompp(**global_paths["step3M_grompp_genion"], properties=global_prop["step3M_grompp_genion"])
 
         # STEP 3K: ion generation
-        global_log.info("step3K_genion: Ion generation")
-        genion(**global_paths["step3K_genion"], properties=global_prop["step3K_genion"])
+        global_log.info("step3N_genion: Ion generation")
+        genion(**global_paths["step3N_genion"], properties=global_prop["step3N_genion"])
         
         # Step 3L: conversion of topology from gro to pdb
-        global_log.info("step3L_gro2pdb: Convert topology from GRO to PDB")
-        gmx_trjconv_str(**global_paths["step3L_gro2pdb"], properties=global_prop["step3L_gro2pdb"])
+        global_log.info("step3O_gro2pdb: Convert topology from GRO to PDB")
+        gmx_trjconv_str(**global_paths["step3O_gro2pdb"], properties=global_prop["step3O_gro2pdb"])
 
         if setup_only:
             global_log.info("Set up only: setup_only flag is set to True! Exiting...")
@@ -964,7 +1084,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
 
     # STEP 4C: create index file
     if ligands_dict:
-        global_prop["step4C_make_ndx"]["selection"] = f'"Protein" | r {" | r ".join(ligand_names)}'
+        global_prop["step4C_make_ndx"]["selection"] = f'"Protein" | r {" | r ".join(list(ligands_dict.keys()))}'
     global_log.info("step4C_make_ndx: Create index file")
     make_ndx(**global_paths["step4C_make_ndx"], properties=global_prop["step4C_make_ndx"])
 
@@ -972,9 +1092,18 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
     global_log.info("step4D_energy_min: Compute potential energy during minimization")
     gmx_energy(**global_paths["step4D_energy_min"], properties=global_prop["step4D_energy_min"])
 
+    chain_posres = " ".join([f"-D{chains_dict[chain]['posres_name']}" for chain in chains_dict])
+    if ligands_dict:
+        ligand_posres = " ".join([f"-D{ligands_dict[ligand]['posres_name']}" for ligand in ligands_dict])
+    else:
+        ligand_posres = ""
+    eq_posres = f"{chain_posres} {ligand_posres}"
+    
     # STEP 4E: NVT equilibration pre-processing
     if ligands_dict:
-        global_prop["step4E_grompp_nvt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(ligand_names)} Water_and_ions"
+        global_prop["step4E_grompp_nvt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions"
+        global_prop["step4E_grompp_nvt"]["mdp"]["define"] = eq_posres
+        
     global_log.info("step4E_grompp_nvt: Preprocess system temperature equilibration")
     grompp(**global_paths["step4E_grompp_nvt"], properties=global_prop["step4E_grompp_nvt"])
 
@@ -988,7 +1117,8 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
 
     # STEP 4H: NPT equilibration pre-processing
     if ligands_dict:
-        global_prop["step4H_grompp_npt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(ligand_names)} Water_and_ions"
+        global_prop["step4H_grompp_npt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions"
+        global_prop["step4H_grompp_npt"]["mdp"]["define"] = eq_posres
     global_log.info("step4H_grompp_npt: Preprocess system pressure equilibration")
     grompp(**global_paths["step4H_grompp_npt"], properties=global_prop["step4H_grompp_npt"])
 
@@ -999,6 +1129,8 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
     # STEP 4J: dump density and pressure evolution
     global_log.info("step4J_density_npt: Compute Density & Pressure during NPT equilibration")
     gmx_energy(**global_paths["step4J_density_npt"], properties=global_prop["step4J_density_npt"])
+    
+    # NOTE: add free equilibration removing those restraints that are not needed in the production run
 
     ##########################
     # Production simulations #
@@ -1031,7 +1163,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
         traj_paths['step6A_rmsd_equilibrated']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
         traj_paths['step6B_rmsd_experimental']['input_structure_path'] = global_paths["step4A_grompp_min"]['input_gro_path']
         traj_paths['step6C_rgyr']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
-        traj_paths['step6D_rmsf']['input_top_path'] = global_paths["step3L_gro2pdb"]['output_str_path']
+        traj_paths['step6D_rmsf']['input_top_path'] = global_paths["step3O_gro2pdb"]['output_str_path']
         
         # Enforce nsteps if provided
         if nsteps is not None:
@@ -1059,7 +1191,8 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
 
         # STEP 17: free NPT production run pre-processing
         if ligands_dict:
-            traj_prop["step5A_grompp_md"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(ligand_names)} Water_and_ions"
+            traj_prop["step5A_grompp_md"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions"
+        traj_prop["step5A_grompp_md"]["mdp"]["define"] = "" # NOTE: here restraint what is asked by the user
         global_log.info(f"{simulation} >  step5A_grompp_md: Preprocess free dynamics")
         grompp(**traj_paths['step5A_grompp_md'], properties=traj_prop["step5A_grompp_md"])
 
