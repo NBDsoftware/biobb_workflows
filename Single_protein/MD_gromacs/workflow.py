@@ -673,7 +673,7 @@ def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
 
 def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chains = None, mutation_list = None, ligands_folder = None, skip_fix_backbone = None, skip_fix_side_chain = None, 
             fix_ss = None, fix_amide_clashes = None, his_protonation_tool = "pdb4amber", his = None, forcefield = 'amber99sb-ildn', setup_only = False, input_gro_path = None, input_top_path = None, 
-            nsteps = None, num_parts = 1, num_replicas = 1, final_analysis = None, output_path = None):
+            equil_only = False, nsteps = None, num_parts = 1, num_replicas = 1, final_analysis = None, output_path = None):
     '''
     Main setup, mutation and MD run workflow with GROMACS. Can be used to retrieve a PDB, fix some defects of the structure,
     add specific mutations, prepare the system, minimize it, equilibrate it and finally do N production runs (either replicas or parts).
@@ -688,7 +688,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
         mutation_list        (str): (Optional) list of mutations to be introduced in the structure
         ligands_folder       (str): (Optional) path to the folder containing the ligand .itp and .gro files
         skip_fix_backbone   (bool): (Optional) whether to skip the fix of the backbone atoms
-        skip_fix_side_chain         (bool): (Optional) whether to skip the fix of the side chain atoms
+        skip_fix_side_chain (bool): (Optional) whether to skip the fix of the side chain atoms
         fix_ss              (bool): (Optional) wether to add disulfide bonds
         fix_amide_clashes   (bool): (Optional) wether to flip clashing amides to relieve the clashes
         his_protonation_tool (str): (Optional) histidine protonation tool to be used (pdb4amber or pdb2gmx). Default: pdb4amber.
@@ -699,6 +699,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
         setup_only          (bool): (Optional) whether to only setup the system or also run the simulations
         input_gro_path       (str): (Optional) path to already-prepared input structure file (.gro)
         input_top_path       (str): (Optional) path to already-prepared input topology file (.zip)
+        equil_only          (bool): (Optional) whether to only run the equilibration or also run the production simulations
         nsteps               (int): (Optional) Total number of steps of the production simulation
         num_parts            (int): (Optional) number of parts of the trajectory 
         num_replicas         (int): (Optional) number of replicas of the trajectory
@@ -1135,6 +1136,10 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
     
     # NOTE: add free equilibration removing those restraints that are not needed in the production run - none by default
 
+    if equil_only:
+        global_log.info("Equilibration only: equil_only flag is set to True! Exiting...")
+        return
+    
     ##########################
     # Production simulations #
     ##########################
@@ -1398,6 +1403,12 @@ if __name__ == "__main__":
                         help="Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, use together with --input_gro (default: None)",
                         required=False)
     
+    # NOTE: using input gro and top we don't have access to the pdb and thus we don't know which POSRES to apply - chains_dict and ligands_dict are not created
+    
+    parser.add_argument('--equil_only', action='store_true',
+                        help="Only run the equilibration steps. Default: False",
+                        required=False, default=False)
+    
     parser.add_argument('--nsteps', dest='nsteps',
                         help="Number of steps of the simulation",
                         required=False)
@@ -1433,5 +1444,5 @@ if __name__ == "__main__":
     main_wf(configuration_path=args.config_path, input_pdb_path=args.input_pdb_path, pdb_code=args.pdb_code, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list, 
             ligands_folder=args.ligands_folder, skip_fix_backbone=args.skip_fix_backbone, skip_fix_side_chain=args.skip_fix_side_chain, fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, 
             his_protonation_tool=args.his_protonation_tool, his=args.his, forcefield=args.forcefield, setup_only=args.setup_only, input_gro_path=args.input_gro_path, 
-            input_top_path=args.input_top_path, nsteps=args.nsteps,  num_parts=args.num_parts, num_replicas=args.num_replicas, final_analysis=args.final_analysis, 
+            input_top_path=args.input_top_path, equil_only=args.equil_only, nsteps=args.nsteps,  num_parts=args.num_parts, num_replicas=args.num_replicas, final_analysis=args.final_analysis, 
             output_path=args.output_path)
