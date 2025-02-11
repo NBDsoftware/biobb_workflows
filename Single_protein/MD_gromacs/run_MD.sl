@@ -20,6 +20,10 @@ ml GROMACS
 module load Miniconda3
 source activate /shared/work/BiobbWorkflows/envs/biobb_md
 
+# Unset env variables that might be set in the loaded modules
+unset PYTHONPATH
+export PATH=/shared/work/BiobbWorkflows/envs/biobb_md/bin:$PATH
+
 # Path to the workflow
 REPO_PATH=/shared/work/BiobbWorkflows/src/biobb_workflows
 WF_PATH=$REPO_PATH/Single_protein/MD_gromacs/
