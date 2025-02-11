@@ -369,6 +369,19 @@ def check_pdb(residues_path: str, global_log):
     
     return residues
     
+def catch_model_0(residue_selection: list, global_log):
+    """
+    Catch the selection of model 0 in the residue list
+    """
+    
+    for residue_dict in residue_selection:
+        
+        if residue_dict['model'] == '0':
+            
+            global_log.error(f"ERROR: Residue selection contains model 0. This is not a valid model for the BioBBs. Please use model 1.")
+            
+            return True
+        
 def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, input_pockets_zip: str, pocket: str, output_path: str, 
             num_top_ligands: int, keep_poses: bool, dock_to_residues: bool, cpus: int, exhaustiveness: int, debug: bool) -> Tuple[Dict, Dict]:
     '''
@@ -429,6 +442,7 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
     if dock_to_residues:
         
         # Extract residues from structure
+        catch_model_0(global_prop['step1b_extract_residues']['residues'], global_log)
         global_log.info("step1b_extract_residues: Extracting residues from structure")
         extract_residues(**global_paths["step1b_extract_residues"], properties=global_prop["step1b_extract_residues"])
         
