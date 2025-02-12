@@ -347,38 +347,38 @@ def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['pro
         # Parameter set available 
         if ligand_name in parameter_sets:
             
-            global_log.info(f"Parameterizing {ligand_name} with custom parameter set")
-            
-            # Zip the custom parameter set in the step2A folder
-            frcmod_zip_path = os.path.join(ligand_prop["step2A_leap_gen_top"]["path"], f"{ligand_name}_frcmod.zip")
-            prep_zip_path = os.path.join(ligand_prop["step2A_leap_gen_top"]["path"], f"{ligand_name}_prep.zip")
-            fu.zip_list(frcmod_zip_path, [parameter_sets[ligand_name]['frcmod']])
-            fu.zip_list(prep_zip_path, [parameter_sets[ligand_name]['prep']])
-            
-            # STEP 2A: Use leap to generate the topology and coordinate files from the custom parameter set
-            ligand_paths["step2A_leap_gen_top"]["input_frcmod_path"] = frcmod_zip_path
-            ligand_paths["step2A_leap_gen_top"]["input_prep_path"] = prep_zip_path
-            ligand_paths["step2A_leap_gen_top"]["forcefield"] = forcefields
-            global_log.info("step2A_leap_gen_top: Generate topology and coordinate files with custom parameter set")
-            leap_gen_top(**ligand_paths["step2A_leap_gen_top"], properties=ligand_prop["step2A_leap_gen_top"]) # NOTE: Does leap add hydrogens?
-                        
-            # If format is gromacs, make conversion
             if format == 'gromacs':
+                
+                # If requested format is gromacs, produce the topology in amber format and convert it to gromacs
+                global_log.info(f"Parameterizing {ligand_name} with custom parameter set")
+                
+                # STEP 2A: Use leap to generate the topology from the custom parameter set
+                ligand_paths["step2A_leap_gen_top"]["input_frcmod_path"] = parameter_sets[ligand_name]['frcmod']
+                ligand_paths["step2A_leap_gen_top"]["input_prep_path"] = parameter_sets[ligand_name]['prep']
+                ligand_paths["step2A_leap_gen_top"]["forcefield"] = forcefields
+                global_log.info("step2A_leap_gen_top: Generate topology with custom parameter set")
+                leap_gen_top(**ligand_paths["step2A_leap_gen_top"], properties=ligand_prop["step2A_leap_gen_top"])
+                            
                 global_log.info("step3A_amber_to_gmx: Convert topology from AMBER to GROMACS")
                 ligand_prop["step3A_amber_to_gmx"]["basename"] = ligand_name
                 global_log.info("step3A_amber_to_gmx: Convert topology from AMBER to GROMACS")
                 acpype_convert_amber_to_gmx(**ligand_paths["step3A_amber_to_gmx"], properties=ligand_prop["step3A_amber_to_gmx"])
-                out_files = [ligand_paths["step3A_amber_to_gmx"]["output_path_gro"], ligand_paths["step3A_amber_to_gmx"]["output_path_top"]]
+                
+                # Output files
+                out_files = [ligand_paths["step3A_amber_to_gmx"]["output_path_top"], ligand_paths["step3A_amber_to_gmx"]["output_path_gro"]]
                 
             elif format == 'amber':
-                out_files = [ligand_paths["step2A_leap_gen_top"]["output_top_path"], ligand_paths["step2A_leap_gen_top"]["output_crd_path"]]
+                
+                # If requested format is amber, use the custom parameter set directly
+                global_log.info(f"Copying custom parameter set for {ligand_name}")
+                out_files = [parameter_sets[ligand_name]['frcmod'], parameter_sets[ligand_name]['prep']]
                 
         # Parameter set not available - generate topology from scratch
         else: 
             
             global_log.info(f"Parameterizing {ligand_name} using GAFF through acpype")
     
-            # NOTE: the charge should be taken into account by protonation tool - to do
+            # NOTE: the charge should be taken into account by protonation tool
             if protonation_tool == 'ambertools':
                 
                 # STEP 2B: Add hydrogens to the ligand using ambertools
@@ -419,21 +419,21 @@ def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['pro
                 ligand_prop["step4B_acpype_params_gmx"]["charge"] = None
                 ligand_prop["step4B_acpype_params_ac"]["charge"] = None
                 
-            # Create gromacs topology and coordinate files
+            # Create gromacs topology
             if format == 'gromacs':
                 ligand_prop["step4B_acpype_params_gmx"]["basename"] = ligand_name
                 global_log.info("step4B_acpype_params_gmx: Generating GROMACS ligand parameters")
                 acpype_params_gmx(**ligand_paths["step4B_acpype_params_gmx"], properties=ligand_prop["step4B_acpype_params_gmx"])
-                out_files = [ligand_paths["step4B_acpype_params_gmx"]["output_path_gro"], ligand_paths["step4B_acpype_params_gmx"]["output_path_itp"]]
+                out_files = [ligand_paths["step4B_acpype_params_gmx"]["output_path_itp"], ligand_paths["step4B_acpype_params_gmx"]["output_path_gro"]]
             
-            # Create amber topology and coordinate files
+            # Create amber topology 
             if format == 'amber':
                 ligand_prop["step4B_acpype_params_ac"]["basename"] = ligand_name
                 global_log.info("step4B_acpype_params_ac: Generating AMBER ligand parameters")
                 acpype_params_ac(**ligand_paths["step4B_acpype_params_ac"], properties=ligand_prop["step4B_acpype_params_ac"])
-                out_files = [ligand_paths["step4B_acpype_params_ac"]["output_path_inpcrd"], ligand_paths["step4B_acpype_params_ac"]["output_path_prmtop"]]
+                out_files = [ligand_paths["step4B_acpype_params_ac"]["output_path_frcmod"], ligand_paths["step4B_acpype_params_ac"]["output_path_lib"]]
                 
-        # Copy the top and coordinate files of this ligand to the final output folder
+        # Copy the topology of this ligand to the final output folder
         copy_out_files(out_files, ligand_name, output_top_path)
         
     # Print timing information to log file
@@ -489,7 +489,7 @@ if __name__ == '__main__':
                         required=False, default=None)
     
     parser.add_argument('--protonation_tool', dest='protonation_tool', 
-                        help='Protonation tool to use, use none to avoid protonation. Options: ambertools, obabel, none. Default: ambertools.',
+                        help='Protonation tool, use none to avoid ligand protonation. Options: ambertools, obabel, none. Default: ambertools.',
                         required=False, default='ambertools')
     
     parser.add_argument('--skip_min', action='store_true',
@@ -497,7 +497,7 @@ if __name__ == '__main__':
                         required=False, default=False)
     
     parser.add_argument('--output_top_path', dest='output_top_path',
-                        help='Output path for the folder with topologies and coordinate files.',
+                        help='Output path for the folder with ligand topologies (Amber: .frcmod and .prep/.lib files, Gromacs: .gro and .itp files).',
                         required=False, default=None)
 
     parser.add_argument('--output', dest='output_path',
