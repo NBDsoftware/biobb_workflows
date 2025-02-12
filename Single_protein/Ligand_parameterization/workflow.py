@@ -365,7 +365,7 @@ def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['pro
                 acpype_convert_amber_to_gmx(**ligand_paths["step3A_amber_to_gmx"], properties=ligand_prop["step3A_amber_to_gmx"])
                 
                 # Output files
-                out_files = [ligand_paths["step3A_amber_to_gmx"]["output_path_top"]]
+                out_files = [ligand_paths["step3A_amber_to_gmx"]["output_path_top"], ligand_paths["step3A_amber_to_gmx"]["output_path_gro"]]
                 
             elif format == 'amber':
                 
@@ -424,7 +424,7 @@ def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['pro
                 ligand_prop["step4B_acpype_params_gmx"]["basename"] = ligand_name
                 global_log.info("step4B_acpype_params_gmx: Generating GROMACS ligand parameters")
                 acpype_params_gmx(**ligand_paths["step4B_acpype_params_gmx"], properties=ligand_prop["step4B_acpype_params_gmx"])
-                out_files = [ligand_paths["step4B_acpype_params_gmx"]["output_path_itp"]]
+                out_files = [ligand_paths["step4B_acpype_params_gmx"]["output_path_itp"], ligand_paths["step4B_acpype_params_gmx"]["output_path_gro"]]
             
             # Create amber topology 
             if format == 'amber':
@@ -497,7 +497,7 @@ if __name__ == '__main__':
                         required=False, default=False)
     
     parser.add_argument('--output_top_path', dest='output_top_path',
-                        help='Output path for the folder with ligand topologies.',
+                        help='Output path for the folder with ligand topologies (Amber: .frcmod and .prep/.lib files, Gromacs: .gro and .itp files).',
                         required=False, default=None)
 
     parser.add_argument('--output', dest='output_path',
