@@ -116,15 +116,15 @@ def highest_occupancy_altlocs(pdb_file, global_log) -> List[str]:
         
     return altloc_residues
 
-def get_ligands(ligands_folder: Union[str, None], global_log) -> List[Dict[str, str]]:
+def get_ligands(ligands_top_folder: Union[str, None], global_log) -> List[Dict[str, str]]:
     """
-    Get a list of available ligands in the ligands folder. The function searches for all the .itp and .gro files in the ligands folder
-    If the ligands folder is provided but doesn't exist or any of the ligands is missing the topology or coordinate file, an error is raised.
+    Get a list of available ligands in the ligands topology folder. The function searches for all the .itp and .gro files in the folder
+    If the folder is provided but doesn't exist or any .itp/.gro file is missing, an error is raised.
     
     Inputs
     ------
     
-        ligands_folder (str): Path to the folder with the ligand .itp and .gro files.
+        ligands_top_folder (str): Path to the folder with the ligands .itp files.
         global_log: Logger object for logging messages.
     
     Returns
@@ -149,16 +149,16 @@ def get_ligands(ligands_folder: Union[str, None], global_log) -> List[Dict[str, 
     ligands = {}
 
     # If ligands folder is not provided, return an empty list
-    if ligands_folder is None:
+    if ligands_top_folder is None:
         return ligands
     
     # Check if the ligands folder exists
-    if not os.path.exists(ligands_folder):
-        global_log.error(f"Folder {ligands_folder} not found")
+    if not os.path.exists(ligands_top_folder):
+        global_log.error(f"Folder {ligands_top_folder} not found")
         return ligands
     
     # Search for ligands in the ligands folder
-    for file in os.listdir(ligands_folder):
+    for file in os.listdir(ligands_top_folder):
         
         # Check if the file is a .itp or .gro file
         if file.endswith(".itp") or file.endswith(".gro"):
@@ -172,14 +172,14 @@ def get_ligands(ligands_folder: Union[str, None], global_log) -> List[Dict[str, 
             # Check if the ligand name is already in the dictionary
             if ligand_id in ligands:
                 if file_extension == ".itp":
-                    ligands[ligand_id]['topology'] = os.path.join(ligands_folder, file)
+                    ligands[ligand_id]['topology'] = os.path.join(ligands_top_folder, file)
                 elif file_extension == ".gro":
-                    ligands[ligand_id]['coordinates'] = os.path.join(ligands_folder, file)
+                    ligands[ligand_id]['coordinates'] = os.path.join(ligands_top_folder, file)
             else:
                 if file_extension == ".itp":
-                    ligands[ligand_id] = {'topology': os.path.join(ligands_folder, file)}
+                    ligands[ligand_id] = {'topology': os.path.join(ligands_top_folder, file)}
                 elif file_extension == ".gro":
-                    ligands[ligand_id] = {'coordinates': os.path.join(ligands_folder, file)}
+                    ligands[ligand_id] = {'coordinates': os.path.join(ligands_top_folder, file)}
     
     # Check if all ligands have both topology and coordinate files
     for ligand, files in ligands.items():
@@ -446,7 +446,7 @@ def set_gpu_use(global_properties: dict, gpu_use: bool) -> None:
     for step in list_of_steps:
         global_properties[step]['use_gpu'] = gpu_use
 
-def set_gmx_properties(global_properties: dict, gmx_properties: dict, global_log) -> None:
+def set_global_gmx_properties(global_properties: dict, gmx_properties: dict, global_log) -> None:
     """
     Set all the gmx global properties of this workflow, i.e. those global properties included at the beginning of the YAML configuration file that
     are general to some gmx steps.
@@ -671,7 +671,7 @@ def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
         merge_xvgtimeseries_files(file_paths, output_xvg_path)
     
 
-def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chains = None, mutation_list = None, ligands_folder = None, skip_fix_backbone = None, skip_fix_side_chain = None, 
+def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chains = None, mutation_list = None, ligands_top_folder = None, skip_fix_backbone = None, skip_fix_side_chain = None, 
             fix_ss = None, fix_amide_clashes = None, his_protonation_tool = "pdb4amber", his = None, forcefield = 'amber99sb-ildn', setup_only = False, input_gro_path = None, input_top_path = None, 
             equil_only = False, nsteps = None, num_parts = 1, num_replicas = 1, final_analysis = None, output_path = None):
     '''
@@ -686,7 +686,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
         pdb_code             (str): (Optional) PDB code to be used to get the canonical FASTA sequence
         pdb_chains           (str): (Optional) list of chains to be extracted from the PDB file and fixed
         mutation_list        (str): (Optional) list of mutations to be introduced in the structure
-        ligands_folder       (str): (Optional) path to the folder containing the ligand .itp and .gro files
+        ligands_top_folder   (str): (Optional) path to the folder containing the ligand .itp and .gro files
         skip_fix_backbone   (bool): (Optional) whether to skip the fix of the backbone atoms
         skip_fix_side_chain (bool): (Optional) whether to skip the fix of the side chain atoms
         fix_ss              (bool): (Optional) wether to add disulfide bonds
@@ -752,7 +752,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
     global_paths = conf.get_paths_dic()
 
     # Set properties for gmx steps
-    set_gmx_properties(global_prop, gmx_properties, global_log)
+    set_global_gmx_properties(global_prop, gmx_properties, global_log)
 
     ##############################################
     # Extract atoms and prepare structure for MD #
@@ -980,7 +980,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
         global_paths["step3D_append_posres"]["input_ndx_path"] = master_index_file
         ndx2resttop(**global_paths["step3D_append_posres"], properties=global_prop["step3D_append_posres"])
         
-        ligands_dict = get_ligands(ligands_folder, global_log)
+        ligands_dict = get_ligands(ligands_top_folder, global_log)
         
         if ligands_dict:
             
@@ -1070,6 +1070,10 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
             return
 
     else:
+        
+        global_log.info("Using prepared structure for MD")
+        global_log.info(f"Input GRO file: {input_gro_path}")
+        global_log.info(f"Input TOP file: {input_top_path}")
         
         # If prepared structure is provided, update the global paths
         global_paths['step4A_grompp_min']['input_gro_path'] = input_gro_path
@@ -1161,7 +1165,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
         traj_paths = conf.get_paths_dic(prefix=simulation)
 
         # Set general properties for all steps
-        set_gmx_properties(traj_prop, gmx_properties, global_log)
+        set_global_gmx_properties(traj_prop, gmx_properties, global_log)
 
         # Update previous global paths needed by simulation-specific steps
         traj_paths['step5A_grompp_md']['input_gro_path'] = global_paths["step5A_grompp_md"]['input_gro_path']
@@ -1286,7 +1290,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
                 traj_paths = conf.get_paths_dic(prefix=simulation)
                 
                 # Set general properties for all steps
-                set_gmx_properties(traj_prop, gmx_properties, global_log)
+                set_global_gmx_properties(traj_prop, gmx_properties, global_log)
                 
                 # NOTE: we are hard-coding the kind of traj that we are using with these paths: output_trr_path
                 # Update previous global paths needed by simulation-specific steps
@@ -1359,8 +1363,8 @@ if __name__ == "__main__":
                         help="List of mutations to be introduced in the protein (default: None, ex: A:Arg220Ala)",
                         required=False)
 
-    parser.add_argument('--ligands_folder', dest='ligands_folder',
-                        help="Folder with .itp and .gro files for the ligands that should be included in the simulation. Default: None",
+    parser.add_argument('--ligands_folder', dest='ligands_top_folder',
+                        help="Path to folder with .itp and .gro files for the ligands that should be included in the simulation. Note that the ligand coordinates don't have to be present in the PDB. However the coordinates for the ligand in the .gro should not clash with the PDB coordinates. Make sure to use the ligand coordinates (.gro) that correspond the structure coordinates in the PDB. Default: None",
                         required=False)
 
     parser.add_argument('--skip_fix_backbone', action='store_true', dest='skip_fix_backbone',
@@ -1410,7 +1414,7 @@ if __name__ == "__main__":
                         required=False, default=False)
     
     parser.add_argument('--nsteps', dest='nsteps',
-                        help="Number of steps of the simulation",
+                        help="Number of steps of the production simulation",
                         required=False)
     
     parser.add_argument('--num_parts', dest='num_parts',
@@ -1442,7 +1446,7 @@ if __name__ == "__main__":
         raise Exception("Both --input_pdb and --input_gro/--input_top are provided. Please provide only one of them")
 
     main_wf(configuration_path=args.config_path, input_pdb_path=args.input_pdb_path, pdb_code=args.pdb_code, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list, 
-            ligands_folder=args.ligands_folder, skip_fix_backbone=args.skip_fix_backbone, skip_fix_side_chain=args.skip_fix_side_chain, fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, 
+            ligands_top_folder=args.ligands_top_folder, skip_fix_backbone=args.skip_fix_backbone, skip_fix_side_chain=args.skip_fix_side_chain, fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, 
             his_protonation_tool=args.his_protonation_tool, his=args.his, forcefield=args.forcefield, setup_only=args.setup_only, input_gro_path=args.input_gro_path, 
             input_top_path=args.input_top_path, equil_only=args.equil_only, nsteps=args.nsteps,  num_parts=args.num_parts, num_replicas=args.num_replicas, final_analysis=args.final_analysis, 
             output_path=args.output_path)
