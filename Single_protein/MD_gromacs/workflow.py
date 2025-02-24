@@ -784,6 +784,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
             global_prop["step2B_mutations"]["mutation_list"] = ",".join(mutation_list)
         global_log.info("step2B_mutations: Preparing mutated structure")
         mutate(**global_paths["step2B_mutations"], properties=global_prop["step2B_mutations"])
+        last_pdb_path = global_paths["step2B_mutations"]["output_pdb_path"]
         
         # Model the backbone atoms
         if not skip_fix_backbone:
@@ -817,8 +818,6 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
             if not fasta_available:
                 global_log.info("step2C_pdb_tofasta: Get FASTA from SEQRES of PDB file")
                 fasta_available = fasta_from_pdb(global_paths["step1A_extractAtoms"]["input_structure_path"], global_paths["step2C_pdb_tofasta"]["output_file_path"], global_log)
-
-                # Update fix backbone input
                 global_paths['step2D_fixbackbone']['input_fasta_canonical_sequence_path'] = global_paths['step2C_pdb_tofasta']['output_file_path']
                 
             # ... from the residues in the PDB file (not canonical)
@@ -830,8 +829,6 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
                 
                 # Only existing residues in the PDB file are included
                 biobb_pdb_tofasta(**global_paths["step2C_pdb_tofasta"], properties=global_prop["step2C_pdb_tofasta"])
-                
-                # Update fix backbone input
                 global_paths['step2D_fixbackbone']['input_fasta_canonical_sequence_path'] = global_paths['step2C_pdb_tofasta']['output_file_path']
                 fasta_available = True
                 
@@ -839,42 +836,41 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
             if fasta_available:
                 global_log.info("step2D_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
                 fix_backbone(**global_paths["step2D_fixbackbone"], properties=global_prop["step2D_fixbackbone"])
+                last_pdb_path = global_paths["step2D_fixbackbone"]["output_pdb_path"]
             else:
                 global_log.warning("step2D_fixbackbone: Could not get FASTA sequence. Skipping modeling of the missing heavy atoms in the backbone.")
-                global_paths['step2E_fixsidechain']['input_pdb_path'] = global_paths['step2B_mutations']['output_pdb_path']
         else:
             global_log.info("step2D_fixbackbone: Skipping modeling of the missing heavy atoms in the backbone")
-            global_paths['step2E_fixsidechain']['input_pdb_path'] = global_paths['step2B_mutations']['output_pdb_path']
 
         # STEP 2E: model missing heavy atoms of side chains
         if not skip_fix_side_chain:
+            global_paths['step2E_fixsidechain']['input_pdb_path'] = last_pdb_path
             global_log.info("step2E_fixsidechain: Modeling the missing heavy atoms in the structure side chains")
             fix_side_chain(**global_paths["step2E_fixsidechain"], properties=global_prop["step2E_fixsidechain"])
+            last_pdb_path = global_paths["step2E_fixsidechain"]["output_pdb_path"]
         else:
             global_log.info("step2E_fixsidechain: Skipping modeling of the missing heavy atoms in the side chains")
-            if not skip_fix_backbone:
-                global_paths['step2F_fixssbonds']['input_pdb_path'] = global_paths['step2D_fixbackbone']['output_pdb_path']
-            else:
-                global_paths['step2F_fixssbonds']['input_pdb_path'] = global_paths['step2B_mutations']['output_pdb_path']
 
         # STEP 2F: model SS bonds (CYS -> CYX)
         if fix_ss:
             global_log.info("step2F_fixssbonds: Fix SS bonds")
+            global_paths['step2F_fixssbonds']['input_pdb_path'] = last_pdb_path
             fix_ssbonds(**global_paths["step2F_fixssbonds"], properties=global_prop["step2F_fixssbonds"])
+            last_pdb_path = global_paths["step2F_fixssbonds"]["output_pdb_path"]
         else:
-            global_paths['step2G_fixamides']['input_pdb_path'] = global_paths['step2E_fixsidechain']['output_pdb_path']
+            global_log.info("step2F_fixssbonds: Skipping modeling of the SS bonds")
 
         # STEP 2G: Rotate amide groups to fix clashes
         if fix_amide_clashes:
             global_log.info("step2G_fixamides: fix clashing amides")
+            global_paths['step2G_fixamides']['input_pdb_path'] = last_pdb_path
             fix_amides(**global_paths["step2G_fixamides"], properties=global_prop["step2G_fixamides"])
+            last_pdb_path = global_paths["step2G_fixamides"]["output_pdb_path"]
         else:
-            if fix_ss:
-                global_paths['step2H_fixchirality']['input_pdb_path'] = global_paths['step2F_fixssbonds']['output_pdb_path']
-            else:
-                global_paths['step2H_fixchirality']['input_pdb_path'] = global_paths['step2E_fixsidechain']['output_pdb_path']
+            global_log.info("step2G_fixamides: Skipping fixing clashing amides")
 
         # STEP 2H: Fix chirality
+        global_paths['step2H_fixchirality']['input_pdb_path'] = last_pdb_path
         global_log.info("step2H_fixchirality: fix chirality of residues")
         fix_chirality(**global_paths["step2H_fixchirality"], properties=global_prop["step2H_fixchirality"])
 
