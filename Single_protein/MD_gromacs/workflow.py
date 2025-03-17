@@ -1106,7 +1106,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
     # STEP 4E: NVT equilibration pre-processing
     if ligands_dict:
         global_prop["step4E_grompp_nvt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions"
-        global_prop["step4E_grompp_nvt"]["mdp"]["define"] = eq_posres
+    global_prop["step4E_grompp_nvt"]["mdp"]["define"] = eq_posres
         
     global_log.info("step4E_grompp_nvt: Preprocess system temperature equilibration")
     grompp(**global_paths["step4E_grompp_nvt"], properties=global_prop["step4E_grompp_nvt"])
@@ -1122,7 +1122,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
     # STEP 4H: NPT equilibration pre-processing
     if ligands_dict:
         global_prop["step4H_grompp_npt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions"
-        global_prop["step4H_grompp_npt"]["mdp"]["define"] = eq_posres
+    global_prop["step4H_grompp_npt"]["mdp"]["define"] = eq_posres
     global_log.info("step4H_grompp_npt: Preprocess system pressure equilibration")
     grompp(**global_paths["step4H_grompp_npt"], properties=global_prop["step4H_grompp_npt"])
 
