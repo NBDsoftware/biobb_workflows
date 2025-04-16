@@ -1360,7 +1360,9 @@ if __name__ == "__main__":
                         required=False)
 
     parser.add_argument('--ligands_folder', dest='ligands_top_folder',
-                        help="Path to folder with .itp and .gro files for the ligands that should be included in the simulation. Note that the ligand coordinates don't have to be present in the PDB. However the coordinates for the ligand in the .gro should not clash with the PDB coordinates. Make sure to use the ligand coordinates (.gro) that correspond the structure coordinates in the PDB. Default: None",
+                        help="""Path to folder with .itp and .gro files for the ligands that 
+                        should be included in the simulation. Make sure the coordinates of the 
+                        ligands do not clash with the PDB coordinates. Default: None""",
                         required=False)
 
     parser.add_argument('--skip_fix_backbone', action='store_true', dest='skip_fix_backbone',
