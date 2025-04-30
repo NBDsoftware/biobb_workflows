@@ -686,6 +686,7 @@ def main_wf(configuration_path,
             his = None, 
             keep_hs = False, 
             forcefield = 'amber99sb-ildn', 
+            salt_concentration = 0.15,
             setup_only = False, 
             input_gro_path = None, 
             input_top_path = None, 
@@ -721,6 +722,7 @@ def main_wf(configuration_path,
         forcefield           (str): (Optional) forcefield to be used in the simulation. Default: amber99sb-ildn. See values supported by pdb2gmx 
                                     (gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, 
                                     amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut). 
+        salt_concentration (float): (Optional) salt concentration to be used in the simulation. Default: 0.15.
         setup_only          (bool): (Optional) whether to only setup the system or also run the simulations
         input_gro_path       (str): (Optional) path to already-prepared input structure file (.gro)
         input_top_path       (str): (Optional) path to already-prepared input topology file (.zip)
@@ -1082,6 +1084,7 @@ def main_wf(configuration_path,
 
         # STEP 3K: ion generation
         global_log.info("step3N_genion: Ion generation")
+        global_prop["step3N_genion"]["concentration"] = salt_concentration
         genion(**global_paths["step3N_genion"], properties=global_prop["step3N_genion"])
         
         # Step 3L: conversion of topology from gro to pdb
@@ -1431,6 +1434,10 @@ if __name__ == "__main__":
                         help="Forcefield to use. Default: amber99sb-ildn",
                         required=False, default='amber99sb-ildn')
 
+    parser.add_argument('--salt_conc', dest='salt_concentration',
+                        help="Concentration of salt in the system. Default: 0.15",
+                        required=False, default=0.15)
+    
     parser.add_argument('--setup_only', action='store_true',
                         help="Only setup the system. Default: False",
                         required=False, default=False)
@@ -1494,6 +1501,7 @@ if __name__ == "__main__":
             his_protonation_tool=args.his_protonation_tool, 
             his=args.his, keep_hs=args.keep_hs, 
             forcefield=args.forcefield, 
+            salt_concentration=args.salt_concentration,
             setup_only=args.setup_only, 
             input_gro_path=args.input_gro_path, 
             input_top_path=args.input_top_path, 
