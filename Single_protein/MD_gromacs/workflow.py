@@ -678,6 +678,7 @@ def main_wf(configuration_path,
             mutation_list = None, 
             ligands_top_folder = None, 
             skip_fix_backbone = False, 
+            add_caps = False,
             skip_fix_side_chain = False, 
             skip_fix_ss = False, 
             fix_amide_clashes = None, 
@@ -709,6 +710,7 @@ def main_wf(configuration_path,
         mutation_list        (str): (Optional) list of mutations to be introduced in the structure
         ligands_top_folder   (str): (Optional) path to the folder containing the ligand .itp and .gro files
         skip_fix_backbone   (bool): (Optional) whether to skip the fix of the backbone atoms. Default: False.
+        add_caps            (bool): (Optional) whether to add caps to the terminal residues. Default: False.
         skip_fix_side_chain (bool): (Optional) whether to skip the fix of the side chain atoms. Default: False.
         skip_fix_ss         (bool): (Optional) whether to add disulfide bonds. Default: False.
         fix_amide_clashes   (bool): (Optional) whether to flip clashing amides to relieve the clashes
@@ -858,6 +860,7 @@ def main_wf(configuration_path,
             # STEP 2D: Model missing heavy atoms of backbone
             if fasta_available:
                 global_log.info("step2D_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
+                global_prop["step2D_fixbackbone"]["add_caps"] = add_caps
                 fix_backbone(**global_paths["step2D_fixbackbone"], properties=global_prop["step2D_fixbackbone"])
                 last_pdb_path = global_paths["step2D_fixbackbone"]["output_pdb_path"]
             else:
@@ -1393,6 +1396,10 @@ if __name__ == "__main__":
                         help="Skip the backbone modeling of missing atoms. Default: False",
                         required=False)
     
+    parser.add_argument('--add_caps', action='store_true', dest='add_caps',
+                        help="Add caps to the protein. Default: False",
+                        required=False)
+    
     parser.add_argument('--skip_fix_sc', action='store_true', dest='skip_fix_side_chain',
                         help="Skip the side chain modeling of missing atoms. Default: False",
                         required=False)
@@ -1473,8 +1480,26 @@ if __name__ == "__main__":
     if (args.input_pdb_path is not None and args.input_gro_path is not None):
         raise Exception("Both --input_pdb and --input_gro/--input_top are provided. Please provide only one of them")
 
-    main_wf(configuration_path=args.config_path, input_pdb_path=args.input_pdb_path, pdb_code=args.pdb_code, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list, 
-            ligands_top_folder=args.ligands_top_folder, skip_fix_backbone=args.skip_fix_backbone, skip_fix_side_chain=args.skip_fix_side_chain, skip_fix_ss=args.skip_fix_ss, fix_amide_clashes=args.fix_amide_clashes, 
-            his_protonation_tool=args.his_protonation_tool, his=args.his, keep_hs=args.keep_hs, forcefield=args.forcefield, setup_only=args.setup_only, input_gro_path=args.input_gro_path, 
-            input_top_path=args.input_top_path, equil_only=args.equil_only, nsteps=args.nsteps,  num_parts=args.num_parts, num_replicas=args.num_replicas, final_analysis=args.final_analysis, 
+    main_wf(configuration_path=args.config_path, 
+            input_pdb_path=args.input_pdb_path, 
+            pdb_code=args.pdb_code, 
+            pdb_chains=args.pdb_chains, 
+            mutation_list=args.mutation_list, 
+            ligands_top_folder=args.ligands_top_folder, 
+            skip_fix_backbone=args.skip_fix_backbone, 
+            add_caps=args.add_caps,
+            skip_fix_side_chain=args.skip_fix_side_chain, 
+            skip_fix_ss=args.skip_fix_ss, 
+            fix_amide_clashes=args.fix_amide_clashes, 
+            his_protonation_tool=args.his_protonation_tool, 
+            his=args.his, keep_hs=args.keep_hs, 
+            forcefield=args.forcefield, 
+            setup_only=args.setup_only, 
+            input_gro_path=args.input_gro_path, 
+            input_top_path=args.input_top_path, 
+            equil_only=args.equil_only, 
+            nsteps=args.nsteps,  
+            num_parts=args.num_parts, 
+            num_replicas=args.num_replicas, 
+            final_analysis=args.final_analysis, 
             output_path=args.output_path)
