@@ -671,9 +671,30 @@ def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
         merge_xvgtimeseries_files(file_paths, output_xvg_path)
     
 
-def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chains = None, mutation_list = None, ligands_top_folder = None, skip_fix_backbone = None, skip_fix_side_chain = None, 
-            fix_ss = None, fix_amide_clashes = None, his_protonation_tool = "pdb4amber", his = None, forcefield = 'amber99sb-ildn', setup_only = False, input_gro_path = None, input_top_path = None, 
-            equil_only = False, nsteps = None, num_parts = 1, num_replicas = 1, final_analysis = None, output_path = None):
+def main_wf(configuration_path, 
+            input_pdb_path = None, 
+            pdb_code = None, 
+            pdb_chains = None, 
+            mutation_list = None, 
+            ligands_top_folder = None, 
+            skip_fix_backbone = False, 
+            skip_fix_side_chain = False, 
+            skip_fix_ss = False, 
+            fix_amide_clashes = None, 
+            his_protonation_tool = "pdb4amber", 
+            his = None, 
+            keep_hs = False, 
+            forcefield = 'amber99sb-ildn', 
+            setup_only = False, 
+            input_gro_path = None, 
+            input_top_path = None, 
+            equil_only = False, 
+            nsteps = None, 
+            num_parts = 1, 
+            num_replicas = 1, 
+            final_analysis = None, 
+            output_path = None
+    ):
     '''
     Main setup, mutation and MD run workflow with GROMACS. Can be used to retrieve a PDB, fix some defects of the structure,
     add specific mutations, prepare the system, minimize it, equilibrate it and finally do N production runs (either replicas or parts).
@@ -687,12 +708,14 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
         pdb_chains           (str): (Optional) list of chains to be extracted from the PDB file and fixed
         mutation_list        (str): (Optional) list of mutations to be introduced in the structure
         ligands_top_folder   (str): (Optional) path to the folder containing the ligand .itp and .gro files
-        skip_fix_backbone   (bool): (Optional) whether to skip the fix of the backbone atoms
-        skip_fix_side_chain (bool): (Optional) whether to skip the fix of the side chain atoms
-        fix_ss              (bool): (Optional) wether to add disulfide bonds
-        fix_amide_clashes   (bool): (Optional) wether to flip clashing amides to relieve the clashes
+        skip_fix_backbone   (bool): (Optional) whether to skip the fix of the backbone atoms. Default: False.
+        skip_fix_side_chain (bool): (Optional) whether to skip the fix of the side chain atoms. Default: False.
+        skip_fix_ss         (bool): (Optional) whether to add disulfide bonds. Default: False.
+        fix_amide_clashes   (bool): (Optional) whether to flip clashing amides to relieve the clashes
         his_protonation_tool (str): (Optional) histidine protonation tool to be used (pdb4amber or pdb2gmx). Default: pdb4amber.
         his                  (str): (Optional) histidine protonation states to be used in the simulation. Default: None. See values supported by pdb2gmx
+        keep_hs             (bool): (Optional) Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx will add them 
+                                    (considering canonical pKa values and a pH of 7 by default). Default: False
         forcefield           (str): (Optional) forcefield to be used in the simulation. Default: amber99sb-ildn. See values supported by pdb2gmx 
                                     (gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, 
                                     amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut). 
@@ -852,7 +875,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
             global_log.info("step2E_fixsidechain: Skipping modeling of the missing heavy atoms in the side chains")
 
         # STEP 2F: model SS bonds (CYS -> CYX)
-        if fix_ss:
+        if not skip_fix_ss:
             global_log.info("step2F_fixssbonds: Fix SS bonds")
             global_paths['step2F_fixssbonds']['input_pdb_path'] = last_pdb_path
             fix_ssbonds(**global_paths["step2F_fixssbonds"], properties=global_prop["step2F_fixssbonds"])
@@ -906,6 +929,7 @@ def main_wf(configuration_path, input_pdb_path = None, pdb_code = None, pdb_chai
             
         global_log.info("step3B_structure_topology: Generate the topology")
         global_prop["step3B_structure_topology"]["force_field"]=forcefield
+        global_prop["step3B_structure_topology"]["ignh"] = not keep_hs
         pdb2gmx(**global_paths["step3B_structure_topology"], properties=global_prop["step3B_structure_topology"])
         
         master_index_file = ""
@@ -1373,7 +1397,7 @@ if __name__ == "__main__":
                         help="Skip the side chain modeling of missing atoms. Default: False",
                         required=False)
     
-    parser.add_argument('--fix_ss', action='store_true',
+    parser.add_argument('--skip_fix_ss', action='store_true',
                         help="Add disulfide bonds to the protein. Use carefully! Default: False",
                         required=False)
 
@@ -1384,10 +1408,17 @@ if __name__ == "__main__":
     parser.add_argument('--his_protonation_tool', dest='his_protonation_tool',
                         help="Tool to use for histidine protonation (pdb4amber or pdb2gmx). Default: pdb4amber",
                         required=False, default='pdb4amber')
+    # NOTE: This option should be revisited 
     
     parser.add_argument('--his', dest='his',
                         help="Histidine protonation states with pdb2gmx convention (HID: 0, HIE: 1, HIP:2). Overrides his_protonation_tool. Default: None. Example: '0 1 1'",
                         required=False)
+    # NOTE: This option will be removed in the future 
+    
+    parser.add_argument('--keep_hs', action='store_true',
+                        help="Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx will add them (considering canonical pKa values and a pH of 7 by default). Default: False",
+                        required=False)
+    # NOTE: Maybe if this option is active we should also ignore the input pH - and add a warning if the pH is given. Otherwise we won't be able to keep the external hydrogens in the titratable residues
     
     parser.add_argument('--forcefield', dest='forcefield',
                         help="Forcefield to use. Default: amber99sb-ildn",
@@ -1404,7 +1435,6 @@ if __name__ == "__main__":
     parser.add_argument('--input_top', dest='input_top_path',
                         help="Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, use together with --input_gro (default: None)",
                         required=False)
-    
     # NOTE: using input gro and top we don't have access to the pdb and thus we don't know which POSRES to apply - chains_dict and ligands_dict are not created
     
     parser.add_argument('--equil_only', action='store_true',
@@ -1431,7 +1461,7 @@ if __name__ == "__main__":
                         help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
     
-    # NOTE: add flag to determine what should remain restrained during the production run - currently everything is free
+    # NOTE: add flag to determine what should remain restrained during the production run - currently everything is free always
 
     args = parser.parse_args()
 
@@ -1444,7 +1474,7 @@ if __name__ == "__main__":
         raise Exception("Both --input_pdb and --input_gro/--input_top are provided. Please provide only one of them")
 
     main_wf(configuration_path=args.config_path, input_pdb_path=args.input_pdb_path, pdb_code=args.pdb_code, pdb_chains=args.pdb_chains, mutation_list=args.mutation_list, 
-            ligands_top_folder=args.ligands_top_folder, skip_fix_backbone=args.skip_fix_backbone, skip_fix_side_chain=args.skip_fix_side_chain, fix_ss=args.fix_ss, fix_amide_clashes=args.fix_amide_clashes, 
-            his_protonation_tool=args.his_protonation_tool, his=args.his, forcefield=args.forcefield, setup_only=args.setup_only, input_gro_path=args.input_gro_path, 
+            ligands_top_folder=args.ligands_top_folder, skip_fix_backbone=args.skip_fix_backbone, skip_fix_side_chain=args.skip_fix_side_chain, skip_fix_ss=args.skip_fix_ss, fix_amide_clashes=args.fix_amide_clashes, 
+            his_protonation_tool=args.his_protonation_tool, his=args.his, keep_hs=args.keep_hs, forcefield=args.forcefield, setup_only=args.setup_only, input_gro_path=args.input_gro_path, 
             input_top_path=args.input_top_path, equil_only=args.equil_only, nsteps=args.nsteps,  num_parts=args.num_parts, num_replicas=args.num_replicas, final_analysis=args.final_analysis, 
             output_path=args.output_path)
