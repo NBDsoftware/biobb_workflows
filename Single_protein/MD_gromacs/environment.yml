@@ -6,6 +6,7 @@ channels:
 dependencies:
   - python==3.10
   - modeller                        # Activate if you want to use Modeller
+  - propka==3.5.1
   - biobb_io>=5.0.0
   - biobb_common>=5.0.0
   - biobb_structure_utils>=5.0.0
