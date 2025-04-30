@@ -682,7 +682,7 @@ def main_wf(configuration_path,
             skip_fix_side_chain = False, 
             skip_fix_ss = False, 
             fix_amide_clashes = None, 
-            his_protonation_tool = "pdb4amber", 
+            pH = 7.0,
             keep_hs = False, 
             forcefield = 'amber99sb-ildn', 
             salt_concentration = 0.15,
@@ -714,7 +714,7 @@ def main_wf(configuration_path,
         skip_fix_side_chain (bool): (Optional) whether to skip the fix of the side chain atoms. Default: False.
         skip_fix_ss         (bool): (Optional) whether to add disulfide bonds. Default: False.
         fix_amide_clashes   (bool): (Optional) whether to flip clashing amides to relieve the clashes
-        his_protonation_tool (str): (Optional) histidine protonation tool to be used (pdb4amber or pdb2gmx). Default: pdb4amber.
+        pH                 (float): (Optional) pH to be used for the protonation state of the titratable residues. Default: 7.0
         keep_hs             (bool): (Optional) Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx will add them 
                                     (considering canonical pKa values and a pH of 7 by default). Default: False
         forcefield           (str): (Optional) forcefield to be used in the simulation. Default: amber99sb-ildn. See values supported by pdb2gmx 
@@ -913,19 +913,6 @@ def main_wf(configuration_path,
         
         # NOTE: if we have a gap that we are not modeling (e.g. a missing loop), pdb2gmx will find terminal atoms OXT in non-terminal residues and will return an error
         # STEP 3A: add H atoms, generate coordinate (.gro) and topology (.top) file for the system
-        if (his_protonation_tool == "pdb4amber"):
-            
-            global_log.info("step3A_amber_reduce: Determine the protonation states of histidine residues")
-            
-            # Find the histidine protonation states with pdb4amber
-            pdb4amber_run(**global_paths["step3A_amber_reduce"], properties=global_prop["step3A_amber_reduce"])
-            
-            # Read the histidine protonation states from the pdb4amber output residue names
-            his_residues = find_amber_his(global_paths["step3A_amber_reduce"]["output_pdb_path"], global_log)
-            
-            # Convert from histidine names to pdb2gmx numbering convention
-            global_prop["step3B_structure_topology"]["his"]=get_pdb2gmx_his(his_residues)
-            
         global_log.info("step3B_structure_topology: Generate the topology")
         global_prop["step3B_structure_topology"]["force_field"]=forcefield
         global_prop["step3B_structure_topology"]["ignh"] = not keep_hs
@@ -1409,13 +1396,12 @@ if __name__ == "__main__":
                         help="Flip clashing amides to relieve the clashes. Default: False",
                         required=False)
 
-    parser.add_argument('--his_protonation_tool', dest='his_protonation_tool',
-                        help="Tool to use for histidine protonation (pdb4amber or pdb2gmx). Default: pdb4amber",
-                        required=False, default='pdb4amber')
-    # NOTE: This option should be revisited 
+    parser.add_argument('--pH', dest='pH',
+                        help="pH of the system. Default: 7.0",
+                        required=False, default=7.0)
     
     parser.add_argument('--keep_hs', action='store_true',
-                        help="Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx will add them (considering canonical pKa values and a pH of 7 by default). Default: False",
+                        help="Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx will add them back (considering pKa estimations from propka and a pH of 7 by default). Default: False",
                         required=False)
     # NOTE: Maybe if this option is active we should also ignore the input pH - and add a warning if the pH is given. Otherwise we won't be able to keep the external hydrogens in the titratable residues
     
@@ -1487,7 +1473,7 @@ if __name__ == "__main__":
             skip_fix_side_chain=args.skip_fix_side_chain, 
             skip_fix_ss=args.skip_fix_ss, 
             fix_amide_clashes=args.fix_amide_clashes, 
-            his_protonation_tool=args.his_protonation_tool, 
+            pH=args.pH,
             keep_hs=args.keep_hs, 
             forcefield=args.forcefield, 
             salt_concentration=args.salt_concentration,
