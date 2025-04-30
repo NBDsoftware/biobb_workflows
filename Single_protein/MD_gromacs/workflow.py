@@ -683,7 +683,6 @@ def main_wf(configuration_path,
             skip_fix_ss = False, 
             fix_amide_clashes = None, 
             his_protonation_tool = "pdb4amber", 
-            his = None, 
             keep_hs = False, 
             forcefield = 'amber99sb-ildn', 
             salt_concentration = 0.15,
@@ -716,7 +715,6 @@ def main_wf(configuration_path,
         skip_fix_ss         (bool): (Optional) whether to add disulfide bonds. Default: False.
         fix_amide_clashes   (bool): (Optional) whether to flip clashing amides to relieve the clashes
         his_protonation_tool (str): (Optional) histidine protonation tool to be used (pdb4amber or pdb2gmx). Default: pdb4amber.
-        his                  (str): (Optional) histidine protonation states to be used in the simulation. Default: None. See values supported by pdb2gmx
         keep_hs             (bool): (Optional) Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx will add them 
                                     (considering canonical pKa values and a pH of 7 by default). Default: False
         forcefield           (str): (Optional) forcefield to be used in the simulation. Default: amber99sb-ildn. See values supported by pdb2gmx 
@@ -915,7 +913,7 @@ def main_wf(configuration_path,
         
         # NOTE: if we have a gap that we are not modeling (e.g. a missing loop), pdb2gmx will find terminal atoms OXT in non-terminal residues and will return an error
         # STEP 3A: add H atoms, generate coordinate (.gro) and topology (.top) file for the system
-        if (his_protonation_tool == "pdb4amber") and (his is None):
+        if (his_protonation_tool == "pdb4amber"):
             
             global_log.info("step3A_amber_reduce: Determine the protonation states of histidine residues")
             
@@ -927,10 +925,6 @@ def main_wf(configuration_path,
             
             # Convert from histidine names to pdb2gmx numbering convention
             global_prop["step3B_structure_topology"]["his"]=get_pdb2gmx_his(his_residues)
-            
-        elif his is not None:
-            # Set user-defined histidine protonation states
-            global_prop["step3B_structure_topology"]["his"]=his
             
         global_log.info("step3B_structure_topology: Generate the topology")
         global_prop["step3B_structure_topology"]["force_field"]=forcefield
@@ -1420,11 +1414,6 @@ if __name__ == "__main__":
                         required=False, default='pdb4amber')
     # NOTE: This option should be revisited 
     
-    parser.add_argument('--his', dest='his',
-                        help="Histidine protonation states with pdb2gmx convention (HID: 0, HIE: 1, HIP:2). Overrides his_protonation_tool. Default: None. Example: '0 1 1'",
-                        required=False)
-    # NOTE: This option will be removed in the future 
-    
     parser.add_argument('--keep_hs', action='store_true',
                         help="Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx will add them (considering canonical pKa values and a pH of 7 by default). Default: False",
                         required=False)
@@ -1499,7 +1488,7 @@ if __name__ == "__main__":
             skip_fix_ss=args.skip_fix_ss, 
             fix_amide_clashes=args.fix_amide_clashes, 
             his_protonation_tool=args.his_protonation_tool, 
-            his=args.his, keep_hs=args.keep_hs, 
+            keep_hs=args.keep_hs, 
             forcefield=args.forcefield, 
             salt_concentration=args.salt_concentration,
             setup_only=args.setup_only, 
