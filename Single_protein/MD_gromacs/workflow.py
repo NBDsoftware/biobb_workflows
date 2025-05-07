@@ -1615,14 +1615,23 @@ if __name__ == "__main__":
                         help="Flip clashing amides to relieve the clashes. Default: False",
                         required=False)
 
-    parser.add_argument('--pH', dest='pH',
-                        help="pH of the system. Default: 7.0",
+    parser.add_argument('--ph', dest='ph', type=float,
+                        help="""pH of the system. Used together with a pKa estimation (with propka) to determine the 
+                        protonation state of titratable residues. Default: 7.0""",
                         required=False, default=7.0)
     
     parser.add_argument('--keep_hs', action='store_true',
-                        help="Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx will add them back (considering pKa estimations from propka and a pH of 7 by default). Default: False",
+                        help="""Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx 
+                        will add them back (see --ph). Default: False""",
                         required=False)
-    # NOTE: Maybe if this option is active we should also ignore the input pH - and add a warning if the pH is given. Otherwise we won't be able to keep the external hydrogens in the titratable residues
+    # NOTE: Maybe if this option is active we should also ignore the input pH - and add a warning if the pH is given. 
+    # Otherwise we won't be able to keep the external hydrogens in the titratable residues
+    
+    parser.add_argument('--his', dest='his',
+                        help="""Manual selection of histidine protonation states (HID: 0, HIE: 1, HIP:2). If given, 
+                        the pKa estimation and the pH won't be used to protonate histidine residues. Default: None. 
+                        Example: '0 1 1'""",
+                        required=False)
     
     parser.add_argument('--forcefield', dest='forcefield',
                         help="Forcefield to use. Default: amber99sb-ildn",
@@ -1681,6 +1690,9 @@ if __name__ == "__main__":
     if (args.input_pdb_path is not None and args.input_gro_path is not None):
         raise Exception("Both --input_pdb and --input_gro/--input_top are provided. Please provide only one of them")
 
+    # Convert to corresponding types
+    if args.ph:
+        args.ph = float(args.ph)
     main_wf(configuration_path=args.config_path, 
             input_pdb_path=args.input_pdb_path, 
             pdb_code=args.pdb_code, 
@@ -1692,8 +1704,9 @@ if __name__ == "__main__":
             skip_fix_side_chain=args.skip_fix_side_chain, 
             skip_fix_ss=args.skip_fix_ss, 
             fix_amide_clashes=args.fix_amide_clashes, 
-            pH=args.pH,
+            pH=args.ph,
             keep_hs=args.keep_hs, 
+            his=args.his,
             forcefield=args.forcefield, 
             salt_concentration=args.salt_concentration,
             setup_only=args.setup_only, 
