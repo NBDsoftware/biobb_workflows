@@ -870,11 +870,11 @@ def main_wf(configuration_path,
             pdb_chains = None, 
             mutation_list = None, 
             ligands_top_folder = None, 
-            skip_fix_backbone = False, 
-            add_caps = False,
-            skip_fix_side_chain = False, 
-            skip_fix_ss = False, 
-            fix_amide_clashes = None, 
+            skip_bc_fix = False, 
+            cap_ter = False,
+            skip_sc_fix = False, 
+            skip_ss_bonds = False, 
+            skip_amides_flip = None, 
             pH = 7.0,
             keep_hs = False, 
             his = None,
@@ -903,11 +903,11 @@ def main_wf(configuration_path,
         pdb_chains           (str): (Optional) list of chains to be extracted from the PDB file and fixed
         mutation_list        (str): (Optional) list of mutations to be introduced in the structure
         ligands_top_folder   (str): (Optional) path to the folder containing the ligand .itp and .gro files
-        skip_fix_backbone   (bool): (Optional) whether to skip the fix of the backbone atoms. Default: False.
-        add_caps            (bool): (Optional) whether to add caps to the terminal residues. Default: False.
-        skip_fix_side_chain (bool): (Optional) whether to skip the fix of the side chain atoms. Default: False.
-        skip_fix_ss         (bool): (Optional) whether to add disulfide bonds. Default: False.
-        fix_amide_clashes   (bool): (Optional) whether to flip clashing amides to relieve the clashes
+        skip_bc_fix         (bool): (Optional) whether to skip the fix of the backbone atoms. Default: False.
+        cap_ter             (bool): (Optional) whether to add caps to the terminal residues. Default: False.
+        skip_sc_fix         (bool): (Optional) whether to skip the fix of the side chain atoms. Default: False.
+        skip_ss_bonds       (bool): (Optional) whether to add disulfide bonds. Default: False.
+        skip_amides_flip     (bool): (Optional) whether to flip clashing amides to relieve the clashes
         pH                 (float): (Optional) pH of the system. Used together with a pKa estimation (propka) to determine the 
                                     protonation state of titratable residues. Default: 7.0
         keep_hs             (bool): (Optional) Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx 
@@ -915,9 +915,10 @@ def main_wf(configuration_path,
         his                  (str): (Optional) Manual selection of histidine protonation states (HID: 0, HIE: 1, HIP:2). 
                                     If given, the pKa estimation and the pH won't be used to protonate histidine residues. 
                                     Default: None. Example: '0 1 1'
-        forcefield           (str): (Optional) forcefield to be used in the simulation. Default: amber99sb-ildn. See values supported by pdb2gmx 
-                                    (gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, 
-                                    amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut). 
+        forcefield           (str): (Optional) forcefield to be used in the simulation. Default: amber99sb-ildn. 
+                                    See values supported by pdb2gmx (gromos45a3, charmm27, gromos53a6, amber96, amber99, 
+                                    gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, 
+                                    oplsaa, amber94, amber99sb-star-ildn-mut). 
         salt_concentration (float): (Optional) salt concentration to be used in the simulation. Default: 0.15.
         setup_only          (bool): (Optional) whether to only setup the system or also run the simulations
         input_gro_path       (str): (Optional) path to already-prepared input structure file (.gro)
@@ -1010,7 +1011,7 @@ def main_wf(configuration_path,
         last_pdb_path = global_paths["step2B_mutations"]["output_pdb_path"]
         
         # Model the backbone atoms
-        if not skip_fix_backbone:
+        if not skip_bc_fix:
             
             # STEP 2C: Try to get the FASTA sequence to model the backbone from ...
             fasta_available = False
@@ -1058,7 +1059,7 @@ def main_wf(configuration_path,
             # STEP 2D: Model missing heavy atoms of backbone
             if fasta_available:
                 global_log.info("step2D_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
-                global_prop["step2D_fixbackbone"]["add_caps"] = add_caps
+                global_prop["step2D_fixbackbone"]["add_caps"] = cap_ter
                 fix_backbone(**global_paths["step2D_fixbackbone"], properties=global_prop["step2D_fixbackbone"])
                 last_pdb_path = global_paths["step2D_fixbackbone"]["output_pdb_path"]
             else:
@@ -1067,7 +1068,7 @@ def main_wf(configuration_path,
             global_log.info("step2D_fixbackbone: Skipping modeling of the missing heavy atoms in the backbone")
 
         # STEP 2E: model missing heavy atoms of side chains
-        if not skip_fix_side_chain:
+        if not skip_sc_fix:
             global_paths['step2E_fixsidechain']['input_pdb_path'] = last_pdb_path
             global_log.info("step2E_fixsidechain: Modeling the missing heavy atoms in the structure side chains")
             fix_side_chain(**global_paths["step2E_fixsidechain"], properties=global_prop["step2E_fixsidechain"])
@@ -1076,7 +1077,7 @@ def main_wf(configuration_path,
             global_log.info("step2E_fixsidechain: Skipping modeling of the missing heavy atoms in the side chains")
 
         # STEP 2F: model SS bonds (CYS -> CYX)
-        if not skip_fix_ss:
+        if not skip_ss_bonds:
             global_log.info("step2F_fixssbonds: Fix SS bonds")
             global_paths['step2F_fixssbonds']['input_pdb_path'] = last_pdb_path
             fix_ssbonds(**global_paths["step2F_fixssbonds"], properties=global_prop["step2F_fixssbonds"])
@@ -1084,8 +1085,8 @@ def main_wf(configuration_path,
         else:
             global_log.info("step2F_fixssbonds: Skipping modeling of the SS bonds")
 
-        # STEP 2G: Rotate amide groups to fix clashes
-        if fix_amide_clashes:
+        # STEP 2G: Flip amide groups to relieve clashes
+        if not skip_amides_flip:
             global_log.info("step2G_fixamides: fix clashing amides")
             global_paths['step2G_fixamides']['input_pdb_path'] = last_pdb_path
             fix_amides(**global_paths["step2G_fixamides"], properties=global_prop["step2G_fixamides"])
@@ -1376,11 +1377,11 @@ def main_wf(configuration_path,
     
     if num_replicas:
         # Folder names for replicas
-        simulation_folders = [f"replica_{i}" for i in range(int(num_replicas))]
+        simulation_folders = [f"replica_{i}" for i in range(num_replicas)]
         global_log.info(f"Number of replicas: {num_replicas}")
     elif num_parts:
         # Folder names for parts
-        simulation_folders = [f"parts_{i}" for i in range(int(num_parts))]
+        simulation_folders = [f"parts_{i}" for i in range(num_parts)]
         global_log.info(f"Number of parts: {num_parts}")
 
     # Run each simulation (replica or part)
@@ -1405,12 +1406,10 @@ def main_wf(configuration_path,
         
         # Enforce nsteps if provided
         if nsteps is not None:
-            traj_prop['step5A_grompp_md']['mdp']['nsteps']=int(nsteps)
-        total_simulation_timesteps = traj_prop['step5A_grompp_md']['mdp']['nsteps']
+            traj_prop['step5A_grompp_md']['mdp']['nsteps']=nsteps
             
         # Simulations are replicas
         if num_replicas:
-            
             # Change seed and velocities for each replica
             traj_prop['step5A_grompp_md']['mdp']['ld-seed'] = random.randint(1, 1000000)
             traj_prop['step5A_grompp_md']['mdp']['continuation'] = 'no'
@@ -1418,10 +1417,8 @@ def main_wf(configuration_path,
 
         # Simulations are parts of a single trajectory
         if num_parts:
-            
             # Divide the number of steps by the number of parts
-            traj_prop['step5A_grompp_md']['mdp']['nsteps']=int(traj_prop['step5A_grompp_md']['mdp']['nsteps']/int(num_parts))
-            
+            traj_prop['step5A_grompp_md']['mdp']['nsteps']=int(traj_prop['step5A_grompp_md']['mdp']['nsteps']/num_parts)
             # For all parts except the first one, use the previous gro and cpt files
             if simulation != simulation_folders[0]:
                 traj_paths['step5A_grompp_md']['input_gro_path'] = previous_gro_path
@@ -1475,35 +1472,35 @@ def main_wf(configuration_path,
             fu.zip_list(zip_file=global_paths["step7A_trjcat"]['input_trj_zip_path'], file_list=traj_list)
             trjcat(**global_paths["step7A_trjcat"], properties=global_prop["step7A_trjcat"])
             
-            # Update properties to dry the full merged trajectory
-            global_prop["step7B_dry_trj"]["start"] = 0                                                                                           # The initial time of the merged trajectory in ps
-            global_prop["step7B_dry_trj"]["end"] = total_simulation_timesteps*traj_prop['step5A_grompp_md']['mdp']['dt']                         # The total time of the merged trajectory in ps
-            global_prop["step7B_dry_trj"]["dt"] =  traj_prop['step5A_grompp_md']['mdp']['dt']*traj_prop['step5A_grompp_md']['mdp']['nstxout']    # The saving frequency of the trajectory # NOTE: here we are hardcoding again the kind of trajectory
-            
-            # STEP 24: obtain dry the merged trajectory
-            global_log.info("step7B_dry_trj: Obtain dry trajectory")
-            gmx_trjconv_trj(**global_paths["step7B_dry_trj"], properties=global_prop["step7B_dry_trj"])
+            # STEP 24: obtain dry structure
+            global_log.info("step7B_dry_str: Obtain dry structure")
+            gmx_trjconv_str(**global_paths["step7B_dry_str"], properties=global_prop["step7B_dry_str"])
+    
+            # STEP 25: obtain dry trajectory
+            global_log.info("step7C_dry_trj: Obtain dry trajectory")
+            traj_paths['step7C_dry_trj']['input_traj_path'] = traj_paths['step7A_trjcat']['output_trj_path']
+            gmx_trjconv_trj(**global_paths["step7C_dry_trj"], properties=global_prop["step7C_dry_trj"])
         
-            #Remove unused trajectory
+            # Remove unused trajectory
             os.remove(global_paths["step7A_trjcat"]["output_trj_path"])
-            
-            # STEP 25: obtain dry structure
-            global_log.info("step7C_dry_str: Obtain dry structure")
-            gmx_trjconv_str(**global_paths["step7C_dry_str"], properties=global_prop["step7C_dry_str"])
+    
+            # STEP 26: center the trajectory
+            global_log.info(f"{simulation} > step7D_center: Center the trajectory")
+            gmx_image(**traj_paths['step7D_center'], properties=traj_prop['step7D_center'])
 
-            # STEP 26: image the trajectory
-            global_log.info("step7D_image_traj: Imaging the trajectory")
-            gmx_image(**global_paths['step7D_image_traj'], properties=global_prop['step7D_image_traj'])
+            # Remove unused trajectory
+            os.remove(global_paths["step7C_dry_trj"]["output_traj_path"])
             
-            #Remove unused trajectory
-            os.remove(global_paths["step7B_dry_trj"]["output_traj_path"])
+            # STEP 27: image the trajectory
+            global_log.info("step7E_image_traj: Imaging the trajectory")
+            gmx_image(**global_paths['step7E_image_traj'], properties=global_prop['step7E_image_traj'])
 
-            # STEP 27: fit the trajectory
-            global_log.info("step7E_fit_traj: Fit the trajectory")
-            gmx_image(**global_paths['step7E_fit_traj'], properties=global_prop['step7E_fit_traj'])
+            # STEP 28: fit the trajectory
+            global_log.info("step7F_fit_traj: Fit the trajectory")
+            gmx_image(**global_paths['step7F_fit_traj'], properties=global_prop['step7F_fit_traj'])
             
-            #Remove unused trajectory
-            os.remove(global_paths["step7D_image_traj"]["output_traj_path"])
+            # Remove unused trajectory
+            os.remove(global_paths["step7E_image_traj"]["output_traj_path"])
             
         # If simulations are replicas
         if num_replicas:
@@ -1520,36 +1517,38 @@ def main_wf(configuration_path,
                 
                 # NOTE: we are hard-coding the kind of traj that we are using with these paths: output_trr_path
                 # Update previous global paths needed by simulation-specific steps
-                traj_paths['step7B_dry_trj']['input_traj_path'] = traj_paths['step5B_mdrun_md']['output_trr_path']
-                traj_paths['step7B_dry_trj']['input_top_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
-                traj_paths['step7B_dry_trj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
-                traj_paths['step7C_dry_str']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
-                traj_paths['step7C_dry_str']['input_top_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
-                traj_paths['step7C_dry_str']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
-                traj_paths['step7D_image_traj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
-                traj_paths['step7E_fit_traj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
+                traj_paths['step7B_dry_str']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
+                traj_paths['step7B_dry_str']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
+                traj_paths['step7C_dry_trj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
+                traj_paths['step7D_center']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']  
+                traj_paths['step7E_image_traj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
+                traj_paths['step7F_fit_traj']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
                 
-                # STEP 24: obtain dry the trajectory
-                global_log.info(f"{simulation} > step7B_dry_trj: Obtain dry trajectory")
-                gmx_trjconv_trj(**traj_paths["step7B_dry_trj"], properties=traj_prop["step7B_dry_trj"])
+                # STEP 24: obtain dry structure
+                global_log.info(f"{simulation} > step7B_dry_str: Obtain dry structure")
+                gmx_trjconv_str(**traj_paths["step7B_dry_str"], properties=traj_prop["step7B_dry_str"])
                 
-                # STEP 25: obtain dry structure
-                global_log.info(f"{simulation} > step7C_dry_str: Obtain dry structure")
-                gmx_trjconv_str(**traj_paths["step7C_dry_str"], properties=traj_prop["step7C_dry_str"])
+                # STEP 25: obtain dry trajectory
+                global_log.info(f"{simulation} > step7C_dry_trj: Obtain dry trajectory")
+                gmx_trjconv_trj(**traj_paths["step7C_dry_trj"], properties=traj_prop["step7C_dry_trj"])
                 
-                # STEP 26: image the trajectory
-                global_log.info(f"{simulation} > step7D_image_traj: Imaging the trajectory")
-                gmx_image(**traj_paths['step7D_image_traj'], properties=traj_prop['step7D_image_traj'])
+                # STEP 26: center the trajectory
+                global_log.info(f"{simulation} > step7D_center: Center the trajectory")
+                gmx_image(**traj_paths['step7D_center'], properties=traj_prop['step7D_center'])
                 
-                #Remove unused trajectory
-                os.remove(traj_paths["step7B_dry_trj"]["output_traj_path"])
+                # Remove unused trajectory
+                os.remove(traj_paths["step7C_dry_trj"]["output_traj_path"])
                 
-                # STEP 27: fit the trajectory
-                global_log.info(f"{simulation} > step7E_fit_traj: Fit the trajectory")
-                gmx_image(**traj_paths['step7E_fit_traj'], properties=traj_prop['step7E_fit_traj'])
+                # STEP 27: image the trajectory
+                global_log.info(f"{simulation} > step7E_image_traj: Imaging the trajectory")
+                gmx_image(**traj_paths['step7E_image_traj'], properties=traj_prop['step7E_image_traj'])
                 
-                #Remove unused trajectory
-                os.remove(traj_paths["step7D_image_traj"]["output_traj_path"])
+                # STEP 28: fit the trajectory
+                global_log.info(f"{simulation} > step7F_fit_traj: Fit the trajectory")
+                gmx_image(**traj_paths['step7F_fit_traj'], properties=traj_prop['step7F_fit_traj'])
+                
+                # Remove unused trajectory
+                os.remove(traj_paths["step7E_image_traj"]["output_traj_path"])
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -1569,50 +1568,61 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("MD Simulation with GROMACS")
 
-    parser.add_argument('--config', dest='config_path',
+    parser.add_argument('--config', dest='config_path', type=str,
                         help="Configuration file (YAML)",
                         required=True)
 
-    parser.add_argument('--input_pdb', dest='input_pdb_path',
-                        help="Input PDB file. Default: input_structure_path in step 1 of configuration file.",
+    parser.add_argument('--input_pdb', dest='input_pdb_path', type=str,
+                        help="Input PDB file. If not given the workflow will look for it in the YAML config file. Default: None",
                         required=False)
 
-    parser.add_argument('--pdb_code', dest='pdb_code',
-                        help="PDB code to get the canonical FASTA sequence of the input PDB file. If not given the workflow will look for it in the HEADER of the PDB. Default: None",
+    parser.add_argument('--pdb_code', dest='pdb_code', type=str,
+                        help="""PDB code to get the canonical FASTA sequence of the input PDB file. 
+                        If not given the workflow will look for it in the HEADER of the PDB. Default: None""",
                         required=False)
 
     parser.add_argument('--pdb_chains', nargs='+', dest='pdb_chains',
-                        help="Protein PDB chains to be extracted from PDB file and fixed. Default: A.",
+                        help="Protein PDB chains to be extracted from PDB file and fixed. Default: A. Example: A B C",
                         required=False, default=['A'])
 
     parser.add_argument('--mutation_list', nargs='+', dest='mutation_list',
-                        help="List of mutations to be introduced in the protein (default: None, ex: A:Arg220Ala)",
+                        help="List of mutations to be introduced in the protein. Default: None. Example: A:Arg220Ala B:Ser221Gly",
                         required=False)
 
-    parser.add_argument('--ligands_folder', dest='ligands_top_folder',
+    parser.add_argument('--ligands_folder', dest='ligands_top_folder', type=str,
                         help="""Path to folder with .itp and .gro files for the ligands that 
                         should be included in the simulation. Make sure the coordinates of the 
-                        ligands do not clash with the PDB coordinates. Default: None""",
+                        ligands correspond to the PDB used. Default: None""",
                         required=False)
 
-    parser.add_argument('--skip_fix_backbone', action='store_true', dest='skip_fix_backbone',
-                        help="Skip the backbone modeling of missing atoms. Default: False",
+    parser.add_argument('--skip_bc_fix', action='store_true', dest='skip_bc_fix', 
+                        help="""Skip the backbone modeling of missing atoms. Otherwise the missing atoms in the backbone 
+                        of the PDB structure will be modeled using 'biobb_structure_checking' and the 'Modeller suite' 
+                        (if the Modeller key is given). Note that missing loops modelling is only possible if the Modeller 
+                        key is provided. To obtain one register at: https://salilab.org/modeller/registration.html. Default: False""",
                         required=False)
     
-    parser.add_argument('--add_caps', action='store_true', dest='add_caps',
-                        help="Add caps to the protein. Default: False",
+    parser.add_argument('--cap_ter', action='store_true', dest='cap_ter',
+                        help="Add terminal residues ACE and NME as necessary, preserving existing atoms. Default: False",
                         required=False)
     
-    parser.add_argument('--skip_fix_sc', action='store_true', dest='skip_fix_side_chain',
-                        help="Skip the side chain modeling of missing atoms. Default: False",
+    parser.add_argument('--skip_sc_fix', action='store_true', dest='skip_sc_fix',
+                        help="""Skip the side chain modeling of missing atoms. Otherwise the missing atoms in the side chains 
+                        of the PDB structure will be modeled using 'biobb_structure_checking' and the 'Modeller suite' 
+                        (if the Modeller key is given). Default: False""",
                         required=False)
     
-    parser.add_argument('--skip_fix_ss', action='store_true',
-                        help="Add disulfide bonds to the protein. Use carefully! Default: False",
+    parser.add_argument('--skip_ss_bonds', action='store_true',
+                        help="""Skip the addition of disulfide bonds to the protein according to a distance criteria. 
+                        Otherwise the missing atoms in the side chains of the PDB structure will be modeled using 
+                        'biobb_structure_checking' and the 'Modeller suite' (if the Modeller key is given). Default: False""",
                         required=False)
+    # NOTE: what happens with di-sulfide bonds between chains? Does pdb2gmx work?
 
-    parser.add_argument('--fix_amides', action='store_true', dest='fix_amide_clashes',
-                        help="Flip clashing amides to relieve the clashes. Default: False",
+    parser.add_argument('--skip_amides_flip', action='store_true', dest='skip_amides_flip',
+                        help="""Skip the fliping clashing amide groups to relieve clashes. 
+                        Otherwise the amide orientations will be changed if needed to relieve clashes using
+                        'biobb_structure_checking'. Default: False""",
                         required=False)
 
     parser.add_argument('--ph', dest='ph', type=float,
@@ -1633,11 +1643,11 @@ if __name__ == "__main__":
                         Example: '0 1 1'""",
                         required=False)
     
-    parser.add_argument('--forcefield', dest='forcefield',
+    parser.add_argument('--forcefield', dest='forcefield', type=str,
                         help="Forcefield to use. Default: amber99sb-ildn",
                         required=False, default='amber99sb-ildn')
 
-    parser.add_argument('--salt_conc', dest='salt_concentration',
+    parser.add_argument('--salt_conc', dest='salt_concentration', type=float,
                         help="Concentration of salt in the system. Default: 0.15",
                         required=False, default=0.15)
     
@@ -1645,36 +1655,40 @@ if __name__ == "__main__":
                         help="Only setup the system. Default: False",
                         required=False, default=False)
 
-    parser.add_argument('--input_gro', dest='input_gro_path',
-                        help="Input structure file ready to minimize (.gro). To provide an externally prepared system, use together with --input_top (default: None)",
+    parser.add_argument('--input_gro', dest='input_gro_path', type=str,
+                        help="""Input structure file ready to minimize (.gro). To provide an externally prepared system, 
+                        use together with --input_top (default: None)""",
                         required=False)
 
-    parser.add_argument('--input_top', dest='input_top_path',
-                        help="Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, use together with --input_gro (default: None)",
+    parser.add_argument('--input_top', dest='input_top_path', type=str,
+                        help="""Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, 
+                        use together with --input_gro (default: None)""",
                         required=False)
-    # NOTE: using input gro and top we don't have access to the pdb and thus we don't know which POSRES to apply - chains_dict and ligands_dict are not created
+    # NOTE: using input gro and top we don't have access to the pdb and thus we don't know which POSRES to apply - 
+    # chains_dict and ligands_dict are not created
     
     parser.add_argument('--equil_only', action='store_true',
                         help="Only run the equilibration steps. Default: False",
                         required=False, default=False)
     
-    parser.add_argument('--nsteps', dest='nsteps',
+    parser.add_argument('--nsteps', dest='nsteps', type=int,
                         help="Number of steps of the production simulation",
                         required=False)
     
-    parser.add_argument('--num_parts', dest='num_parts',
+    parser.add_argument('--num_parts', dest='num_parts', type=int,
                         help="Number of parts to divide the simulation into. Default: 1",
                         required=False)
     
-    parser.add_argument('--num_replicas', dest='num_replicas',
+    parser.add_argument('--num_replicas', dest='num_replicas', type=int,
                         help="Number of replicas with different seeds to run the simulation. Default: 1",
                         required=False)
 
-    parser.add_argument('--final_analysis', action='store_true', dest='final_analysis',
-                        help="Run the final analysis of the trajectory/ies. Concatenation of the analysis and trajectory, trajectory drying, imaging and fitting. Default: False",
+    parser.add_argument('--skip_traj_processing', action='store_true', dest='skip_traj_processing', 
+                        help="""Skip the trajectory post-processing. Otherwise the trajectory will be dried, centered,
+                        imaged and fitted using 'gmx trjconv'. Default: False""",
                         required=False, default=False)
 
-    parser.add_argument('--output', dest='output_path',
+    parser.add_argument('--output', dest='output_path', type=str,
                         help="Output path (default: working_dir_path in YAML config file)",
                         required=False)
     
@@ -1693,17 +1707,26 @@ if __name__ == "__main__":
     # Convert to corresponding types
     if args.ph:
         args.ph = float(args.ph)
+    if args.salt_concentration:
+        args.salt_concentration = float(args.salt_concentration)
+    if args.nsteps:
+        args.nsteps = int(args.nsteps)
+    if args.num_parts:
+        args.num_parts = int(args.num_parts)
+    if args.num_replicas:
+        args.num_replicas = int(args.num_replicas)
+    
     main_wf(configuration_path=args.config_path, 
             input_pdb_path=args.input_pdb_path, 
             pdb_code=args.pdb_code, 
             pdb_chains=args.pdb_chains, 
             mutation_list=args.mutation_list, 
             ligands_top_folder=args.ligands_top_folder, 
-            skip_fix_backbone=args.skip_fix_backbone, 
-            add_caps=args.add_caps,
-            skip_fix_side_chain=args.skip_fix_side_chain, 
-            skip_fix_ss=args.skip_fix_ss, 
-            fix_amide_clashes=args.fix_amide_clashes, 
+            skip_bc_fix=args.skip_bc_fix, 
+            cap_ter=args.cap_ter,
+            skip_sc_fix=args.skip_sc_fix, 
+            skip_ss_bonds=args.skip_ss_bonds, 
+            skip_amides_flip=args.skip_amides_flip, 
             pH=args.ph,
             keep_hs=args.keep_hs, 
             his=args.his,

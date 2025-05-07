@@ -484,6 +484,7 @@ step6D_rmsf:
 # Section 7 (Steps A-D): Trajectory post-processing #
 #####################################################
 
+# Optional step: used only if trajectories are different parts
 step7A_trjcat:
   tool: trjcat
   paths:
@@ -492,24 +493,11 @@ step7A_trjcat:
   properties:
     concatenate: True
 
-step7B_dry_trj:
-  tool: gmx_trjconv_trj
-  paths: 
-    input_traj_path: dependency/step7A_trjcat/output_trj_path
-    input_top_path: dependency/step4I_mdrun_npt/output_gro_path
-    input_index_path: dependency/step4C_make_ndx/output_ndx_path
-    output_traj_path: dry_traj.xtc
-  properties:
-    selection: Protein
-    start: 0
-    end: -1
-    dt: 1
-
-step7C_dry_str:
+step7B_dry_str:
   tool: gmx_trjconv_str
   paths: 
     input_structure_path: dependency/step4I_mdrun_npt/output_gro_path
-    input_top_path: dependency/step4I_mdrun_npt/output_gro_path
+    input_top_path: dependency/step5A_grompp_md/output_tpr_path
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
     output_str_path: dry_structure.gro
   properties:
@@ -518,28 +506,55 @@ step7C_dry_str:
     pbc: mol
     ur: compact
 
-step7D_image_traj:
-  tool: gmx_image
-  paths:
-    input_traj_path: dependency/step7B_dry_trj/output_traj_path
-    input_top_path: dependency/step7C_dry_str/output_str_path
+step7C_dry_trj:
+  tool: gmx_trjconv_trj
+  paths: 
+    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
+    input_top_path: dependency/step5A_grompp_md/output_tpr_path
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
-    output_traj_path: imaged_traj.xtc
+    output_traj_path: dry_traj.xtc
+  properties:
+    selection: Protein
+
+step7D_center:
+  tool: gmx_image 
+  paths:
+    input_traj_path: dependency/step7C_dry_trj/output_traj_path
+    input_top_path: dependency/step5A_grompp_md/output_tpr_path
+    input_index_path: dependency/step4C_make_ndx/output_ndx_path
+    output_traj_path: center_traj.xtc
   properties:
     center_selection: Protein
     output_selection: Protein
     center: True
     ur: compact
-    pbc: mol
+    pbc: none
 
-step7E_fit_traj:
+step7E_image_traj:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/step7D_image_traj/output_traj_path
-    input_top_path: dependency/step7C_dry_str/output_str_path
+    input_traj_path: dependency/step7D_center/output_traj_path
+    input_top_path: dependency/step5A_grompp_md/output_tpr_path
+    input_index_path: dependency/step4C_make_ndx/output_ndx_path
+    output_traj_path: imaged_traj.xtc
+  properties:
+    output_selection: Protein
+    cluster_selection: Protein
+    center_selection: Protein  # NOTE: why is this used??
+    center: False
+    ur: compact
+    pbc: mol
+
+step7F_fit_traj:
+  tool: gmx_image
+  paths:
+    input_traj_path: dependency/step7E_image_traj/output_traj_path
+    input_top_path: dependency/step5A_grompp_md/output_tpr_path
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc
   properties:
     fit_selection: Protein
-    output_selection: Protein  
+    center_selection: Protein
+    output_selection: Protein
+    center: False
     fit: rot+trans
