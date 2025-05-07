@@ -399,6 +399,7 @@ def set_gromacs_path(global_properties: dict, binary_path: str) -> None:
     """
     Set the path to the GROMACS binary for all steps using GROMACS.
 
+    NOTE: try if we can set this using global properties while keeping a different value for non-gmx steps
     Inputs
     ------
 
@@ -406,9 +407,13 @@ def set_gromacs_path(global_properties: dict, binary_path: str) -> None:
         binary_path (str): Path to the GROMACS binary.
     """
 
-    list_of_steps = ['step3B_structure_topology', 'step3K_editconf', 'step3L_solvate', 'step3M_grompp_genion', 'step3N_genion',
-                        'step4A_grompp_min', 'step4B_mdrun_min', 'step4E_grompp_nvt', 'step4F_mdrun_nvt',
-                        'step4H_grompp_npt', 'step4I_mdrun_npt', 'step5A_grompp_md', 'step5B_mdrun_md']
+    list_of_steps = ['step3B_structure_topology', 'step3C_make_ref_group', 'step3C_make_rest_group', 'step3H_make_ligand_ndx',
+                     'step3I_ligand_restraints', 'step3K_editconf', 'step3L_solvate', 'step3M_grompp_genion', 'step3N_genion',
+                     'step4A_grompp_min', 'step4B_mdrun_min', 'step4C_make_ndx', 'step4D_energy_min', 'step4E_grompp_nvt', 
+                     'step4F_mdrun_nvt', 'step4G_temp_nvt', 'step4H_grompp_npt', 'step4I_mdrun_npt', 'step4J_density_npt', 
+                     'step5A_grompp_md', 'step5B_mdrun_md', 'step6A_rmsd_equilibrated',
+                     'step6B_rmsd_experimental', 'step6C_rgyr', 'step7A_trjcat', 'step7B_dry_str', 'step7C_dry_trj', 
+                     'step7D_center', 'step7E_image_traj', 'step7F_fit_traj']
 
     for step in list_of_steps:
         global_properties[step]['binary_path'] = binary_path
