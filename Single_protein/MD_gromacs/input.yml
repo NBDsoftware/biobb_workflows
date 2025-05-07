@@ -131,12 +131,19 @@ step2I_renumberstructure:
 # Section 3 (Steps A-I): Prepare topology and coordinates for MD #
 ##################################################################
 
-# Use amber Reduce to guess protonation states of HIS residues
-step3A_amber_reduce:
-  tool: pdb4amber_run
+# Use propka to predict the pKa of the titratable residues
+step3A_propka:
+  tool: propka
+  paths: 
+    input_structure_path: dependency/step2I_renumberstructure/output_structure_path
+    output_summary_path: summary.pka
+
+# Use reduce to optimize H-bonds of HIS residues
+step3B_his_hbonds:
+  tool: pdb4amber
   paths:
     input_pdb_path: dependency/step2I_renumberstructure/output_structure_path
-    output_pdb_path: reduced.pdb
+    output_pdb_path: his_hbonds.pdb
   properties:
     reduce: True
 

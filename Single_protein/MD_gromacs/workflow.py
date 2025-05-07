@@ -10,6 +10,7 @@ from Bio.PDB import PDBParser
 from Bio import SeqIO
 from typing import List, Dict, Union
 from pathlib import Path
+import propka.run
 import time
 import random
 import argparse
@@ -36,7 +37,6 @@ from biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_gromacs.gromacs.genrestr import genrestr
 from biobb_gromacs.gromacs_extra.append_ligand import append_ligand
 from biobb_gromacs.gromacs_extra.ndx2resttop import ndx2resttop
-from biobb_amber.pdb4amber.pdb4amber_run import pdb4amber_run
 from biobb_analysis.gromacs.gmx_rms import gmx_rms
 from biobb_analysis.gromacs.gmx_rgyr import gmx_rgyr
 from biobb_analysis.gromacs.gmx_energy import gmx_energy
@@ -44,11 +44,17 @@ from biobb_analysis.gromacs.gmx_image import gmx_image
 from biobb_analysis.gromacs.gmx_trjconv_trj import gmx_trjconv_trj
 from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 from biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf
+from biobb_amber.pdb4amber.pdb4amber_run import pdb4amber_run
 from biobb_structure_utils.utils.cat_pdb import cat_pdb
 from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 from biobb_pdb_tools.pdb_tools.biobb_pdb_tofasta import biobb_pdb_tofasta
 
+
+# Constants
+
+# Titratable residues with pdb2gmx
+titratable_residues = ['LYS', 'ARG', 'ASP', 'GLU', 'GLN', 'HIS']
 
 # Biopython helpers
 def highest_occupancy_altlocs(pdb_file, global_log) -> List[str]:
@@ -310,16 +316,10 @@ def find_amber_his(pdb_file: str, global_log) -> List[str]:
                 # Check if the residue is a histidine
                 if res_name in his_names:
                     histidine_residues[res_num] = res_name
-                    
-    # Log the result
-    if histidine_residues:
-        global_log.info(f"Found histidine residues: {histidine_residues}")
-    else:
-        global_log.info("No histidine residues found")
 
     return list(histidine_residues.values())
 
-def get_pdb2gmx_his(his_residues: List[str]) -> str:
+def get_pdb2gmx_his(his_residues: List[str]) -> List[str]:
     """
     Transform the histidine residue names from AMBER to a string
     that can be used as input for the -his flag in the pdb2gmx tool.
@@ -335,7 +335,7 @@ def get_pdb2gmx_his(his_residues: List[str]) -> str:
     Returns
     -------
     
-    str:
+    List[str]:
         A string with the histidine residues transformed to the pdb2gmx format.
     """
 
@@ -343,7 +343,7 @@ def get_pdb2gmx_his(his_residues: List[str]) -> str:
     
     his_pdb2gmx = [his_dict[his] for his in his_residues]
     
-    return " ".join(his_pdb2gmx)
+    return his_pdb2gmx
     
 def get_chains_dict(pdb_file: str) -> Dict[str, Dict[str, List[int]]]:
     """ 
@@ -669,8 +669,201 @@ def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
         # Output path for the concatenated file
         output_xvg_path = os.path.join(output_path, f"{step}.xvg")
         merge_xvgtimeseries_files(file_paths, output_xvg_path)
-    
 
+# Propka 
+def biobb_propka(input_structure_path: str, output_summary_path: str, properties: dict, global_log) -> None:
+    """ 
+    A mock function to simulate the behaviour of a biobb that uses propka
+    
+    Inputs:
+    -------
+        input_structure_path (str): Path to the input PDB file with the protein structure to predict the pKa of its aminoacids
+        output_summary_path (str): Path to the output summary file with the pKa predictions
+        protperties (dict): Dictionary with the properties of the function
+        global_log: Logger object for logging messages
+    
+    NOTE: This will be changed by the true Biobb function when available
+    """
+    
+    # Create output directory if it does not exist
+    if not os.path.exists(properties["path"]):
+        os.makedirs(properties["path"])
+    
+    # Run propka on the input structure
+    mol = propka.run.single(input_structure_path)
+    
+    # Find the file name of the input structure
+    input_structure_name = Path(input_structure_path).stem
+    
+    # Find the path to the propka summary file
+    propka_summary_path = f"{input_structure_name}.pka"
+    
+    # Check the file exists
+    if os.path.exists(propka_summary_path):
+        # Move the propka summary file to the output path
+        os.rename(propka_summary_path, output_summary_path)
+    else:
+        global_log.error(f"Propka summary file {propka_summary_path} not found")
+        
+    return
+
+def parse_propka_summary(filepath) -> List[Dict[str, Union[str, int, float]]]:  
+    """
+    Parse the pKa summary section from a PROPKA output file.
+    
+    Inputs
+    ------
+    
+        filepath (str): Path to the PROPKA output file.
+    
+    Returns
+    -------
+    
+        List[Dict[str, Union[str, int, float]]]: A list of dictionaries containing the parsed pKa data.
+    """
+    
+    results = []
+    in_summary = False
+
+    with open(filepath) as f:
+        for line in f:
+            line = line.strip()
+
+            # Detect start of summary
+            if line.startswith("SUMMARY OF THIS PREDICTION"):
+                in_summary = True
+                continue
+            
+            # Skip header line
+            if line.startswith("Group"):
+                continue
+
+            # Detect end of summary (first dashed line after the summary)
+            if in_summary and line.startswith("----"):
+                break
+
+            if in_summary and line:
+                # Format: RESNAME  RESNUM CHAIN  pKa  model-pKa
+                parts = line.split()
+                if len(parts) >= 5:
+                    resname = parts[0]
+                    resnum = int(parts[1])
+                    chain = parts[2]
+                    pKa = float(parts[3])
+                    model_pKa = float(parts[4])
+                    results.append({
+                        "resname": resname,
+                        "resnum": resnum,
+                        "chain": chain,
+                        "pKa": pKa,
+                        "model_pKa": model_pKa
+                    })
+    return results
+
+def get_protonation_state(pKa_data: List[Dict[str, Union[str, int, float]]], pH: float, resname: str) -> str:
+    """
+    Determine the protonation state of a residue based on a pKa estimate and the pH. 
+    The rule used to determine the protonation state is based on the Henderson-Hasselbalch equation. 
+    
+    If pH < pKa, the residue is acting as base and is protonated (HA).
+    If pH > pKa, the residue is acting as acid and is deprotonated (A-).
+    
+    Inputs
+    ------
+    
+        pKa_data : 
+            List of dictionaries containing the parsed pKa data.
+        pH :
+            The pH value to compare against the pKa.
+        resname :
+            The residue name to return the protonation states for.
+            
+    Returns
+    -------
+    
+        str: 
+            The protonation states of the residue using the pdb2gmx format.
+    """
+    
+    protonation_states = ""
+    
+    for residue_data in pKa_data:
+        
+        if residue_data['resname'] == resname:
+            # Get the pKa value
+            pKa = residue_data['pKa']
+            
+            # Determine the protonation state based on pH and pKa
+            if resname == 'HIS':
+                if pH < pKa:
+                    # Protonated
+                    protonation_states += "2 "
+                if pH >= pKa:
+                    # Non protonated 
+                    # Check the result from reduce (AmberTools)
+                    reduce_protonation = residue_data.get('reduce_protonation')
+                    
+                    # Place the proton based on the reduce result
+                    if reduce_protonation == '0':
+                        protonation_states += "0 "
+                    elif reduce_protonation == '1':
+                        protonation_states += "1 "
+                    elif reduce_protonation == '2':
+                        protonation_states += "0 "   
+            else:
+                if pH < pKa:
+                    # Protonated
+                    protonation_states += "1 "
+                else:
+                    # Non protonated
+                    protonation_states += "0 "
+            
+    # Remove the last space
+    protonation_states = protonation_states.strip()
+    
+    return protonation_states
+
+def add_proton_placement(pKa_data: List[Dict[str, Union[str, int, float]]], pdb_file: str, global_log) -> List[Dict[str, Union[str, int, float]]]:
+    """ 
+    Read the HIS resnames in the PDB file (HID, HIE, HIP) and add the corresponding pdb2gmx code to the pKa data.
+    
+    The pdb_file is assumed to be the output of the reduce program in AmberTools. Which optimizes the H-bonds 
+    of HIS to place the protons.
+    
+    Input
+    -----
+    
+        pKa_data : 
+            List of dictionaries containing the parsed pKa data.
+        pdb_file : 
+            Path to the PDB file with the HIS resnames.
+        global_log: 
+            Logger object for logging messages.
+            
+    Returns
+    -------
+    
+        pKa_data : 
+            Updated list of dictionaries with the pKa data.
+    """
+    
+    # Find the HIS resnames in the PDB file
+    his_residues = find_amber_his(pdb_file, global_log)
+    
+    # Get the corresponding pdb2gmx code for the HIS resnames
+    his_protonations = get_pdb2gmx_his(his_residues)
+    
+    # Update the pKa data
+    his_count = 0
+    for residue_data in pKa_data:
+        if residue_data['resname'] == 'HIS':
+            # Add the HIS code coming from the PDB file
+            residue_data["reduce_protonation"] = his_protonations[his_count] 
+            his_count += 1
+            
+    return pKa_data
+            
+# Main workflow
 def main_wf(configuration_path, 
             input_pdb_path = None, 
             pdb_code = None, 
@@ -684,6 +877,7 @@ def main_wf(configuration_path,
             fix_amide_clashes = None, 
             pH = 7.0,
             keep_hs = False, 
+            his = None,
             forcefield = 'amber99sb-ildn', 
             salt_concentration = 0.15,
             setup_only = False, 
@@ -714,9 +908,13 @@ def main_wf(configuration_path,
         skip_fix_side_chain (bool): (Optional) whether to skip the fix of the side chain atoms. Default: False.
         skip_fix_ss         (bool): (Optional) whether to add disulfide bonds. Default: False.
         fix_amide_clashes   (bool): (Optional) whether to flip clashing amides to relieve the clashes
-        pH                 (float): (Optional) pH to be used for the protonation state of the titratable residues. Default: 7.0
-        keep_hs             (bool): (Optional) Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx will add them 
-                                    (considering canonical pKa values and a pH of 7 by default). Default: False
+        pH                 (float): (Optional) pH of the system. Used together with a pKa estimation (propka) to determine the 
+                                    protonation state of titratable residues. Default: 7.0
+        keep_hs             (bool): (Optional) Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx 
+                                    will add them back (see ph). Default: False
+        his                  (str): (Optional) Manual selection of histidine protonation states (HID: 0, HIE: 1, HIP:2). 
+                                    If given, the pKa estimation and the pH won't be used to protonate histidine residues. 
+                                    Default: None. Example: '0 1 1'
         forcefield           (str): (Optional) forcefield to be used in the simulation. Default: amber99sb-ildn. See values supported by pdb2gmx 
                                     (gromos45a3, charmm27, gromos53a6, amber96, amber99, gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, 
                                     amber99sb, amber03, amber99sb-ildn, oplsaa, amber94, amber99sb-star-ildn-mut). 
@@ -911,11 +1109,32 @@ def main_wf(configuration_path,
         # Prepare topology and coordinates for MD #
         ###########################################
         
+        # NOTE: do we need no hydrogens and standard names for residues before running propka? -> check
+        # STEP 3A: Estimate pKa of titratable residues with propka
+        global_log.info("step3A_propka: Estimate protonation state of titratable residues from empirical pKa calculation with propka")
+        biobb_propka(**global_paths["step3A_propka"], properties=global_prop["step3A_propka"], global_log=global_log)
+        
+        # Parse the propka summary file
+        pKa_results = parse_propka_summary(global_paths["step3A_propka"]["output_summary_path"])
+        
+        # STEP 3B: Run reduce from Amber Tools to estimate optimal proton placement in HIS
+        global_log.info("step3B_his_hbonds: Estimate optimal proton placement in HIS")
+        pdb4amber_run(**global_paths["step3B_his_hbonds"], properties=global_prop["step3B_his_hbonds"])
+        
+        # Include HIS proton placement information in the propka summary file
+        pKa_results = add_proton_placement(pKa_results, global_paths["step3B_his_hbonds"]["output_pdb_path"], global_log)
+               
         # NOTE: if we have a gap that we are not modeling (e.g. a missing loop), pdb2gmx will find terminal atoms OXT in non-terminal residues and will return an error
-        # STEP 3A: add H atoms, generate coordinate (.gro) and topology (.top) file for the system
+        # STEP 3B: add H atoms, generate coordinate (.gro) and topology (.top) file for the system
         global_log.info("step3B_structure_topology: Generate the topology")
         global_prop["step3B_structure_topology"]["force_field"]=forcefield
         global_prop["step3B_structure_topology"]["ignh"] = not keep_hs
+        for resname in titratable_residues:
+            protonation_states = get_protonation_state(pKa_results, pH, resname)
+            if protonation_states:
+                global_prop["step3B_structure_topology"][resname.lower()] = protonation_states
+        if his:
+            global_prop["step3B_structure_topology"]["his"] = his
         pdb2gmx(**global_paths["step3B_structure_topology"], properties=global_prop["step3B_structure_topology"])
         
         master_index_file = ""
