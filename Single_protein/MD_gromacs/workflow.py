@@ -1137,12 +1137,17 @@ def main_wf(configuration_path,
         global_log.info("step3B_structure_topology: Generate the topology")
         global_prop["step3B_structure_topology"]["force_field"]=forcefield
         global_prop["step3B_structure_topology"]["ignh"] = not keep_hs
+        # Find protonation states
         for resname in titratable_residues:
             protonation_states = get_protonation_state(pKa_results, pH, resname)
             if protonation_states:
                 global_prop["step3B_structure_topology"][resname.lower()] = protonation_states
         if his:
             global_prop["step3B_structure_topology"]["his"] = his
+        # Log protonation states
+        for resname in titratable_residues:
+            if global_prop["step3B_structure_topology"].get(resname.lower()):
+                global_log.info(f"step3B_structure_topology: {resname} protonation states: {global_prop['step3B_structure_topology'][resname.lower()]}")
         pdb2gmx(**global_paths["step3B_structure_topology"], properties=global_prop["step3B_structure_topology"])
         
         master_index_file = ""
@@ -1605,7 +1610,7 @@ if __name__ == "__main__":
     parser.add_argument('--skip_bc_fix', action='store_true', dest='skip_bc_fix', 
                         help="""Skip the backbone modeling of missing atoms. Otherwise the missing atoms in the backbone 
                         of the PDB structure will be modeled using 'biobb_structure_checking' and the 'Modeller suite' 
-                        (if the Modeller key is given). Note that missing loops modelling is only possible if the Modeller 
+                        (if the Modeller key is given). Note that modeling of missing loops is only possible if the Modeller 
                         key is provided. To obtain one register at: https://salilab.org/modeller/registration.html. Default: False""",
                         required=False, default=False)
     
@@ -1627,9 +1632,10 @@ if __name__ == "__main__":
     # NOTE: what happens with di-sulfide bonds between chains? Does pdb2gmx work?
 
     parser.add_argument('--skip_amides_flip', action='store_true', dest='skip_amides_flip',
-                        help="""Skip the fliping clashing amide groups to relieve clashes. 
+                        help="""Skip the fliping of clashing amide groups in ASP or GLU residues.
                         Otherwise the amide orientations will be changed if needed to relieve clashes using
-                        'biobb_structure_checking'. Default: False""",
+                        'biobb_structure_checking'. Note that amide group orientations coming from PDB structures is 
+                        not reliable in general due to symmetries in the electron density. Default: False""",
                         required=False, default=False)
 
     parser.add_argument('--ph', dest='ph', type=float,
@@ -1696,8 +1702,8 @@ if __name__ == "__main__":
                         required=False, default=False)
 
     parser.add_argument('--output', dest='output_path', type=str,
-                        help="Output path (default: working_dir_path in YAML config file)",
-                        required=False)
+                        help="Output path. Default: 'output' in the current working directory",
+                        required=False, default='output')
     
     # NOTE: add flag to determine what should remain restrained during the production run - currently everything is free always
 
