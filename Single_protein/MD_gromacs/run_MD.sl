@@ -33,4 +33,4 @@ INPUT_PDB=/path/to/pdb/file.pdb
 OUTPUT_PATH=output
 
 # Launch workflow
-python $WF_PATH/workflow.py --config input.yml --input_pdb $INPUT_PDB --output $OUTPUT_PATH --fix_ss --fix_amides --final_analysis
+python $WF_PATH/workflow.py --config input.yml --input_pdb $INPUT_PDB --output $OUTPUT_PATH

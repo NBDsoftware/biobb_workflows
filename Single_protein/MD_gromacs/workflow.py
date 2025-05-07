@@ -124,8 +124,9 @@ def highest_occupancy_altlocs(pdb_file, global_log) -> List[str]:
 
 def get_ligands(ligands_top_folder: Union[str, None], global_log) -> List[Dict[str, str]]:
     """
-    Get a list of available ligands in the ligands topology folder. The function searches for all the .itp and .gro files in the folder
-    If the folder is provided but doesn't exist or any .itp/.gro file is missing, an error is raised.
+    Get a list of available ligands in the ligands topology folder. The function searches for all the 
+    .itp and .gro files in the folder. If the folder is provided but doesn't exist or any .itp/.gro file 
+    is missing, an error is raised.
     
     Inputs
     ------
@@ -207,8 +208,8 @@ def get_ligands(ligands_top_folder: Union[str, None], global_log) -> List[Dict[s
       
 def fasta_from_pdb(input_pdb_path: str, output_fasta_path: str, global_log) -> bool:
     """
-    Try to obtain the FASTA sequence using the SEQRES records in the PDB file with Biopython. If the SEQRES records are available, write the FASTA sequence to 
-    the output file and return True. If the SEQRES records are not available, return False.
+    Try to obtain the FASTA sequence using the SEQRES records in the PDB file with Biopython. If the SEQRES records are available, 
+    write the FASTA sequence to the output file and return True. If the SEQRES records are not available, return False.
     
     Inputs
     ------
@@ -448,8 +449,8 @@ def set_gpu_use(global_properties: dict, gpu_use: bool) -> None:
 
 def set_global_gmx_properties(global_properties: dict, gmx_properties: dict, global_log) -> None:
     """
-    Set all the gmx global properties of this workflow, i.e. those global properties included at the beginning of the YAML configuration file that
-    are general to some gmx steps.
+    Set all the gmx global properties of this workflow, i.e. those global properties included at the beginning 
+    of the YAML configuration file that are general to some gmx steps.
     
     Inputs
     ------
@@ -476,7 +477,7 @@ def set_global_gmx_properties(global_properties: dict, gmx_properties: dict, glo
 
 
 # Process topology - temporal solution 
-def process_ligand_top(input_path, output_path) -> None:
+def process_ligand_top(input_path: str, output_path: str) -> None:
     """
     Read the input topology from the ligand. 
     Removes any [ defaults ] directive present.
@@ -543,12 +544,12 @@ def merge_xvgtimeseries_files(file_paths: list, output_xvg_path: str) -> None:
     
     Inputs
     ------
-    filepaths : list of str
+    filepaths :
         A list of file paths for the input XVG files to be merged. 
         Each file should follow the format of time series data with comments starting 
         with '#' followed by a header section starting with '@' with plot details 
     
-    output_filepath : str
+    output_filepath :
         The path for the output XVG file that will contain the merged data.
 
     Returns:
@@ -638,7 +639,7 @@ def merge_xvgtimeseries_files(file_paths: list, output_xvg_path: str) -> None:
         for data_row in merged_data:
             output_file.write(" ".join(f"{val:.6f}" for val in data_row) + '\n')
     
-def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
+def concatenate_gmx_analysis(conf, simulation_folders: List[str], output_path: str) -> None:
     """
     Concatenates the analysis files for each step of the GROMACS analysis including
     RMSD and Rgyr. The function reads the analysis files for each step from the
@@ -647,11 +648,11 @@ def concatenate_gmx_analysis(conf, simulation_folders, output_path) -> None:
     Inputs:
     -------
     
-    conf : class settings.ConfReader
+    conf :
         Configuration file reader object
-    simulation_folders : list of str
+    simulation_folders : 
         List of folder names containing the simulation data for each part or replica
-    output_path : str
+    output_path :
         Path to the output folder where the concatenated files will be saved
     """
     
@@ -874,7 +875,7 @@ def main_wf(configuration_path,
             cap_ter = False,
             skip_sc_fix = False, 
             skip_ss_bonds = False, 
-            skip_amides_flip = None, 
+            skip_amides_flip = False, 
             pH = 7.0,
             keep_hs = False, 
             his = None,
@@ -887,7 +888,7 @@ def main_wf(configuration_path,
             nsteps = None, 
             num_parts = 1, 
             num_replicas = 1, 
-            final_analysis = None, 
+            skip_traj_processing = False, 
             output_path = None
     ):
     '''
@@ -897,38 +898,39 @@ def main_wf(configuration_path,
     Inputs
     ------
 
-        configuration_path   (str): path to YAML configuration file
-        input_pdb_path       (str): (Optional) path to input PDB file
-        pdb_code             (str): (Optional) PDB code to be used to get the canonical FASTA sequence
-        pdb_chains           (str): (Optional) list of chains to be extracted from the PDB file and fixed
-        mutation_list        (str): (Optional) list of mutations to be introduced in the structure
-        ligands_top_folder   (str): (Optional) path to the folder containing the ligand .itp and .gro files
-        skip_bc_fix         (bool): (Optional) whether to skip the fix of the backbone atoms. Default: False.
-        cap_ter             (bool): (Optional) whether to add caps to the terminal residues. Default: False.
-        skip_sc_fix         (bool): (Optional) whether to skip the fix of the side chain atoms. Default: False.
-        skip_ss_bonds       (bool): (Optional) whether to add disulfide bonds. Default: False.
+        configuration_path    (str): path to YAML configuration file
+        input_pdb_path        (str): (Optional) path to input PDB file
+        pdb_code              (str): (Optional) PDB code to be used to get the canonical FASTA sequence
+        pdb_chains            (str): (Optional) list of chains to be extracted from the PDB file and fixed
+        mutation_list         (str): (Optional) list of mutations to be introduced in the structure
+        ligands_top_folder    (str): (Optional) path to the folder containing the ligand .itp and .gro files
+        skip_bc_fix          (bool): (Optional) whether to skip the fix of the backbone atoms. Default: False.
+        cap_ter              (bool): (Optional) whether to add caps to the terminal residues. Default: False.
+        skip_sc_fix          (bool): (Optional) whether to skip the fix of the side chain atoms. Default: False.
+        skip_ss_bonds        (bool): (Optional) whether to add disulfide bonds. Default: False.
         skip_amides_flip     (bool): (Optional) whether to flip clashing amides to relieve the clashes
-        pH                 (float): (Optional) pH of the system. Used together with a pKa estimation (propka) to determine the 
+        pH                  (float): (Optional) pH of the system. Used together with a pKa estimation (propka) to determine the 
                                     protonation state of titratable residues. Default: 7.0
-        keep_hs             (bool): (Optional) Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx 
+        keep_hs              (bool): (Optional) Keep hydrogen atoms in the input PDB file. Otherwise they will be ignored and pdb2gmx 
                                     will add them back (see ph). Default: False
-        his                  (str): (Optional) Manual selection of histidine protonation states (HID: 0, HIE: 1, HIP:2). 
+        his                   (str): (Optional) Manual selection of histidine protonation states (HID: 0, HIE: 1, HIP:2). 
                                     If given, the pKa estimation and the pH won't be used to protonate histidine residues. 
                                     Default: None. Example: '0 1 1'
-        forcefield           (str): (Optional) forcefield to be used in the simulation. Default: amber99sb-ildn. 
+        forcefield            (str): (Optional) forcefield to be used in the simulation. Default: amber99sb-ildn. 
                                     See values supported by pdb2gmx (gromos45a3, charmm27, gromos53a6, amber96, amber99, 
                                     gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, 
                                     oplsaa, amber94, amber99sb-star-ildn-mut). 
-        salt_concentration (float): (Optional) salt concentration to be used in the simulation. Default: 0.15.
-        setup_only          (bool): (Optional) whether to only setup the system or also run the simulations
-        input_gro_path       (str): (Optional) path to already-prepared input structure file (.gro)
-        input_top_path       (str): (Optional) path to already-prepared input topology file (.zip)
-        equil_only          (bool): (Optional) whether to only run the equilibration or also run the production simulations
-        nsteps               (int): (Optional) Total number of steps of the production simulation
-        num_parts            (int): (Optional) number of parts of the trajectory 
-        num_replicas         (int): (Optional) number of replicas of the trajectory
-        final_analysis      (bool): (Optional) whether to perform the final analysis or not
-        output_path          (str): (Optional) path to output folder
+        salt_concentration  (float): (Optional) salt concentration to be used in the simulation. Default: 0.15.
+        setup_only           (bool): (Optional) whether to only setup the system or also run the simulations
+        input_gro_path        (str): (Optional) path to already-prepared input structure file (.gro)
+        input_top_path        (str): (Optional) path to already-prepared input topology file (.zip)
+        equil_only           (bool): (Optional) whether to only run the equilibration or also run the production simulations
+        nsteps                (int): (Optional) Total number of steps of the production simulation
+        num_parts             (int): (Optional) number of parts of the trajectory 
+        num_replicas          (int): (Optional) number of replicas of the trajectory
+        skip_traj_processing (bool): (Optional) Skip the trajectory post-processing. Otherwise the trajectory will be dried, centered,
+                                     imaged and fitted using 'gmx trjconv'. Default: False
+        output_path           (str): (Optional) path to output folder
 
     Outputs
     -------
@@ -1459,7 +1461,7 @@ def main_wf(configuration_path,
         cpptraj_rmsf(**traj_paths['step6D_rmsf'], properties=traj_prop['step6D_rmsf'])
         
     # Do the final analysis with all the previous parts or replicas
-    if final_analysis:
+    if not skip_traj_processing:
         
         # If simulations are different parts of a single trajectory
         if num_parts:
@@ -1600,30 +1602,30 @@ if __name__ == "__main__":
                         of the PDB structure will be modeled using 'biobb_structure_checking' and the 'Modeller suite' 
                         (if the Modeller key is given). Note that missing loops modelling is only possible if the Modeller 
                         key is provided. To obtain one register at: https://salilab.org/modeller/registration.html. Default: False""",
-                        required=False)
+                        required=False, default=False)
     
     parser.add_argument('--cap_ter', action='store_true', dest='cap_ter',
                         help="Add terminal residues ACE and NME as necessary, preserving existing atoms. Default: False",
-                        required=False)
+                        required=False, default=False)
     
     parser.add_argument('--skip_sc_fix', action='store_true', dest='skip_sc_fix',
                         help="""Skip the side chain modeling of missing atoms. Otherwise the missing atoms in the side chains 
                         of the PDB structure will be modeled using 'biobb_structure_checking' and the 'Modeller suite' 
                         (if the Modeller key is given). Default: False""",
-                        required=False)
+                        required=False, default=False)
     
     parser.add_argument('--skip_ss_bonds', action='store_true',
                         help="""Skip the addition of disulfide bonds to the protein according to a distance criteria. 
                         Otherwise the missing atoms in the side chains of the PDB structure will be modeled using 
                         'biobb_structure_checking' and the 'Modeller suite' (if the Modeller key is given). Default: False""",
-                        required=False)
+                        required=False, default=False)
     # NOTE: what happens with di-sulfide bonds between chains? Does pdb2gmx work?
 
     parser.add_argument('--skip_amides_flip', action='store_true', dest='skip_amides_flip',
                         help="""Skip the fliping clashing amide groups to relieve clashes. 
                         Otherwise the amide orientations will be changed if needed to relieve clashes using
                         'biobb_structure_checking'. Default: False""",
-                        required=False)
+                        required=False, default=False)
 
     parser.add_argument('--ph', dest='ph', type=float,
                         help="""pH of the system. Used together with a pKa estimation (with propka) to determine the 
@@ -1739,5 +1741,5 @@ if __name__ == "__main__":
             nsteps=args.nsteps,  
             num_parts=args.num_parts, 
             num_replicas=args.num_replicas, 
-            final_analysis=args.final_analysis, 
+            skip_traj_processing=args.skip_traj_processing, 
             output_path=args.output_path)
