@@ -394,6 +394,50 @@ def get_chains_dict(pdb_file: str) -> Dict[str, Dict[str, List[int]]]:
     
     return chains_dict
 
+# Other helpers
+def rename_CYX(pdb_file: str) -> str:
+    """ 
+    Read a pdb file and rename all CYX residues to CYS2 residues.
+    
+    CYX residues are recognized as cysteine residues with a disulfide bond only from GROMACS version 2024.
+    Older versions will need CYS2 as cysteine name to form bonds in the topology.
+    
+    Parameters
+    ----------
+    
+    pdb_file : str
+        Path to the PDB file.
+    
+    Outputs
+    -------
+    
+    new_pdb_file : str
+        Path to the new PDB file with the renamed CYX residues.    
+    """
+    
+    # Find parent path of the pdb file
+    parent_path = Path(pdb_file).parent
+    
+    # Find the name of the pdb file
+    pdb_name = Path(pdb_file).stem
+    
+    # Create a path to the new pdb file
+    new_pdb_file = os.path.join(parent_path, f"{pdb_name}_CYS2.pdb")
+    
+    # Read the input PDB file
+    with open(pdb_file, 'r') as f:
+        lines = f.readlines()
+    
+    # Replace all CYX residues with CYS2
+    with open(new_pdb_file, 'w') as f:
+        for line in lines:
+            # If line contains CYX, replace it with CYS2
+            if 'CYX' in line:
+                line = line.replace('CYX ', 'CYS2')
+            f.write(line)
+    
+    return new_pdb_file
+    
 # Set additional general properties not considered by the configuration reader
 def set_gromacs_path(global_properties: dict, binary_path: str) -> None:
     """
@@ -911,8 +955,13 @@ def main_wf(configuration_path,
         ligands_top_folder    (str): (Optional) path to the folder containing the ligand .itp and .gro files
         skip_bc_fix          (bool): (Optional) whether to skip the fix of the backbone atoms. Default: False.
         cap_ter              (bool): (Optional) whether to add caps to the terminal residues. Default: False.
-        skip_sc_fix          (bool): (Optional) whether to skip the fix of the side chain atoms. Default: False.
-        skip_ss_bonds        (bool): (Optional) whether to add disulfide bonds. Default: False.
+        skip_sc_fix          (bool): (Optional) Skip the side chain modeling of missing atoms. Otherwise the 
+                                     missing atoms in the side chains of the PDB structure will be modeled using 
+                                     'biobb_structure_checking' and the 'Modeller suite' (if the Modeller key is given). 
+                                     Default: False
+        skip_ss_bonds        (bool): (Optional) Skip the addition of disulfide bonds to the protein according to a distance criteria. 
+                                     Otherwise the missing atoms in the side chains of the PDB structure will be modeled using 
+                                     'biobb_structure_checking' and the 'Modeller suite' (if the Modeller key is given).
         skip_amides_flip     (bool): (Optional) whether to flip clashing amides to relieve the clashes
         pH                  (float): (Optional) pH of the system. Used together with a pKa estimation (propka) to determine the 
                                     protonation state of titratable residues. Default: 7.0
@@ -1083,14 +1132,10 @@ def main_wf(configuration_path,
         else:
             global_log.info("step2E_fixsidechain: Skipping modeling of the missing heavy atoms in the side chains")
 
-        # STEP 2F: model SS bonds (CYS -> CYX)
-        if not skip_ss_bonds:
-            global_log.info("step2F_fixssbonds: Fix SS bonds")
-            global_paths['step2F_fixssbonds']['input_pdb_path'] = last_pdb_path
-            fix_ssbonds(**global_paths["step2F_fixssbonds"], properties=global_prop["step2F_fixssbonds"])
-            last_pdb_path = global_paths["step2F_fixssbonds"]["output_pdb_path"]
-        else:
-            global_log.info("step2F_fixssbonds: Skipping modeling of the SS bonds")
+        # STEP 2F: Renumber structure atoms and residues
+        global_log.info("step2F_renumberstructure: renumber structure")
+        renumber_structure(**global_paths["step2F_renumberstructure"], properties=global_prop["step2F_renumberstructure"])
+        last_pdb_path = global_paths["step2F_renumberstructure"]["output_structure_path"]
 
         # STEP 2G: Flip amide groups to relieve clashes
         if not skip_amides_flip:
@@ -1105,13 +1150,18 @@ def main_wf(configuration_path,
         global_paths['step2H_fixchirality']['input_pdb_path'] = last_pdb_path
         global_log.info("step2H_fixchirality: fix chirality of residues")
         fix_chirality(**global_paths["step2H_fixchirality"], properties=global_prop["step2H_fixchirality"])
-
-        # STEP 2I: Renumber structure atoms and residues
-        global_log.info("step2I_renumberstructure: renumber structure")
-        renumber_structure(**global_paths["step2I_renumberstructure"], properties=global_prop["step2I_renumberstructure"])
         
+        # STEP 2I: model SS bonds (CYS -> CYX)
+        if not skip_ss_bonds:
+            global_log.info("step2I_fixssbonds: Fix SS bonds")
+            global_paths['step2I_fixssbonds']['input_pdb_path'] = last_pdb_path
+            fix_ssbonds(**global_paths["step2I_fixssbonds"], properties=global_prop["step2I_fixssbonds"])
+            last_pdb_path = rename_CYX(global_paths["step2I_fixssbonds"]["output_pdb_path"])
+        else:
+            global_log.info("step2I_fixssbonds: Skipping modeling of the SS bonds")
+            
         # Get the chain residues
-        chains_dict = get_chains_dict(global_paths["step2I_renumberstructure"]["output_structure_path"])
+        chains_dict = get_chains_dict(last_pdb_path)
         
         ###########################################
         # Prepare topology and coordinates for MD #
@@ -1120,6 +1170,7 @@ def main_wf(configuration_path,
         # NOTE: do we need no hydrogens and standard names for residues before running propka? -> check
         # STEP 3A: Estimate pKa of titratable residues with propka
         global_log.info("step3A_propka: Estimate protonation state of titratable residues from empirical pKa calculation with propka")
+        global_paths["step3A_propka"]["input_structure_path"] = last_pdb_path
         biobb_propka(**global_paths["step3A_propka"], properties=global_prop["step3A_propka"], global_log=global_log)
         
         # Parse the propka summary file
@@ -1127,6 +1178,7 @@ def main_wf(configuration_path,
         
         # STEP 3B: Run reduce from Amber Tools to estimate optimal proton placement in HIS
         global_log.info("step3B_his_hbonds: Estimate optimal proton placement in HIS")
+        global_paths["step3B_his_hbonds"]["input_pdb_path"] = last_pdb_path
         pdb4amber_run(**global_paths["step3B_his_hbonds"], properties=global_prop["step3B_his_hbonds"])
         
         # Include HIS proton placement information in the propka summary file
@@ -1135,6 +1187,7 @@ def main_wf(configuration_path,
         # NOTE: if we have a gap that we are not modeling (e.g. a missing loop), pdb2gmx will find terminal atoms OXT in non-terminal residues and will return an error
         # STEP 3B: add H atoms, generate coordinate (.gro) and topology (.top) file for the system
         global_log.info("step3B_structure_topology: Generate the topology")
+        global_paths["step3B_structure_topology"]["input_pdb_path"] = last_pdb_path
         global_prop["step3B_structure_topology"]["force_field"]=forcefield
         global_prop["step3B_structure_topology"]["ignh"] = not keep_hs
         # Find protonation states
