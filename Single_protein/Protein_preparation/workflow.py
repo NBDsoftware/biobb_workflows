@@ -27,7 +27,6 @@ from biobb_amber.pdb4amber.pdb4amber_run import pdb4amber_run
 from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 from biobb_pdb_tools.pdb_tools.biobb_pdb_tofasta import biobb_pdb_tofasta
-from biobb_pdb_tools.pdb_tools.biobb_pdb_tidy import biobb_pdb_tidy
 from biobb_chemistry.ambertools.reduce_remove_hydrogens import reduce_remove_hydrogens
 
 
