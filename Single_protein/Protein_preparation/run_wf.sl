@@ -18,7 +18,7 @@ ml GROMACS
 
 # Activate conda environment
 module load Miniconda3
-source activate /shared/work/BiobbWorkflows/envs/biobb_md
+source activate /shared/work/BiobbWorkflows/envs/biobb_pp
 
 # Unset env variables that might be set in the loaded modules
 unset PYTHONPATH
