@@ -5,14 +5,9 @@ channels:
   - salilab
 dependencies:
   - python==3.10
-  - modeller                        # Activate if you want to use Modeller
-  - propka==3.5.1
-  - biobb_io>=5.0.0
   - biobb_common>=5.0.0
   - biobb_structure_utils>=5.0.0
   - biobb_model>=5.0.0
   - biobb_gromacs>=5.0.0
   - biobb_amber>=5.0.3
   - biobb_analysis>=5.0.1
-  - biobb_chemistry>=5.0.3
-  - biobb_pdb_tools>=5.0.0         # Line 81 of pdb_tofasta -> fu.log(' '.join(self.cmd), self.out_log, self.global_log)

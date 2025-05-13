@@ -53,76 +53,12 @@ python workflow.py --help
 ```
 
 ```
-usage: MD Simulation with GROMACS [-h] --config CONFIG_PATH [--setup_only] [--num_parts NUM_PARTS] [--num_replicas NUM_REPLICAS] [--output OUTPUT_PATH] [--input_pdb INPUT_PDB_PATH] [--his HIS]
-                                  [--pdb_chains PDB_CHAINS [PDB_CHAINS ...]] [--mutation_list MUTATION_LIST [MUTATION_LIST ...]] [--input_gro INPUT_GRO_PATH] [--input_top INPUT_TOP_PATH]
-                                  [--skip_fix_backbone] [--fix_ss] [--fix_amides] [--nsteps NSTEPS] [--final_analysis] [--ligand_parameters LIGAND_PARAMETERS]
 
-options:
-  -h, --help            show this help message and exit
-  --config CONFIG_PATH  Configuration file (YAML)
-  --setup_only          Only setup the system (default: False)
-  --num_parts NUM_PARTS
-                        Number of parts of the trajectorie (default: 1)
-  --num_replicas NUM_REPLICAS
-                        Number of replicas (default: 1)
-  --output OUTPUT_PATH  Output path (default: working_dir_path in YAML config file)
-  --input_pdb INPUT_PDB_PATH
-                        Input PDB file (default: input_structure_path in step 1 of configuration file)
-  --his HIS             Histidine protonation states list.
-  --pdb_chains PDB_CHAINS [PDB_CHAINS ...]
-                        PDB chains to be extracted from PDB file (default: chains in properties of step 1)
-  --mutation_list MUTATION_LIST [MUTATION_LIST ...]
-                        List of mutations to be introduced in the protein (default: None, ex: A:Arg220Ala)
-  --input_gro INPUT_GRO_PATH
-                        Input structure file ready to minimize (.gro). To provide an externally prepared system, use together with --input_top (default: None)
-  --input_top INPUT_TOP_PATH
-                        Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, use together with --input_gro (default: None)
-  --skip_fix_backbone   Skip the backbone modeling of missing atoms (default: False)
-  --fix_ss              Add disulfide bonds to the protein. Use carefully! (default: False)
-  --fix_amides          Flip clashing amides to relieve the clashes (default: False)
-  --nsteps NSTEPS       Number of steps of the simulation
-  --final_analysis      Run the final analysis of the trajectory/ies. Concatenation of the analysis and trajectory, trajectory drying, imaging and fitting (default: False)
-  --ligand_parameters LIGAND_PARAMETERS
-                        Folder with .itp files for the ligand topology and heavy-atom constraints (default: None). If there is a ligand in the selected chain with a topology in the ligand_parameters
-                        folder, it will be included in the simulation.
 ```
 
 ## Description
 
-This workflow has several steps. The input for the workflow can be (1) a pdb file to be fixed and prepared. Or (2) an already prepared gromacs structure file and .zip topology files ready to be minimized.
-
-1. **Extraction of structure from PDB**
-    Provide the input pdb file and chain to be extracted through the command line arguments or through the paths and properties of section 1 in the YAML configuration file. The workflow will always prioritize the inputs from command line arguments. Any cofactor present in the selected chain will also be extracted.
-
-2. **Fix PDB defects (A-I)**
-    Steps to fix different possible defects in the input pdb structure. See below.
-
-    A. **Fix alternative locations** 
-    Provide a list with the choices of alternative locations to keep in the final structure. If no list is given (_null_ value) it will select the alternative location with the highest occupancy (the workflow will use Biopython to do so). 
-
-    B. **Mutate initial pdb structure** 
-    Mutations can be requested through the mutation_list property of the YAML configuration file as a single string of mutations separated by commas (no spaces). Where each mutation is defined by string with the following format: "Chain:Wild_type_residue_name Residue_number Mutated_type_residue_name". The residue name should be a 3 letter code starting with capital letters, e.g. "A:Arg220Ala". Alternatively, they can be given through the mutation_list command line argument. If no mutation is desired leave an empty string ("") or comment the mutation_list property.
-
-    C. **Obtain the Sequence in FASTA format** 
-    The sequence is then used to model missing backbone atoms in the next step. The workflow first tries to download the canonical FASTA (including all residues for that protein) from the Protein Data Bank. If there is no internet connection, it will try to obtain the sequence from the _SEQRES_ records in the PDB. If there are no _SEQRES_, then only the residues that contain at least one atom in the structure will be included. This step can be skipped including the ```--skip_fix_backbone``` option.  
-
-    D. **Model missing backbone atoms**
-    Add missing backbone heavy atoms using _biobb_structure_checking_ and Modeller suite. A modeller license key and the previous FASTA file are required for this step. This step can be skipped including the ```--skip_fix_backbone``` option.  
-
-    E. **Model missing side chain atoms**
-    Add missing side chain atoms using _biobb_structure_checking_ (and Modeller suite if a license key is provided). NOTE: this step might erase unknown atoms
-
-    F. **Add missing disulfide bonds**
-    It changes CYS for CYX to mark cysteines residues pertaining to a [di-sulfide bond](https://en.wikipedia.org/wiki/Disulfide). It uses a distance criteria to determine if nearby cysteines are part of a di-sulfide bridge (_check_structure getss_). Use carefully. This step is executed only if the "--fix_ss" option is used. 
-
-    G. **Relieve clashes flipping amide groups**
-    It flips the clashing amide groups to relieve clashes.
-
-    H. **Fix chirality of residues**
-    Creates a new PDB file fixing stereochemical errors in residue side-chains changing it's chirality when needed.
-
-    I. **Renumber atomic indices**
-    So they start at 1.
+This workflow has several steps. The input for the workflow can be (1) a prepared PDB file or (2) a gromacs structure file and .zip topology files ready to be minimized.
 
 3. **Preparation of topology and coordinates for MD**
 
