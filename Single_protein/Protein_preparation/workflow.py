@@ -589,8 +589,7 @@ step1_extractAtoms:
     input_structure_path: /path/to/input                            # Overwritten by command line
     output_molecule_path: main_structure.pdb
   properties:
-    molecule_type: chains                                           # type of molecule to extract. Options: all, protein, na, dna, rna, chains
-    chains: [A]                                                     # if "chains" is selected in molecule_type. Options: None, [A], [A, B], ...
+    molecule_type: all                                             # type of molecule to extract. Options: all, protein, na, dna, rna, chains.
 
 # Step 2: fix alternative locations of residues if any with biobb_structure_checking and the Modeller suite (if key property is given)
 step2_fixaltlocs:                 
@@ -615,7 +614,7 @@ step4_canonical_fasta:
   paths:
     output_fasta_path: canonicalFasta.fasta
   properties:
-    pdb_code: null                                                    # Will be set by the workflow
+    pdb_code: null                                                    # Will be set at runtime
 
 # Step 2 C: Extract the residue sequence from the PDB file to FASTA format
 step5_pdb_tofasta:
@@ -1065,8 +1064,8 @@ if __name__ == "__main__":
                         required=False)
 
     parser.add_argument('--pdb_chains', nargs='+', dest='pdb_chains',
-                        help="Protein PDB chains to be extracted from PDB file and fixed. Default: A. Example: A B C",
-                        required=False, default=['A'])
+                        help="Protein PDB chains to be extracted from PDB file and fixed. Default: all chains in PDB. Example: A B C",
+                        required=False)
 
     parser.add_argument('--mutation_list', nargs='+', dest='mutation_list',
                         help="List of mutations to be introduced in the protein. Default: None. Example: A:Arg220Ala B:Ser221Gly",
