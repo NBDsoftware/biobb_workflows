@@ -504,8 +504,19 @@ def create_config_file(config_path: str) -> None:
     with open(config_path, 'w') as f:
         f.write(config_contents())
         
-def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, input_pockets_zip: str, pocket: str, output_path: str, 
-            num_top_ligands: int, keep_poses: bool, dock_to_residues: bool, cpus: int, exhaustiveness: int, debug: bool) -> Tuple[Dict, Dict]:
+def main_wf(configuration_path: str, 
+            ligand_lib_path: str, 
+            structure_path: str, 
+            input_pockets_zip: str, 
+            pocket: str, 
+            output_path: str, 
+            num_top_ligands: int, 
+            keep_poses: bool, 
+            dock_to_residues: bool, 
+            cpus: int, 
+            exhaustiveness: int, 
+            debug: bool
+    ) -> Tuple[Dict, Dict]:
     '''
     Main VS workflow. This workflow takes a ligand library, a pocket (defined by the output of a cavity analysis or some residues) 
     and a receptor to screen the cavity using the ligand library (with AutoDock).
@@ -513,18 +524,30 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
     Inputs
     ------
 
-        configuration_path   : path to input.yml 
-        ligand_lib_path      : path to ligand library. Either a SMILES file or a SDF file
-        structure_path       : path to receptor structure
-        input_pockets_zip    : path to input pockets zip file
-        pocket               : pocket name
-        output_path          : path to output directory
-        num_top_ligands      : number of top ligands to be saved
-        keep_poses           : keep poses of top ligands
-        dock_to_residues     : dock to residues instead of cavity
-        cpus                 : number of cpus to use for each docking
-        exhaustiveness       : exhaustiveness of the docking
-        debug                : keep intermediate files for debugging
+        configuration_path:
+            path to YAML configuration file
+        ligand_lib_path: 
+            path to ligand library. Either a SMILES file or a SDF file
+        structure_path: 
+            path to receptor structure
+        input_pockets_zip: 
+            path to input pockets zip file
+        pocket: 
+            pocket name
+        output_path: 
+            path to output directory
+        num_top_ligands: 
+            number of top ligands to be saved
+        keep_poses: 
+            keep poses of top ligands
+        dock_to_residues: 
+            dock to residues instead of cavity
+        cpus: 
+            number of cpus to use for each docking
+        exhaustiveness: 
+            exhaustiveness of the docking
+        debug: 
+            keep intermediate files for debugging
 
     Outputs
     -------

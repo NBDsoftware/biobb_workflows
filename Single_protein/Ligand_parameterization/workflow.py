@@ -363,29 +363,55 @@ def create_config_file(config_path: str) -> None:
         f.write(config_contents())
 
 # Main workflow
-def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['protein.ff14SB', 'DNA.bsc1', 'gaff'], ligand_names: Union[List[str], None] = None, 
-         charges: Union[List[str], None] = None, chains: List[str] = ['A'], model: int = 0, format: Literal['gromacs', 'amber'] = 'gromacs', custom_parameters: Union[str, None] = None,
-         protonation_tool: Literal['ambertools', 'obabel', 'none'] = 'ambertools', skip_min: bool = False, 
-         output_top_path: Union[str, None] = None, output_path: Union[str, None] = None):
+def main_wf(configuration_path: str, 
+            input_pdb: str, 
+            forcefields: List[str] = ['protein.ff14SB', 'DNA.bsc1', 'gaff'], 
+            ligand_names: Union[List[str], None] = None, 
+            charges: Union[List[str], None] = None, 
+            chains: List[str] = ['A'], 
+            model: int = 0, 
+            format: Literal['gromacs', 'amber'] = 'gromacs', 
+            custom_parameters: Union[str, None] = None,
+            protonation_tool: Literal['ambertools', 'obabel', 'none'] = 'ambertools', 
+            skip_min: bool = False, 
+            output_top_path: Union[str, None] = None, 
+            output_path: Union[str, None] = None
+    ):
     '''
     Ligand parameterization workflow using BioExcel Building Blocks.
 
     Inputs
     ------
     
-        configuration_path : Path to the configuration file (YAML).
-        input_pdb          : Path to the input PDB file with the ligands to parameterize.
-        forcefields        : (Optional) List of paths or file names of force fields to use in the parameterization. Only used within LEaP if custom parameters are also provided.
-        ligand_names       : (Optional) List of ligand names in the PDB file to parameterize. By default, all ligands are parameterized.
-        charges            : (Optional) List of charges for the ligands to parameterize. Only used when no custom parameters are given and the ligand is parameterized using GAFF and antechamber through acpype. By default acpype will guess the charge based on the protonation state.
-        chains             : (Optional) Chain ID of the ligands to parameterize. Default: A.
-        model              : (Optional) Model number of the ligands to parameterize. Default: 1.
-        format             : (Optional) Format of the output topology files. Options: gromacs, amber. Default: gromacs.
-        custom_parameters  : (Optional) Path to folder with custom parameter sets for one or more ligands (.prep and .frcmod files with the ligand name).
-        protonation_tool   : (Optional) Protonation tool to use. Options: ambertools, obabel. Default: ambertools.
-        skip_min           : (Optional) Skip the minimization step. Default: False.
-        output_top_path    : (Optional) Output path for the folder with topologies and coordinate files.
-        output_path        : (Optional) Output path. Default: working_dir_path in YAML config file.
+        configuration_path: 
+            path to YAML configuration file
+        input_pdb: 
+            path to the input PDB file with the ligands to parameterize.
+        forcefields: 
+            list of paths or file names of force fields to use in the parameterization. 
+            Only used within LEaP if custom parameters are also provided.
+        ligand_names: 
+            list of ligand names in the PDB file to parameterize. By default, all ligands are parameterized.
+        charges:  
+            list of charges for the ligands to parameterize. Only used when no custom parameters are 
+            given and the ligand is parameterized using GAFF and antechamber through acpype. By default acpype will guess the charge based on the protonation state.
+        chains:  
+            chain ID of the ligands to parameterize. Default: A.
+        model:  
+            model number of the ligands to parameterize. Default: 1.
+        format:  
+            format of the output topology files. Options: gromacs, amber. Default: gromacs.
+        custom_parameters:  
+            path to folder with custom parameter sets for one or more ligands 
+            (.prep and .frcmod files with the ligand name).
+        protonation_tool:  
+            protonation tool to use. Options: ambertools, obabel. Default: ambertools.
+        skip_min:  
+            skip the minimization step. Default: False.
+        output_top_path:  
+            output path for the folder with topologies and coordinate files.
+        output_path:  
+            output path. Default: working_dir_path in YAML config file.
         
     Outputs
     -------
@@ -637,6 +663,18 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     
-    main(configuration_path = args.config_path, input_pdb = args.input_pdb, forcefields=args.forcefields, ligand_names = args.ligand_names, charges = args.charges,  
-         chains = args.chains, model = args.model, format = args.format, custom_parameters = args.custom_parameters, protonation_tool = args.protonation_tool, 
-         skip_min = args.skip_min, output_top_path = args.output_top_path, output_path=args.output_path)
+    main_wf(
+        configuration_path = args.config_path, 
+        input_pdb = args.input_pdb, 
+        forcefields=args.forcefields, 
+        ligand_names = args.ligand_names, 
+        charges = args.charges,  
+        chains = args.chains, 
+        model = args.model, 
+        format = args.format, 
+        custom_parameters = args.custom_parameters, 
+        protonation_tool = args.protonation_tool, 
+        skip_min = args.skip_min, 
+        output_top_path = args.output_top_path, 
+        output_path=args.output_path
+    )

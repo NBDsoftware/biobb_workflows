@@ -11,6 +11,7 @@ from Bio import PDB
 import pandas as pd
 from pathlib import Path
 from functools import partial
+from typing import Literal
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from scipy.spatial.distance import squareform
@@ -1292,7 +1293,13 @@ def create_config_file(config_path: str) -> None:
 # Main #
 ########
 
-def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_output_path, skip_until, output_path):
+def main_wf(configuration_path: str, 
+            receptor_pdb_path: str, 
+            ligand_pdb_path: str, 
+            previous_output_path: str, 
+            skip_until: Literal["dockrst", "makePDB", "clustering", "oda_filtering"],
+            output_path: str
+    ):
     '''
     Main protein-protein docking workflow. Can be used to sample protein-protein docking poses,
     rank them according to pyDock score and cluster them based on RMSD. The best scoring pose from each cluster 
@@ -1301,12 +1308,18 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
     Inputs
     ------
 
-        configuration_path   (str): path to input.yml
-        receptor_pdb_path    (str): path to receptor pdb file
-        ligand_pdb_path      (str): path to ligand pdb file
-        previous_output_path (str): path to previous output folder. Used if you want to re-use some steps of a previous run
-        skip_until           (str): skip everything until this step. Options: dockrst, makePDB, clustering, oda_filtering 
-        output_path          (str): path to output folder
+        configuration_path:
+            path to YAML configuration file
+        receptor_pdb_path: 
+            path to receptor pdb file
+        ligand_pdb_path: 
+            path to ligand pdb file
+        previous_output_path: 
+            path to previous output folder. Used if you want to re-use some steps of a previous run
+        skip_until:  
+            skip everything until this step. Options: dockrst, makePDB, clustering, oda_filtering 
+        output_path: 
+            path to output folder
 
     Outputs
     -------

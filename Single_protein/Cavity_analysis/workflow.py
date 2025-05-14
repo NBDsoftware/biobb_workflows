@@ -37,7 +37,8 @@ def is_gromacs_format(traj_path: str) -> bool:
     Inputs
     ------
 
-        traj_path (str): Path to the trajectory file
+        traj_path: 
+            path to the trajectory file
     
     Output
     -------
@@ -61,8 +62,8 @@ def set_gromacs_path(global_prop: dict, binary_path: str) -> None:
     Inputs
     ------
 
-        global_prop (dict): Dictionary containing all the properties of the workflow.
-        binary_path (str): Path to the GROMACS binary.
+        global_prop: Dictionary containing all the properties of the workflow.
+        binary_path: Path to the GROMACS binary.
     """
 
     list_of_steps = ['step1A_traj_preparation_ndx', 'step1B_add_selection_group', 'step2A_strip_traj', 'step2B_strip_top',
@@ -725,7 +726,15 @@ def create_config_file(config_path: str) -> None:
         f.write(config_contents())
         
 # Main workflow   
-def main_wf(configuration_path, traj_path, top_path, clustering_path, distance_threshold, prepare_traj, filtering_selection, output_path):
+def main_wf(configuration_path: str,  
+            traj_path: str, 
+            top_path: str, 
+            clustering_path: str, 
+            distance_threshold: float, 
+            prepare_traj: bool, 
+            filtering_selection: str, 
+            output_path: str
+    ):
     '''
     Main clustering and cavity analysis workflow. This workflow clusters a given trajectory and analyzes the cavities of the most representative
     structures. Then filters the cavities according to a pre-defined criteria and outputs the pockets that passed the filter.
@@ -733,14 +742,22 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, distance_t
     Inputs
     ------
 
-        configuration_path   (str): path to YAML configuration file
-        traj_path            (str): (Optional) path to trajectory file
-        top_path             (str): (Optional) path to topology file
-        clustering_path      (str): (Optional) path to the folder with the most representative structures in pdb format from an external clustering 
-        prepare_traj        (bool): (Optional) flag to prepare the trajectory for clustering
-        filtering_selection  (str): (Optional) residue selection to filter pockets by distance to center of mass
-        distance_threshold (float): (Optional) distance threshold to filter pockets by distance to center of mass
-        output_path          (str): (Optional) path to output folder
+        configuration_path: 
+            path to YAML configuration file
+        traj_path:  
+            path to trajectory file
+        top_path:  
+            path to topology file
+        clustering_path:  
+            path to the folder with the most representative structures in pdb format from an external clustering 
+        prepare_traj:  
+            flag to prepare the trajectory for clustering
+        filtering_selection:  
+            residue selection to filter pockets by distance to center of mass
+        distance_threshold:  
+            distance threshold to filter pockets by distance to center of mass
+        output_path:  
+            path to output folder
 
     Outputs
     -------
