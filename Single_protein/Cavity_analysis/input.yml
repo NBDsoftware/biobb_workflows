@@ -1,7 +1,7 @@
 # YAML configuration file for the Clustering and cavity analysis workflow
 
 # Global properties (common for all steps)
-binary_path: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/bin/gmx_mpi # GROMACS binary path
+binary_path: gmx                                                                                # GROMACS binary path
 working_dir_path: output                                                                        # Workflow default output directory
 can_write_console_log: True                                                                     # Output log to console
 remove_tmp: True                                                                                # Remove temporal files

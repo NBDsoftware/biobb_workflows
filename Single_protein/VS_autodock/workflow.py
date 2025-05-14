@@ -382,6 +382,128 @@ def catch_model_0(residue_selection: list, global_log):
             
             return True
         
+
+# YML construction
+def config_contents() -> str:
+    """
+    Returns the contents of the YAML configuration file as a string.
+    
+    The YAML file contains the configuration for the protein preparation workflow.
+    
+    Returns
+    -------
+    str
+        The contents of the YAML configuration file.
+    """
+    
+    return f""" 
+
+# Global properties (common for all steps)
+global_properties:
+  working_dir_path: output
+  can_write_console_log: False
+  restart: True 
+  remove_tmp: True
+
+# Section 1: Pocket selection and receptor preparation
+
+step1_fpocket_select:
+  tool: fpocket_select
+  paths:
+    input_pockets_zip: /path/to/input_pockets.zip       # Will be set by the workflow
+    output_pocket_pdb: fpocket_cavity.pdb
+    output_pocket_pqr: fpocket_pocket.pqr
+  properties:
+    pocket: 1                                           # Will be set by the workflow
+
+step1b_extract_residues:
+  tool: extract_residues
+  paths:
+    input_structure_path: /path/to/input_structure.pdb  # Will be set by the workflow
+    output_residues_path: pocket_residues.pdb
+  properties:
+    residues: [{'res_id': '37', 'model':'0'}, {'res_id': '49', 'model':'0'}, {'res_id': '112', 'model':'0'}]
+
+step2_box:
+  tool: box
+  paths:
+    input_pdb_path: dependency/step1_fpocket_select/output_pocket_pqr
+    output_pdb_path: box.pdb 
+  properties:
+    offset: 12                                         # change - Extra distance (Angstroms) between the last residue atom and the box boundary
+    box_coordinates: True
+
+step3_str_check_add_hydrogens:
+  tool: str_check_add_hydrogens
+  paths:
+    input_structure_path: /path/to/input_structure.pdb   # Will be set by the workflow
+    output_structure_path: prep_receptor.pdbqt
+  properties:
+    charges: False
+    mode: null                                          # change - auto, list, ph or null to avoid adding any Hs                      
+
+# Section 2: Source each ligand and dock it to receptor
+
+step4_babel_protonate:
+  tool: babel_convert
+  paths:
+    input_path: ligand.smi
+    output_path: ligand.pdbqt
+  properties:
+    coordinates: 3
+    ph: 7.4
+
+step4b_babel_convert:
+  tool: babel_convert
+  paths:
+    input_path: ligand.sdf
+    output_path: ligand.pdbqt
+  properties:
+
+step5_autodock_vina_run:
+  tool: autodock_vina_run
+  paths:
+    input_ligand_pdbqt_path: dependency/step4_babel_protonate/output_path
+    input_receptor_pdbqt_path: dependency/step3_str_check_add_hydrogens/output_structure_path
+    input_box_path: dependency/step2_box/output_pdb_path
+    output_pdbqt_path: output_vina.pdbqt
+    output_log_path: output_vina.log
+  properties:
+    exhaustiveness: 8                                    # Will be set by the workflow
+    cpu: 1                                               # Will be set by the workflow
+    binary_path: vina                                    # change - path to the vina binary
+
+step6_babel_prepare_pose:
+  tool: babel_convert
+  paths:
+    input_path: dependency/step5_autodock_vina_run/output_pdbqt_path
+    output_path: output_vina.pdb
+  properties:
+"""
+
+def create_config_file(config_path: str) -> None:
+    """
+    Create a YAML configuration file for the workflow if needed.
+    
+    Parameters
+    ----------
+    config_path : str
+        Path to the configuration file to be created.
+    
+    Returns
+    -------
+    None
+    """
+    
+    # Check if the file already exists
+    if os.path.exists(config_path):
+        print(f"Configuration file already exists at {config_path}.")
+        return
+    
+    # Write the contents to the file
+    with open(config_path, 'w') as f:
+        f.write(config_contents())
+        
 def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, input_pockets_zip: str, pocket: str, output_path: str, 
             num_top_ligands: int, keep_poses: bool, dock_to_residues: bool, cpus: int, exhaustiveness: int, debug: bool) -> Tuple[Dict, Dict]:
     '''
@@ -415,6 +537,11 @@ def main_wf(configuration_path: str, ligand_lib_path: str, structure_path: str, 
 
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
+    
+    if configuration_path is None:
+        # Create a default configuration file
+        configuration_path = "config.yml"
+        create_config_file(configuration_path)
     
     # Enforce output_path if provided
     if output_path is not None:
