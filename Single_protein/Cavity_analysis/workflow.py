@@ -773,8 +773,10 @@ def main_wf(configuration_path: str,
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
 
+    # Default configuration file
+    default_config = False
     if configuration_path is None:
-        # Create a default configuration file
+        default_config = True
         configuration_path = "config.yml"
         create_config_file(configuration_path)
 
@@ -967,6 +969,11 @@ def main_wf(configuration_path: str,
     global_log.info("    Creating YAML summary file...")
     create_summary(cluster_names, cluster_populations, cluster_filtered_pockets, global_paths, output_path)
 
+    if default_config:
+        # Move the default configuration file to the output path
+        shutil.move(configuration_path, os.path.join(output_path, 'config.yml'))
+        configuration_path = os.path.join(output_path, 'config.yml')
+        
     # Print timing information to log file
     elapsed_time = time.time() - start_time
     global_log.info('')
@@ -987,7 +994,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)", 
-                        required=True)
+                        required=False)
     
     parser.add_argument('--traj_path', dest='traj_path',
                         help="Path to input trajectory (GROMACS or AMBER formats)", 

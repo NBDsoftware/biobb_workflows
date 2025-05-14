@@ -5,6 +5,7 @@ from typing import List, Dict, Union, Optional
 from pathlib import Path
 import argparse
 import random
+import shutil
 import time
 import os
 
@@ -1132,8 +1133,10 @@ def main_wf(configuration_path: Optional[str] = None,
     
     start_time = time.time()
 
+    # Default configuration file
+    default_config = False
     if configuration_path is None:
-        # Create a default configuration file
+        default_config = True
         configuration_path = "config.yml"
         create_config_file(configuration_path)
         
@@ -1604,6 +1607,11 @@ def main_wf(configuration_path: Optional[str] = None,
                 # Remove unused trajectory
                 os.remove(traj_paths["step7E_image_traj"]["output_traj_path"])
 
+    if default_config:
+        # Move the default configuration file to the output path
+        shutil.move(configuration_path, os.path.join(output_path, 'config.yml'))
+        configuration_path = os.path.join(output_path, 'config.yml')
+        
     # Print timing information to log file
     elapsed_time = time.time() - start_time
     global_log.info('')

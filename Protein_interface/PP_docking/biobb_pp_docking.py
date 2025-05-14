@@ -1332,14 +1332,16 @@ def main_wf(configuration_path: str,
 
     # Start timer
     start_time = time.time()
+
+    # Default configuration file
+    default_config = False
+    if configuration_path is None:
+        default_config = True
+        configuration_path = "config.yml"
+        create_config_file(configuration_path)
     
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
-
-    if configuration_path is None:
-        # Create a default configuration file
-        configuration_path = "config.yml"
-        create_config_file(configuration_path)
         
     # Enforce output_path if provided
     if output_path is not None:
@@ -1426,6 +1428,11 @@ def main_wf(configuration_path: str,
     final_poses_table = clean_poses_table(global_prop["step10_oda_decoration"]["poses_table"])
     final_poses_table.to_csv(os.path.join(output_path, "summary.csv"), index=False)
 
+    if default_config:
+        # Move the default configuration file to the output path
+        shutil.move(configuration_path, os.path.join(output_path, 'config.yml'))
+        configuration_path = os.path.join(output_path, 'config.yml')
+        
     # Print timing information to log file
     total_elapsed_time = time.time() - start_time
     global_log.info('')
@@ -1456,7 +1463,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--config', dest='config_path',
                         help="Configuration file (YAML)",
-                        required=True)
+                        required=False)
 
     # Inputs
     parser.add_argument('--receptor_pdb', dest='receptor_pdb_path',

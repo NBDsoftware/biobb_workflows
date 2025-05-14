@@ -426,8 +426,10 @@ def main_wf(configuration_path: str,
     
     start_time = time.time()
     
+    # Default configuration file
+    default_config = False
     if configuration_path is None:
-        # Create a default configuration file
+        default_config = True
         configuration_path = "config.yml"
         create_config_file(configuration_path)
     
@@ -593,6 +595,11 @@ def main_wf(configuration_path: str,
         # Copy the topology of this ligand to the final output folder
         copy_out_files(out_files, ligand_name, output_top_path)
         
+    if default_config:
+        # Move the default configuration file to the output path
+        shutil.move(configuration_path, os.path.join(output_path, 'config.yml'))
+        configuration_path = os.path.join(output_path, 'config.yml')
+        
     # Print timing information to log file
     elapsed_time = time.time() - start_time
     global_log.info('')
@@ -612,7 +619,7 @@ if __name__ == '__main__':
     
     parser.add_argument('--config', dest='config_path', 
                         help='Configuration file (YAML)', 
-                        required=True)
+                        required=False)
 
     parser.add_argument('--input_pdb', dest='input_pdb',
                         help='Path to the input PDB file with the ligands to parameterize.', 

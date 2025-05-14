@@ -558,6 +558,13 @@ def main_wf(configuration_path: str,
 
     start_time = time.time()
 
+    # Default configuration file
+    default_config = False
+    if configuration_path is None:
+        default_config = True
+        configuration_path = "config.yml"
+        create_config_file(configuration_path)
+
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
     
@@ -797,6 +804,11 @@ def main_wf(configuration_path: str,
 
     # Save structure path in output_path
     shutil.copy(structure_path, os.path.join(output_path, 'receptor.pdb'))
+    
+    if default_config:
+        # Move the default configuration file to the output path
+        shutil.move(configuration_path, os.path.join(output_path, 'config.yml'))
+        configuration_path = os.path.join(output_path, 'config.yml')
 
     # Save absolute path to ligand library in a text file
     with open(os.path.join(output_path, 'ligand_library.txt'), 'w') as file:
@@ -825,7 +837,7 @@ if __name__ == '__main__':
     
     parser.add_argument('-c', '--config', dest='config_path', type=str,
                         help="Configuration file (YAML)",
-                        required=True)
+                        required=False)
 
     parser.add_argument('-lib', '--ligand_lib', dest='ligand_lib', type=str,
                         help="Path to file with the ligand library. The format should be SMILES (.smi) or SDF (.sdf). For .smi files, one ligand per line is expected: 'smiles name'. For sdf files, the file may contain one or more ligands.",
