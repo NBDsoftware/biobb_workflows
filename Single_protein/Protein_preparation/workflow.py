@@ -196,6 +196,12 @@ def get_pdb_code(pdb_file: str) -> Union[str, None]:
 
     # Retrieve the PDB code (idcode)
     pdb_code = header.get('idcode', None)
+    
+    # If empty, set to None
+    if pdb_code is not None:
+        pdb_code = pdb_code.strip()
+        if len(pdb_code) == 0:
+            pdb_code = None
 
     return pdb_code
 
@@ -886,26 +892,34 @@ def main_wf(configuration_path: Optional[str] = None,
     # Model the backbone atoms
     if not skip_bc_fix:
         
-        # STEP 4: Try to get the FASTA sequence to model the backbone from ...
+        # STEP 4: Try to get the FASTA sequence to model the backbone
         fasta_available = False
         
-        # ... an http request to the PDB
-        try:
-            global_log.info("step4_canonical_fasta: Get canonical FASTA")
-            file_pdb_code = get_pdb_code(global_paths["step1_extractAtoms"]["input_structure_path"])
-            if None not in [pdb_code, file_pdb_code]:
-                # Make sure the PDB code is the same as the one in the input PDB file
-                if pdb_code != file_pdb_code:
-                    global_log.warning(f"step4_canonical_fasta: Provided PDB code ({pdb_code}) is different from the one in the input PDB file ({file_pdb_code}).")
-                    global_log.warning(f"step4_canonical_fasta: Using the provided PDB code ({pdb_code}).")
-            if pdb_code is None:
+        # Find the PDB code of the input PDB file
+        file_pdb_code = get_pdb_code(global_paths["step1_extractAtoms"]["input_structure_path"])
+        if None not in [pdb_code, file_pdb_code]:
+            print(f"step4_canonical_fasta: Both PDB code and PDB file code found: {pdb_code} and {file_pdb_code}")
+            # Make sure the PDB code provided is the same as the one in the input PDB file
+            if pdb_code != file_pdb_code:
+                global_log.warning(f"step4_canonical_fasta: Provided PDB code ({pdb_code}) is different from the one in the input PDB file ({file_pdb_code}).")
+                global_log.warning(f"step4_canonical_fasta: Using the one in the input PDB file ({file_pdb_code}).")
                 pdb_code = file_pdb_code
-            if pdb_code is not None:
+        if file_pdb_code is not None:
+            print(f"step4_canonical_fasta: PDB code found in the input PDB file: {file_pdb_code}")
+            pdb_code = file_pdb_code
+            
+        # If we have a PDB code, get the FASTA sequence from an http request to the PDB
+        if pdb_code is not None:
+            try:
+                global_log.info("step4_canonical_fasta: Get canonical FASTA")
                 global_prop["step4_canonical_fasta"]["pdb_code"] = pdb_code
                 canonical_fasta(**global_paths["step4_canonical_fasta"], properties=global_prop["step4_canonical_fasta"])
                 fasta_available = True
-        except:
-            global_log.warning("step4_canonical_fasta: Could not get canonical FASTA. Check the internet connection on the machine running the workflow. Trying to get the canonical FASTA from the PDB file...")
+            except:
+                global_log.warning("step4_canonical_fasta: Could not get canonical FASTA. Check the internet connection on the machine running the workflow. Trying to get the canonical FASTA from the PDB file...")
+                fasta_available = False
+        else:
+            global_log.warning("step4_canonical_fasta: No PDB code found. Trying to get the FASTA from the PDB file...")
             fasta_available = False
         
         # ... from SEQRES records in the PDB file
