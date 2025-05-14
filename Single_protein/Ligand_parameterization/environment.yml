@@ -1,4 +1,4 @@
-name: ligand_parameterization
+name: biobb_lp
 channels:
   - conda-forge
   - bioconda
