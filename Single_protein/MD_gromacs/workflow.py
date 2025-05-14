@@ -1702,13 +1702,16 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Check .gro structure and .zip topology are given together
-    if (args.input_gro_path is None and args.input_top_path is not None) or (args.input_gro_path is not None and args.input_top_path is None):
-        raise Exception("Both --input_gro and --input_top must be provided together")
-
     # Check .pdb structure and .gro/.zip topology are not given together
-    if (args.input_pdb_path is not None and args.input_gro_path is not None):
-        raise Exception("Both --input_pdb and --input_gro/--input_top are provided. Please provide only one of them")
+    both_pdb_and_gro = args.input_pdb_path is not None and args.input_gro_path is not None
+    if both_pdb_and_gro:
+        raise Exception("Both --input_pdb and --input_gro are provided. Please provide only one of them")
+    
+    # Check .gro structure and .zip topology are given together
+    only_topology = args.input_gro_path is None and args.input_top_path is not None
+    only_coordinates = args.input_gro_path is not None and args.input_top_path is None
+    if only_topology and only_coordinates:
+        raise Exception("Both --input_gro and --input_top must be provided together")
 
     # Convert to corresponding types
     if args.salt_concentration:
