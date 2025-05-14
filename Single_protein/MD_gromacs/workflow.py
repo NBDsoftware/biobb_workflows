@@ -593,9 +593,474 @@ def concatenate_gmx_analysis(conf, simulation_folders: List[str], output_path: s
         output_xvg_path = os.path.join(output_path, f"{step}.xvg")
         merge_xvgtimeseries_files(file_paths, output_xvg_path)
 
+# YML construction
+def config_contents() -> str:
+    """
+    Returns the contents of the YAML configuration file as a string.
+    
+    The YAML file contains the configuration for the protein preparation workflow.
+    
+    Returns
+    -------
+    str
+        The contents of the YAML configuration file.
+    """
+    
+    return f""" 
+# Global properties (common for all steps)
+global_properties:
+  gmx:
+    binary_path: gmx                                                # GROMACS binary path
+    mpi_bin: null                                                   # MPI binary path, e.g. mpirun, srun... (should be left as null if gromacs already includes MPI support)
+    mpi_np: 1                                                       # Number of processors for MPI selected in the mpi_bin call
+    use_gpu: False                                                  # Wether to use GPU support or not
+  working_dir_path: output                                          # Workflow default output directory
+  can_write_console_log: False                                      # Verbose writing of log information
+  restart: True                                                     # Skip steps already performed
+  remove_tmp: True                                                  # Remove temporal files
+
+##################################################################
+# Section 3 (Steps A-I): Prepare topology and coordinates for MD #
+##################################################################
+
+# Generate the topology of the structure with pdb2gmx
+step3B_structure_topology:
+  tool: pdb2gmx
+  paths:
+    input_pdb_path: path/to/input.pdb                     # Will be set by the workflow
+    output_gro_path: structure.gro
+    output_top_zip_path: structure_top.zip
+  properties:
+    force_field: amber99sb-ildn   # Will be set by the workflow
+    water_type: tip3p             # spc, spce, tip3p, tip4p, tip5p, tips3p
+    ignh: False                   # Ignore hydrogens in the input structure
+    merge: False                  # Merge all chains into one molecule
+
+# Add the reference group to the index file
+step3C_make_ref_group:
+  tool: make_ndx
+  paths:
+    input_structure_path: dependency/step3B_structure_topology/output_gro_path
+    output_ndx_path: chain.ndx
+  properties:
+    selection:  "System"         # Will be set by the workflow
+
+# Add the restrained group to the index file
+step3C_make_rest_group:
+  tool: make_ndx
+  paths:
+    input_structure_path: dependency/step3B_structure_topology/output_gro_path
+    input_ndx_path: dependency/step3C_make_ref_group/output_ndx_path
+    output_ndx_path: calpha.ndx
+  properties:
+    selection: "a CA"           # Will be set by the workflow
+
+# Append position restraints to the topology file using the reference and restrained groups of the index file
+step3D_append_posres:
+  tool: ndx2resttop
+  paths:
+    input_ndx_path: dependency/step3C_make_rest_group/output_ndx_path
+    input_top_zip_path: dependency/step3B_structure_topology/output_top_zip_path
+    output_top_zip_path: structure_top.zip
+  properties:
+    force_constants: "500 500 500"
+
+step3E_structure_pdb:
+  tool: gmx_trjconv_str
+  paths: 
+    input_top_path: dependency/step3B_structure_topology/output_gro_path
+    input_structure_path: dependency/step3B_structure_topology/output_gro_path
+    output_str_path: structure.pdb
+
+step3F_ligand_pdb:
+  tool: gmx_trjconv_str
+  paths: 
+    input_top_path: path/to/ligand.gro        # Will be set by the workflow
+    input_structure_path: path/to/ligand.gro  # Will be set by the workflow
+    output_str_path: ligand.pdb   
+
+step3G_complex_pdb:
+  tool: cat_pdb
+  paths: 
+    input_structure1: dependency/step3E_structure_pdb/output_str_path  # Will be set by the workflow
+    input_structure2: dependency/step3F_ligand_pdb/output_str_path
+    output_structure_path: complex.pdb
+
+step3H_make_ligand_ndx:
+  tool: make_ndx
+  paths:
+    input_structure_path: path/to/ligand.gro  # Will be set by the workflow
+    output_ndx_path: ligand_heavy_atoms.ndx
+  properties:
+    selection: "0 & ! a H*"
+
+step3I_ligand_restraints:
+  tool: genrestr
+  paths:
+    input_structure_path: path/to/ligand.gro  # Will be set by the workflow
+    input_ndx_path: dependency/step3H_make_ligand_ndx/output_ndx_path
+    output_itp_path: ligand_restraints.itp    # Will be set by the workflow
+  properties:
+    restrained_group: "System_&_!H*"
+    force_constants: "500 500 500"
+
+step3J_append_ligand:
+  tool: append_ligand
+  paths:
+    input_top_zip_path: dependency/step3D_append_posres/output_top_zip_path  # Will be set by the workflow
+    input_itp_path: path/to/ligand.itp                                            # Will be set by the workflow
+    input_posres_itp_path: dependency/step3I_ligand_restraints/output_itp_path    # Path to ligand position restraint topology file
+    output_top_zip_path: complex_top.zip
+
+step3K_editconf:
+  tool: editconf
+  paths:
+    input_gro_path: dependency/step3B_structure_topology/output_gro_path
+    output_gro_path: editconf.gro
+  properties:
+    box_type: octahedron         # cubic, triclinic, octahedron, dodecahedron
+    distance_to_molecule: 1.0    # Distance of the box from the outermost atom in nm
+
+step3L_solvate:
+  tool: solvate
+  paths:
+    input_solute_gro_path: dependency/step3K_editconf/output_gro_path
+    input_top_zip_path: dependency/step3D_append_posres/output_top_zip_path
+    output_top_zip_path: solvate_top.zip
+    output_gro_path: solvate.gro
+    
+step3M_grompp_genion:
+  tool: grompp
+  paths:
+    input_gro_path: dependency/step3L_solvate/output_gro_path
+    input_top_zip_path: dependency/step3L_solvate/output_top_zip_path
+    output_tpr_path: gppion.tpr
+  properties:
+    simulation_type: minimization
+    maxwarn: 10                      # NOTE: this will be ligand dependent!! :o - the warning is for each atom with redefined parameters
+
+step3N_genion:
+  tool: genion
+  paths:
+    input_tpr_path: dependency/step3M_grompp_genion/output_tpr_path
+    input_top_zip_path: dependency/step3L_solvate/output_top_zip_path
+    output_top_zip_path: genion_top.zip
+    output_gro_path: genion.gro
+  properties:
+    neutral: True             # Neutralize charge of the system
+    concentration: 0.15       # Concentration of ions in mols/L
+
+step3O_gro2pdb:
+  tool: gmx_trjconv_str
+  paths: 
+    input_top_path: dependency/step3N_genion/output_gro_path
+    input_structure_path: dependency/step3N_genion/output_gro_path
+    output_str_path: topology.pdb
+
+#############################################################################
+# Section 4 (Steps A-I): Minimize and equilibrate the initial configuration #
+#############################################################################
+
+# NOTE: Leverage hierarchy in mdp when creating new eq steps without restraints - you can overwrite the default mdp config from the type of simulation
+
+step4A_grompp_min:
+  tool: grompp
+  paths:
+    input_gro_path: dependency/step3N_genion/output_gro_path
+    input_top_zip_path: dependency/step3N_genion/output_top_zip_path
+    output_tpr_path: gppmin.tpr
+  properties:
+    simulation_type: minimization
+    mdp:
+      integrator: steep
+      nsteps: 10000
+      emtol: 500
+      emstep: 0.01
+    
+step4B_mdrun_min:
+  tool: mdrun
+  paths:
+    input_tpr_path: dependency/step4A_grompp_min/output_tpr_path
+    output_trr_path: min.trr
+    output_gro_path: min.gro
+    output_edr_path: min.edr
+    output_log_path: min.log
+    
+step4C_make_ndx:
+  tool: make_ndx 
+  paths:
+    input_structure_path: dependency/step4B_mdrun_min/output_gro_path
+    output_ndx_path: index.ndx
+  properties:
+    selection: '"System"'
+
+step4D_energy_min:
+  tool: gmx_energy
+  paths:
+    input_energy_path: dependency/step4B_mdrun_min/output_edr_path
+    output_xvg_path: min_ene.xvg
+  properties:
+    terms: ["Potential"]
+    xvg: xmgr 
+
+step4E_grompp_nvt:
+  tool: grompp
+  paths:
+    input_gro_path: dependency/step4B_mdrun_min/output_gro_path
+    input_ndx_path: dependency/step4C_make_ndx/output_ndx_path
+    input_top_zip_path: dependency/step3N_genion/output_top_zip_path
+    output_tpr_path: gppnvt.tpr
+  properties:
+    simulation_type: nvt
+    mdp:
+      ref-t: 300 300
+      tc-grps: "Protein Water_and_ions"
+      nsteps: 500000
+      dt: 0.002
+
+step4F_mdrun_nvt:
+  tool: mdrun
+  paths:
+    input_tpr_path: dependency/step4E_grompp_nvt/output_tpr_path
+    output_trr_path: nvt.trr
+    output_gro_path: nvt.gro
+    output_edr_path: nvt.edr
+    output_log_path: nvt.log
+    output_cpt_path: nvt.cpt
+
+step4G_temp_nvt:
+  tool: gmx_energy
+  paths:
+    input_energy_path: dependency/step4F_mdrun_nvt/output_edr_path
+    output_xvg_path: nvt_temp.xvg
+  properties:
+    terms: ["Temperature"]
+    xvg: xmgr 
+
+step4H_grompp_npt:
+  tool: grompp
+  paths:
+    input_gro_path: dependency/step4F_mdrun_nvt/output_gro_path
+    input_ndx_path: dependency/step4C_make_ndx/output_ndx_path
+    input_top_zip_path: dependency/step3N_genion/output_top_zip_path
+    input_cpt_path: dependency/step4F_mdrun_nvt/output_cpt_path
+    output_tpr_path: gppnpt.tpr
+  properties:
+    simulation_type: npt
+    mdp:
+      pcoupltype: isotropic
+      nsteps: 500000 
+      ref-t: 300 300
+      tc-grps: "Protein Water_and_ions"
+
+step4I_mdrun_npt:
+  tool: mdrun
+  paths:
+    input_tpr_path: dependency/step4H_grompp_npt/output_tpr_path
+    output_trr_path: npt.trr
+    output_gro_path: npt.gro
+    output_edr_path: npt.edr
+    output_log_path: npt.log
+    output_cpt_path: npt.cpt
+
+step4J_density_npt:
+  tool: gmx_energy
+  paths:
+    input_energy_path: dependency/step4I_mdrun_npt/output_edr_path
+    output_xvg_path: npt_press_den.xvg
+  properties:
+    terms: ["Pressure", "Density"]
+    xvg: xmgr 
+
+############################################
+# Section 5 (Steps A-B): MD production run #
+############################################
+
+step5A_grompp_md:
+  tool: grompp
+  paths:
+    input_gro_path: dependency/step4I_mdrun_npt/output_gro_path
+    input_cpt_path: dependency/step4I_mdrun_npt/output_cpt_path 
+    input_ndx_path: dependency/step4C_make_ndx/output_ndx_path
+    input_top_zip_path: dependency/step3N_genion/output_top_zip_path
+    output_tpr_path: gppmd.tpr
+  properties:
+    simulation_type: free
+    mdp:
+      nsteps: 50000000
+      dt: 0.002 
+      ref-t: 300 300
+      tc-grps: "Protein Water_and_ions"
+      nstxout: 500      # freq. of trajectory (coordinates) writing in time steps 
+      nstvout: 500      # freq. of trajectory (velocities) writing in time steps
+      nstfout: 500
+      nstenergy: 500
+      continuation: 'yes'
+      gen-vel: 'no'          
+      ld-seed: 1
+
+step5B_mdrun_md:
+  tool: mdrun
+  paths:
+    input_tpr_path: dependency/step5A_grompp_md/output_tpr_path
+    output_trr_path: md.trr
+    output_gro_path: md.gro
+    output_edr_path: md.edr
+    output_log_path: md.log
+    output_cpt_path: md.cpt
+
+#########################################
+# Section 6 (Steps A-D): Basic analysis #
+#########################################
+
+step6A_rmsd_equilibrated:
+  tool: gmx_rms
+  paths:
+    input_structure_path: dependency/step4I_mdrun_npt/output_gro_path
+    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
+    output_xvg_path: md_rmsdfirst.xvg
+  properties:
+    selection: Backbone
+    xvg: xmgr 
+
+step6B_rmsd_experimental:
+  tool: gmx_rms
+  paths:
+    input_structure_path: dependency/step4A_grompp_min/input_gro_path
+    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
+    output_xvg_path: md_rmsdexp.xvg
+  properties:
+    selection: Backbone
+    xvg: xmgr 
+  
+step6C_rgyr:
+  tool: gmx_rgyr
+  paths:
+    input_structure_path: dependency/step4I_mdrun_npt/output_gro_path
+    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
+    output_xvg_path: md_rgyr.xvg
+  properties:
+    selection: Backbone
+    xvg: xmgr 
+
+step6D_rmsf:
+  tool: cpptraj_rmsf
+  paths:
+    input_top_path: dependency/step3O_gro2pdb/output_str_path
+    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
+    output_cpptraj_path: md_rmsf.xmgr   # .dat, .agr, .xmgr, .gnu
+  properties:
+    start: 1
+    end: -1
+    steps: 1
+    mask: "!@H=" # by default cpptraj already strips solvent atoms
+
+#####################################################
+# Section 7 (Steps A-D): Trajectory post-processing #
+#####################################################
+
+# Optional step: used only if trajectories are different parts
+step7A_trjcat:
+  tool: trjcat
+  paths:
+    input_trj_zip_path: all_trajectories_trr.zip
+    output_trj_path: all_trajectories.xtc
+  properties:
+    concatenate: True
+
+step7B_dry_str:
+  tool: gmx_trjconv_str
+  paths: 
+    input_structure_path: dependency/step4I_mdrun_npt/output_gro_path
+    input_top_path: dependency/step5A_grompp_md/output_tpr_path
+    input_index_path: dependency/step4C_make_ndx/output_ndx_path
+    output_str_path: dry_structure.gro
+  properties:
+    selection: Protein
+    center: True
+    pbc: mol
+    ur: compact
+
+step7C_dry_traj:
+  tool: gmx_trjconv_trj
+  paths: 
+    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
+    input_top_path: dependency/step5A_grompp_md/output_tpr_path
+    input_index_path: dependency/step4C_make_ndx/output_ndx_path
+    output_traj_path: dry_traj.xtc
+  properties:
+    selection: Protein
+
+step7D_center:
+  tool: gmx_image 
+  paths:
+    input_traj_path: dependency/step7C_dry_traj/output_traj_path
+    input_top_path: dependency/step5A_grompp_md/output_tpr_path
+    input_index_path: dependency/step4C_make_ndx/output_ndx_path
+    output_traj_path: center_traj.xtc
+  properties:
+    center_selection: Protein
+    output_selection: Protein
+    center: True
+    ur: compact
+    pbc: none
+
+step7E_image_traj:
+  tool: gmx_image
+  paths:
+    input_traj_path: dependency/step7D_center/output_traj_path
+    input_top_path: dependency/step5A_grompp_md/output_tpr_path
+    input_index_path: dependency/step4C_make_ndx/output_ndx_path
+    output_traj_path: imaged_traj.xtc
+  properties:
+    output_selection: Protein
+    cluster_selection: Protein
+    center_selection: Protein  # NOTE: why is this used??
+    center: False
+    ur: compact
+    pbc: mol
+
+step7F_fit_traj:
+  tool: gmx_image
+  paths:
+    input_traj_path: dependency/step7E_image_traj/output_traj_path
+    input_top_path: dependency/step5A_grompp_md/output_tpr_path
+    input_index_path: dependency/step4C_make_ndx/output_ndx_path
+    output_traj_path: fitted_traj.xtc
+  properties:
+    fit_selection: Protein
+    center_selection: Protein
+    output_selection: Protein
+    center: False
+    fit: rot+trans
+"""
+
+def create_config_file(config_path: str) -> None:
+    """
+    Create a YAML configuration file for the workflow if needed.
+    
+    Parameters
+    ----------
+    config_path : str
+        Path to the configuration file to be created.
+    
+    Returns
+    -------
+    None
+    """
+    
+    # Check if the file already exists
+    if os.path.exists(config_path):
+        print(f"Configuration file already exists at {config_path}.")
+        return
+    
+    # Write the contents to the file
+    with open(config_path, 'w') as f:
+        f.write(config_contents())
+    
          
 # Main workflow
-def main_wf(configuration_path: str, 
+def main_wf(configuration_path: Optional[str] = None, 
             input_pdb_path: Optional[str] = None, 
             ligands_top_folder: Optional[str] = None, 
             forcefield: str = 'amber99sb-ildn', 
@@ -667,6 +1132,11 @@ def main_wf(configuration_path: str,
     
     start_time = time.time()
 
+    if configuration_path is None:
+        # Create a default configuration file
+        configuration_path = "config.yml"
+        create_config_file(configuration_path)
+        
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
 
@@ -1154,7 +1624,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--config', dest='config_path', type=str,
                         help="Configuration file (YAML)",
-                        required=True)
+                        required=False)
 
     parser.add_argument('--input_pdb', dest='input_pdb_path', type=str,
                         help="""Input PDB file. The workflow assumes the protonation state specified by the residue names

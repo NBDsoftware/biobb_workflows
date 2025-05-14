@@ -237,6 +237,132 @@ def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str):
             new_file_path = os.path.join(output_folder, f"{ligand_name}{file_extension}")
             shutil.copyfile(path, new_file_path)
 
+# YML construction
+def config_contents() -> str:
+    """
+    Returns the contents of the YAML configuration file as a string.
+    
+    The YAML file contains the configuration for the protein preparation workflow.
+    
+    Returns
+    -------
+    str
+        The contents of the YAML configuration file.
+    """
+    
+    return f""" 
+# Global properties (common for all steps)
+global_properties:                                                                               # Wether to use GPU support or not
+  working_dir_path: output                                                                          # Workflow default output directory
+  can_write_console_log: False                                                                      # Verbose writing of log information
+  restart: True                                                                                     # Skip steps already performed
+  remove_tmp: True  
+
+# Step 1: extract heteroatoms from input PDB file
+step1_ligand_extraction:
+  tool: extract_heteroatoms
+  paths:
+    input_structure_path: /path/to/input              # Will be set by the workflow
+    output_heteroatom_path: ligand.pdb
+  properties:
+    heteroatoms: null                                  # Will be set by the workflow
+
+step2A_leap_gen_top:
+  tool: leap_gen_top
+  paths:
+    input_pdb_path: dependency/step1_ligand_extraction/output_heteroatom_path
+    input_frcmod_path: path/to/frcmod.zip             # Will be set by the workflow
+    input_prep_path: path/to/prep.zip                 # Will be set by the workflow
+    output_pdb_path: cofactors.pdb
+    output_top_path: cofactors.prmtop
+    output_crd_path: cofactors.inpcrd
+  properties:
+    forcefield: ["protein.ff14SB"]                    # Will be set by the workflow
+
+step3A_amber_to_gmx:
+  tool: acpype_convert_amber_to_gmx
+  paths:
+    input_crd_path: dependency/step2A_leap_gen_top/output_crd_path
+    input_top_path: dependency/step2A_leap_gen_top/output_top_path
+    output_path_gro: cofactors.gro
+    output_path_top: cofactors.top
+  properties:
+    basename: cofactors
+
+step2B_ambertools_reduce:
+  tool: reduce_add_hydrogens
+  paths:
+    input_path: dependency/step1_ligand_extraction/output_heteroatom_path
+    output_path: ligand_reduced.pdb
+  properties:
+    charges: True
+
+step2B_obabel_reduce:
+  tool: babel_add_hydrogens
+  paths:
+    input_path: dependency/step1_ligand_extraction/output_heteroatom_path
+    output_path: ligand_reduced.pdb
+  properties:
+    coordinates: 3,
+    ph: 7.4
+
+step3B_babel_minimize:
+  tool: babel_minimize
+  paths:
+    input_path:  dependency/step2B_ambertools_reduce/output_path
+    output_path: ligand_minimized.pdb
+  properties:
+    criteria: 1e-6
+    method: sd
+    force_field: GAFF
+    hydrogens: False
+
+step4B_acpype_params_gmx:
+  tool: acpype_params_gmx
+  paths:
+    input_path:  dependency/step3B_babel_minimize/output_path
+    output_path_gro: output.params.gro
+    output_path_itp: output.params.itp
+    output_path_top: output.params.top
+  properties:
+    basename: biobb_GMX_LP
+
+step4B_acpype_params_ac:
+  tool: acpype_params_ac
+  paths:
+    input_path:  dependency/step3B_babel_minimize/output_path
+    output_path_frcmod: output.frcmod
+    output_path_inpcrd: output.inpcrd
+    output_path_lib: output.lib
+    output_path_prmtop: output.prmtop
+  properties:
+    basename: biobb_AC_LP
+"""
+
+def create_config_file(config_path: str) -> None:
+    """
+    Create a YAML configuration file for the workflow if needed.
+    
+    Parameters
+    ----------
+    config_path : str
+        Path to the configuration file to be created.
+    
+    Returns
+    -------
+    None
+    """
+    
+    # Check if the file already exists
+    if os.path.exists(config_path):
+        print(f"Configuration file already exists at {config_path}.")
+        return
+    
+    # Write the contents to the file
+    with open(config_path, 'w') as f:
+        f.write(config_contents())
+
+# Main workflow
 def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['protein.ff14SB', 'DNA.bsc1', 'gaff'], ligand_names: Union[List[str], None] = None, 
          charges: Union[List[str], None] = None, chains: List[str] = ['A'], model: int = 0, format: Literal['gromacs', 'amber'] = 'gromacs', custom_parameters: Union[str, None] = None,
          protonation_tool: Literal['ambertools', 'obabel', 'none'] = 'ambertools', skip_min: bool = False, 
@@ -273,6 +399,11 @@ def main(configuration_path: str, input_pdb: str, forcefields: List[str] = ['pro
     ###########################
     
     start_time = time.time()
+    
+    if configuration_path is None:
+        # Create a default configuration file
+        configuration_path = "config.yml"
+        create_config_file(configuration_path)
     
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)

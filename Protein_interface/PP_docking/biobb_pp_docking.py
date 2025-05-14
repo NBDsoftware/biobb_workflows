@@ -1090,6 +1090,204 @@ def clean_poses_table(poses_table):
     return poses_table
 
 
+# YML construction
+def config_contents() -> str:
+    """
+    Returns the contents of the YAML configuration file as a string.
+    
+    The YAML file contains the configuration for the protein preparation workflow.
+    
+    Returns
+    -------
+    str
+        The contents of the YAML configuration file.
+    """
+    
+    return f""" 
+working_dir_path: output      # Folder to write i/o files of the workflow steps
+can_write_console_log: False  # Verbose writing of log information
+restart: True                 # Skip steps already performed
+remove_tmp: True
+
+step1_setup:
+  tool: setup
+  paths:
+    input_rec_pdb_path: /path/to/receptor.pdb
+    input_lig_pdb_path: /path/to/ligand.pdb
+    output_rec_path: prepared_receptor.pdb
+    output_rec_H_path: prepared_receptor.pdb.H
+    output_rec_amber_path: prepared_receptor.pdb.amber
+    output_lig_path: prepared_ligand.pdb
+    output_lig_H_path: prepared_ligand.pdb.H
+    output_lig_amber_path: prepared_ligand.pdb.amber
+    output_ref_path: prepared_reference.pdb
+  properties:
+    docking_name: docking_test
+    receptor: 
+      mol: A
+      newmol: A
+    ligand: 
+      mol: A
+      newmol: B
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+
+step2_oda_receptor:
+  tool: oda 
+  paths:
+    input_structure_path: dependency/step1_setup/input_rec_pdb_path
+    output_oda_path: receptor.pdb.oda
+    output_oda_H_path: receptor.pdb.oda.H
+    output_oda_tab_path: receptor.pdb.oda.ODAtab
+    output_oda_amber_path: receptor.oda.amber
+  properties:
+    subunit_name: receptor
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+
+step3_oda_ligand:
+  tool: oda 
+  paths:
+    input_structure_path: dependency/step1_setup/input_lig_pdb_path
+    output_oda_path: ligand.pdb.oda
+    output_oda_H_path: ligand.pdb.oda.H
+    output_oda_tab_path: ligand.pdb.oda.ODAtab
+    output_oda_amber_path: ligand.oda.amber
+  properties:
+    subunit_name: ligand
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+    
+step4_ftdock:
+  tool: ftdock
+  paths:
+    input_rec_path: dependency/step1_setup/output_rec_path
+    input_lig_path: dependency/step1_setup/output_lig_path
+    output_ftdock_path: ftdock_output.ftdock
+    output_rot_path: rotftdock_output.rot
+  properties:
+    docking_name: docking_test
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+
+step5_dockser:
+  tool: dockser
+  paths:
+    input_rec_path: dependency/step1_setup/output_rec_path
+    input_rec_H_path: dependency/step1_setup/output_rec_H_path
+    input_rec_amber_path: dependency/step1_setup/output_rec_amber_path
+    input_lig_path: dependency/step1_setup/output_lig_path
+    input_lig_H_path: dependency/step1_setup/output_lig_H_path
+    input_lig_amber_path: dependency/step1_setup/output_lig_amber_path
+    input_rot_path: dependency/step4_ftdock/output_rot_path
+    output_ene_path: dockser_output.ene
+  properties:
+    docking_name: docking_test
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+
+step6_makePDB:
+  tool: makePDB
+  paths:
+    input_rec_path: dependency/step1_setup/output_rec_path
+    input_rec_H_path: dependency/step1_setup/output_rec_H_path
+    input_rec_amber_path: dependency/step1_setup/output_rec_amber_path
+    input_lig_path: dependency/step1_setup/output_lig_path
+    input_lig_H_path: dependency/step1_setup/output_lig_H_path
+    input_lig_amber_path: dependency/step1_setup/output_lig_amber_path
+    input_rot_path: dependency/step4_ftdock/output_rot_path
+    input_ene_path: dependency/step5_dockser/output_ene_path
+    output_zip_path: top_poses.zip
+  properties:
+    docking_name: docking_test
+    rank1: 1
+    rank2: 100
+    container_path: singularity
+    container_image: /shared/work/NBD_Utilities/pyDock3/3.6.1/nbd_pydock.sif
+    container_volume_path: /data
+    container_working_dir: /
+    container_generic_command: exec
+
+step7_oda_filtering:
+  paths: 
+    input_receptor_path: dependency/step2_oda_receptor/output_oda_path
+    input_ligand_path: dependency/step3_oda_ligand/output_oda_path
+    input_zip_path: dependency/step6_makePDB/output_zip_path
+    output_zip_path: top_filtered_poses.zip
+  properties:
+    oda_threshold: -2                     # ODA score threshold for a residue to be considered as part of a hydrophobic patch (oda patch)
+    distance_threshold: 8.0               # Distance threshold in A for two residues to be considered as neighbors
+    oda_coverage: 0.1                     # Minimum ratio of interface residues covered by ODA Patches -> measures overlap between interface and oda patches
+    oda_overlap: 0.05                     # Minimum ratio of neighboring interface residues covered by oda patches (between receptor and ligand) -> measures overlap of ligand and receptor oda patches inside the interface (0 to ignore) 
+    run_step: True                        # Run this step
+
+step8_distance_filtering:
+  paths: 
+    input_zip_path: dependency/step7_oda_filtering/output_zip_path
+    output_zip_path: top_filtered_poses.zip
+  properties:
+    distances:
+      - name: "dummy_constraint"
+        receptor_residue_selection: "resnum 336 and resname GLN"
+        ligand_residue_selection: "resnum 93 and resname THR"
+        threshold: 12.0
+    run_step: True
+
+step9_rmsd_filtering:
+  paths: 
+    input_zip_path: dependency/step8_distance_filtering/output_zip_path
+    output_zip_path: top_filtered_poses.zip
+  properties:
+    rmsd_threshold: 5.0          # RMSD threshold for the hierarchical clustering
+    keep_all: True               # Keep all poses in the output zip file or just the best ranking one from each cluster
+    run_step: True
+
+step10_oda_decoration:
+  paths:
+    input_zip_path: dependency/step9_rmsd_filtering/output_zip_path
+    input_receptor_path: dependency/step2_oda_receptor/output_oda_path
+    input_ligand_path: dependency/step3_oda_ligand/output_oda_path
+    output_zip_path: top_filtered_poses.zip
+"""
+
+def create_config_file(config_path: str) -> None:
+    """
+    Create a YAML configuration file for the workflow if needed.
+    
+    Parameters
+    ----------
+    config_path : str
+        Path to the configuration file to be created.
+    
+    Returns
+    -------
+    None
+    """
+    
+    # Check if the file already exists
+    if os.path.exists(config_path):
+        print(f"Configuration file already exists at {config_path}.")
+        return
+    
+    # Write the contents to the file
+    with open(config_path, 'w') as f:
+        f.write(config_contents())
+        
 ########
 # Main #
 ########
@@ -1125,6 +1323,11 @@ def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_out
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
 
+    if configuration_path is None:
+        # Create a default configuration file
+        configuration_path = "config.yml"
+        create_config_file(configuration_path)
+        
     # Enforce output_path if provided
     if output_path is not None:
         output_path = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))

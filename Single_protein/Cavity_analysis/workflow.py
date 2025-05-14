@@ -530,7 +530,201 @@ def check_arguments(global_log, traj_path, top_path, clustering_path):
         global_log.error("ERROR: clustering_path doesn't exist")
         raise SystemExit
 
+# YML construction
+def config_contents() -> str:
+    """
+    Returns the contents of the YAML configuration file as a string.
+    
+    The YAML file contains the configuration for the protein preparation workflow.
+    
+    Returns
+    -------
+    str
+        The contents of the YAML configuration file.
+    """
+    
+    return f""" 
+# Global properties (common for all steps)
+binary_path: gmx                                                                                # GROMACS binary path
+working_dir_path: output                                                                        # Workflow default output directory
+can_write_console_log: True                                                                     # Output log to console
+remove_tmp: True                                                                                # Remove temporal files
+restart: True                                                                                   # Do not execute steps if output files are already created
+num_clusters: 20                                                                                # Number of most populated clusters to extract from the trajectory and analyze 
+                                                                                                # with fpocket, if representative structures are given instead of a traj, this
+                                                                                                # number is ignored
 
+# Step 0: Convert from Amber to Gromacs compatible format
+# Optional step (will be executed if the trajectory is not in a Gromacs-compatible format)
+step0_convert_amber_traj:
+  tool: cpptraj_convert
+  paths:
+    input_traj_path: /path/to/trajectory.dcd                                        # Amber compatible trajectory file
+    input_top_path: /path/to/topology.pdb                                           # topology file
+    output_cpptraj_path: trajectory.xtc
+  properties:
+    mask: "all-atoms"                                                               # Any Amber atom selection syntax
+    format: "xtc"
+
+# Step 1: Create index file to select some atoms from the trajectory
+# Optional step (activate from command line with --prepare_traj)
+step1A_traj_preparation_ndx:
+  tool: make_ndx 
+  paths:
+    input_structure_path: dependency/step0_convert_amber_traj/input_top_path
+    output_ndx_path: index.ndx
+  properties:
+    selection: "System"      
+
+step1B_add_selection_group:                                       
+  tool: gmxselect
+  paths:
+    input_structure_path: dependency/step0_convert_amber_traj/input_top_path
+    input_ndx_path: dependency/step1A_traj_preparation_ndx/output_ndx_path
+    output_ndx_path: index_selection.ndx
+  properties:
+    selection: '"Selection" resnr 1 to 196'                                       # Gromacs selection syntax
+    append: True        
+
+# Step 2: Extract requested atoms from the Gromacs compatible trajectory and topology
+# Optional step (activate from command line with --prepare_traj)
+step2A_strip_traj:
+  tool: gmx_trjconv_trj
+  paths: 
+    input_traj_path: dependency/step0_convert_amber_traj/output_cpptraj_path
+    input_top_path: dependency/step0_convert_amber_traj/input_top_path
+    input_index_path: dependency/step1B_add_selection_group/output_ndx_path
+    output_traj_path: trajectory.xtc
+  properties:
+    selection: "Selection" 
+    start: 0
+    end: 100 
+    dt: 1
+
+step2B_strip_top:                       
+  tool: gmx_trjconv_str
+  paths: 
+    input_structure_path: dependency/step0_convert_amber_traj/input_top_path
+    input_top_path: dependency/step0_convert_amber_traj/input_top_path
+    input_index_path: dependency/step1B_add_selection_group/output_ndx_path
+    output_str_path: stripped_topology.pdb
+  properties:
+    selection: "Selection"   
+
+# Step 3: Create index file to select the atoms for the RMSD calculation
+step3A_rmsd_calculation_ndx:
+  tool: make_ndx 
+  paths:
+    input_structure_path: dependency/step2B_strip_top/output_str_path
+    output_ndx_path: index.ndx
+  properties:
+    selection: "System"      
+
+step3B_add_rmsd_group:                                       
+  tool: gmxselect
+  paths:
+    input_structure_path: dependency/step2B_strip_top/output_str_path
+    input_ndx_path: dependency/step3A_rmsd_calculation_ndx/output_ndx_path
+    output_ndx_path: index_rmsd.ndx
+  properties:
+    selection: '"RmsdGroup" resnr 181 to 296' 
+    append: True        
+
+step3C_add_output_group:                                       
+  tool: gmxselect
+  paths:
+    input_structure_path: dependency/step2B_strip_top/output_str_path
+    input_ndx_path: dependency/step3B_add_rmsd_group/output_ndx_path
+    output_ndx_path: index_rmsd_output.ndx
+  properties:
+    selection: '"OutputGroup" group "Protein"'
+    append: True
+
+# Steps 4-5: Cluster trajectory and extract centroids pdb
+step4_gmx_cluster:
+  tool: gmx_cluster
+  paths:
+    input_traj_path: dependency/step2A_strip_traj/output_traj_path
+    input_structure_path: dependency/step2B_strip_top/output_str_path
+    input_index_path: dependency/step3C_add_output_group/output_ndx_path
+    output_pdb_path: output.cluster.pdb
+    output_cluster_log_path: output.cluster.log
+    output_rmsd_cluster_xpm_path: output.rmsd-clust.xpm
+    output_rmsd_dist_xvg_path: output.rmsd-dist.xvg
+  properties:
+    fit_selection: RmsdGroup       
+    output_selection: OutputGroup        
+    dista: False
+    method: linkage                      
+    cutoff: 0.10                    # nm (RMSD cut-off)
+    nofit: True                     # Wether to use the RmsdGroups to fit the traj before computing the RMSD or not
+
+step5_extract_models:
+  tool: extract_model
+  paths:
+    input_structure_path: dependency/step4_gmx_cluster/output_pdb_path
+    output_structure_path: cluster.pdb     
+  properties:
+
+# Step 6-8: Cavity analysis with fpocket on centroids + filtering
+step6_cavity_analysis:
+  tool: fpocket_run
+  paths:
+    input_pdb_path: dependency/step5_extract_models/output_structure_path
+    output_pockets_zip: all_pockets.zip
+    output_summary: summary.json
+  properties:
+    min_radius: 3
+    max_radius: 6
+    num_spheres: 35
+    sort_by: druggability_score
+
+step7_filter_cavities:
+  tool: fpocket_filter
+  paths:
+    input_pockets_zip: dependency/step6_cavity_analysis/output_pockets_zip
+    input_summary: dependency/step6_cavity_analysis/output_summary
+    output_filter_pockets_zip: filtered_pockets.zip
+  properties:
+    score: [0.4, 1]
+    druggability_score: [0.4, 1]
+    volume: [200, 5000]
+
+step8_filter_residue_com:
+  paths: 
+    input_pockets_zip: dependency/step7_filter_cavities/output_filter_pockets_zip
+    input_pdb_path: dependency/step5_extract_models/output_structure_path
+    output_filter_pockets_zip: filtered_pockets.zip
+  properties:
+    residue_selection: "resid 31 or resid 21"      # MDAnalysis selection string
+    distance_threshold: 8                          # Distance threshold in Angstroms (6-8 are reasonable values if the residue/s are part of the pocket)
+    run_step: False                                 # Run step or not
+"""
+
+def create_config_file(config_path: str) -> None:
+    """
+    Create a YAML configuration file for the workflow if needed.
+    
+    Parameters
+    ----------
+    config_path : str
+        Path to the configuration file to be created.
+    
+    Returns
+    -------
+    None
+    """
+    
+    # Check if the file already exists
+    if os.path.exists(config_path):
+        print(f"Configuration file already exists at {config_path}.")
+        return
+    
+    # Write the contents to the file
+    with open(config_path, 'w') as f:
+        f.write(config_contents())
+        
+# Main workflow   
 def main_wf(configuration_path, traj_path, top_path, clustering_path, distance_threshold, prepare_traj, filtering_selection, output_path):
     '''
     Main clustering and cavity analysis workflow. This workflow clusters a given trajectory and analyzes the cavities of the most representative
@@ -561,6 +755,11 @@ def main_wf(configuration_path, traj_path, top_path, clustering_path, distance_t
 
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
+
+    if configuration_path is None:
+        # Create a default configuration file
+        configuration_path = "config.yml"
+        create_config_file(configuration_path)
 
     # Enforce output_path if provided
     if output_path is not None:

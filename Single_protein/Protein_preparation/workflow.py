@@ -66,7 +66,7 @@ gmx_4letter_resnames = [
     'HISH',
     'HIS1'
 ]
-   
+
 # Biopython helpers
 def highest_occupancy_altlocs(pdb_file, global_log) -> List[str]:
     """
@@ -561,9 +561,188 @@ def biobb_titrate(input_structure_path: str, output_structure_path: str, propert
     os.remove(tmp_structure_path)
     return            
            
+# YML construction
+def config_contents() -> str:
+    """
+    Returns the contents of the YAML configuration file as a string.
+    
+    The YAML file contains the configuration for the protein preparation workflow.
+    
+    Returns
+    -------
+    str
+        The contents of the YAML configuration file.
+    """
+    
+    return f""" 
+# Global properties (common for all steps)
+global_properties:
+  working_dir_path: output                                          # Workflow default output directory
+  can_write_console_log: False                                      # Verbose writing of log information
+  restart: True                                                     # Skip steps already performed
+  remove_tmp: True                                                  # Remove temporal files
+
+# Step 1: extract atoms from input PDB file
+step1_extractAtoms:
+  tool: extract_molecule
+  paths:
+    input_structure_path: /path/to/input                            # Overwritten by command line
+    output_molecule_path: main_structure.pdb
+  properties:
+    molecule_type: chains                                           # type of molecule to extract. Options: all, protein, na, dna, rna, chains
+    chains: [A]                                                     # if "chains" is selected in molecule_type. Options: None, [A], [A, B], ...
+
+# Step 2: fix alternative locations of residues if any with biobb_structure_checking and the Modeller suite (if key property is given)
+step2_fixaltlocs:                 
+  tool: fix_altlocs
+  paths:
+    input_pdb_path: dependency/step1_extractAtoms/output_molecule_path
+    output_pdb_path: fixaltlocs.pdb
+  properties:
+    altlocs: null                                                    # Format: ["Chain Residue_number:Altloc"], e.g. # ["A339:A", "A171:B", "A768:A"]                       # MODELLER license key
+
+# Step 3: Mutate residues in the structure if needed
+step3_mutations:
+  tool: mutate
+  paths:
+    input_pdb_path: dependency/step2_fixaltlocs/output_pdb_path
+    output_pdb_path: mutated.pdb
+
+# Step 4: Download a FASTA file with the canonical sequence of the protein
+# It requires internet connection and a PDB code
+step4_canonical_fasta:
+  tool: canonical_fasta
+  paths:
+    output_fasta_path: canonicalFasta.fasta
+  properties:
+    pdb_code: null                                                    # Will be set by the workflow
+
+# Step 2 C: Extract the residue sequence from the PDB file to FASTA format
+step5_pdb_tofasta:
+  tool: biobb_pdb_tofasta
+  paths:
+    input_file_path: dependency/step1_extractAtoms/input_structure_path
+    output_file_path: pdbFasta.fasta
+  properties:
+    multi: True
+
+# Step 2 D: Model missing backbone atoms with biobb_structure_checking and the Modeller suite
+# It requires a MODELLER license 
+step6_fixbackbone:
+  tool: fix_backbone
+  paths:
+    input_pdb_path: dependency/step3_mutations/output_pdb_path
+    input_fasta_canonical_sequence_path: dependency/step4_canonical_fasta/output_fasta_path
+    output_pdb_path: fixbackbone.pdb
+  properties:
+    add_caps: False
+
+# Step 2 E: Model missing side chain atoms with biobb_structure_checking and the Modeller suite (if key property is given)
+step7_fixsidechain:
+  tool: fix_side_chain
+  paths:
+    input_pdb_path: dependency/step6_fixbackbone/output_pdb_path
+    output_pdb_path: fixsidechain.pdb
+
+step8_renumberstructure:
+  tool: renumber_structure
+  paths:
+    input_structure_path: dependency/step7_fixsidechain/output_pdb_path
+    output_structure_path: renumbered.pdb
+    output_mapping_json_path: mapping.json
+  properties:
+    renumber_residues: True
+    renumber_residues_per_chain: False
+
+# Step 2 G: Flip clashing amides with biobb_structure_checking and the Modeller suite
+# Optional step (activate from command line with --fix_amides)
+step9_fixamides:
+  tool: fix_amides
+  paths:
+    input_pdb_path: dependency/step8_renumberstructure/output_structure_path
+    output_pdb_path: fixamides.pdb
+
+step10_fixchirality:
+  tool: fix_chirality
+  paths:
+    input_pdb_path: dependency/step9_fixamides/output_pdb_path
+    output_pdb_path: fixchirality.pdb
+
+# Step 2 F: Fix disulfide bonds with biobb_structure_checking (CYS -> CYX for cysteines involved in disulfide bonds)
+# Optional step (activate from command line with --fix_ss)
+step11_fixssbonds:
+  tool: fix_ssbonds
+  paths:
+    input_pdb_path: dependency/step10_fixchirality/output_pdb_path
+    output_pdb_path: fixssbonds.pdb
+  # properties:
+    # modeller_key: HERE YOUR MODELLER KEY  # MODELLER license key
+
+step12_remove_hs:
+  tool: remove_hydrogens
+  paths:
+    input_path: dependency/step11_fixssbonds/output_pdb_path
+    output_path: remove_hs.pdb
+
+# Use propka to predict the pKa of the titratable residues
+step13_propka:
+  paths: 
+    input_structure_path: dependency/step12_remove_hs/output_path
+    output_summary_path: summary.pka
+
+# Use reduce to optimize H-bonds of HIS residues
+step14_his_hbonds:
+  tool: pdb4amber
+  paths:
+    input_pdb_path: dependency/step12_remove_hs/output_path
+    output_pdb_path: his_hbonds.pdb
+  properties:
+    reduce: True
+
+# Rename titratable residues according to protonation state
+step15_titrate:
+  paths:
+    input_structure_path: dependency/step12_remove_hs/output_path
+    output_structure_path: titrate.pdb
+  properties:
+    pH: 7.0
+
+# Put back hydrogens
+step16_pdb4amber:
+  tool: pdb4amber_run
+  paths:
+    input_pdb_path: dependency/step15_titrate/output_structure_path
+    output_pdb_path: pdb4amber.pdb
+  properties:
+    reduce: True
+"""
+
+def create_config_file(config_path: str) -> None:
+    """
+    Create a YAML configuration file for the workflow if needed.
+    
+    Parameters
+    ----------
+    config_path : str
+        Path to the configuration file to be created.
+    
+    Returns
+    -------
+    None
+    """
+    
+    # Check if the file already exists
+    if os.path.exists(config_path):
+        print(f"Configuration file already exists at {config_path}.")
+        return
+    
+    # Write the contents to the file
+    with open(config_path, 'w') as f:
+        f.write(config_contents())
+    
 # Main workflow
-def main_wf(configuration_path: str, 
-            input_pdb_path : Optional[str] = None, 
+def main_wf(configuration_path: Optional[str] = None, 
+            input_pdb_path: Optional[str] = None, 
             pdb_code: Optional[str] = None, 
             pdb_chains: Optional[List] = None, 
             mutation_list: Optional[List] = None, 
@@ -636,6 +815,11 @@ def main_wf(configuration_path: str,
     '''
     
     start_time = time.time()
+    
+    if configuration_path is None:
+        # Create a default configuration file
+        configuration_path = "config.yml"
+        create_config_file(configuration_path)
 
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
@@ -862,7 +1046,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--config', dest='config_path', type=str,
                         help="Configuration file (YAML)",
-                        required=True)
+                        required=False)
 
     parser.add_argument('--input_pdb', dest='input_pdb_path', type=str,
                         help="Input PDB file. If not given the workflow will look for it in the YAML config file. Default: None",
