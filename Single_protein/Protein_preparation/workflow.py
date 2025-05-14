@@ -414,7 +414,7 @@ def propka_summary(filepath) -> Dict:
                 
     return results
 
-def add_reduce_his_resnames(pKa_data: Dict, pdb_file: str) -> Dict:
+def add_reduce_his_resnames(pKa_data: Dict, pdb_file: str, global_log) -> Dict:
     """ 
     Read the histidine resnames in the PDB file (HID, HIE, HIP) and add it to the corresponding residue in the pKa data.
     
@@ -428,6 +428,8 @@ def add_reduce_his_resnames(pKa_data: Dict, pdb_file: str) -> Dict:
             Dictionary with the parsed pKa data.
         pdb_file : 
             Path to the PDB file with the HIS resnames.
+        global_log :
+            Logger object for logging messages
             
     Returns
     -------
@@ -442,6 +444,8 @@ def add_reduce_his_resnames(pKa_data: Dict, pdb_file: str) -> Dict:
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure('structure', pdb_file)
     
+    any_missing_his = False
+    
     for model in structure:
         for chain in model:
             for residue in chain:
@@ -451,7 +455,14 @@ def add_reduce_his_resnames(pKa_data: Dict, pdb_file: str) -> Dict:
                 res_num = residue.get_id()[1]
                 # Check if the residue is a histidine
                 if res_name in his_names: 
-                    pKa_data[f"{res_num}:{chain.get_id()}"]['reduce_resname'] = res_name
+                    res_key = f"{res_num}:{chain.get_id()}"
+                    if res_key in pKa_data: 
+                        pKa_data[res_key]['reduce_resname'] = res_name
+                    else:
+                        any_missing_his = True
+                        
+    if any_missing_his:
+        global_log.warning("Some HIS residues found by reduce (AmberTools) were not found by propka. Check the residue names.")
             
     return pKa_data
  
@@ -983,7 +994,8 @@ def main_wf(configuration_path: Optional[str] = None,
         global_log.info("step12_remove_hs: Skipping removal of hydrogens")
         
     # STEP 13: Estimate pKa of titratable residues with propka
-    # NOTE: do we need no hydrogens and standard names for residues before running propka? -> check
+    # NOTE: do we need no hydrogens? -> check
+    # NOTE: we need standardized residue names for propka! Otherwise it will skip them
     global_log.info("step13_propka: Estimate protonation state of titratable residues from empirical pKa calculation with propka")
     global_paths["step13_propka"]["input_structure_path"] = last_pdb_path
     biobb_propka(**global_paths["step13_propka"], properties=global_prop["step13_propka"], global_log=global_log)
@@ -997,7 +1009,7 @@ def main_wf(configuration_path: Optional[str] = None,
     global_log.info("step14_his_hbonds: Estimate optimal proton placement in Histidines")
     global_paths["step14_his_hbonds"]["input_pdb_path"] = last_pdb_path
     pdb4amber_run(**global_paths["step14_his_hbonds"], properties=global_prop["step14_his_hbonds"])
-    pKa_results = add_reduce_his_resnames(pKa_results, global_paths["step14_his_hbonds"]["output_pdb_path"])
+    pKa_results = add_reduce_his_resnames(pKa_results, global_paths["step14_his_hbonds"]["output_pdb_path"], global_log)
             
     # STEP 15: Choose protonation states for titratable residues
     global_log.info("step15_titrate: Choose protonation states for titratable residues") 
