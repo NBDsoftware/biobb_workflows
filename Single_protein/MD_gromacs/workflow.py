@@ -34,14 +34,13 @@ from biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf
 from biobb_structure_utils.utils.cat_pdb import cat_pdb
 
 # Constants
-
-# Titratable residues in GROMACS
+# Titratable residues in GROMACS, HIS are already set with their resnames
+# 'HIS': ('HISD', 'HISE', 'HISH', 'HIS1')
 gmx_titra_resnames = {
     'LYS': ('LYSN', 'LYS'),                 # deprotonated, protonated
     'ARG': ('ARGN', 'ARG'),                 # deprotonated, protonated
     'ASP': ('ASP', 'ASPH'),                 # deprotonated, protonated
-    'GLU': ('GLU', 'GLUH'),                 # deprotonated, protonated
-    'HIS': ('HISD', 'HISE', 'HISH', 'HIS1') # delta, epsilon, protonated, bound to HEME
+    'GLU': ('GLU', 'GLUH')                  # deprotonated, protonated
 }
 
 # Biopython helpers
@@ -251,28 +250,31 @@ def get_chains_dict(pdb_file: str) -> Dict[str, Dict[str, List[int]]]:
     
     return chains_dict
    
-def read_protonation_states(pdb_file: str, resname: str, global_log) -> str:
+def read_protonation_states(pdb_file: str, resname: str, global_log) -> List[str]:
     """ 
-    Read a PDB file and return the protonation state (assuming the pdb2gmx convention) of
-    the specified residue name along the protein. 
+    Read a PDB file and return the protonation states per chain of the specified residue 
+    name along the protein. The protonation states are given using the pdb2gmx naming convention:
+    
+        0: deprotonated
+        1: protonated
     
     Parameters
     ----------
     
-    pdb_file : str
-        Path to the PDB file.
-    resname : str
-        Residue name to check the protonation state. Example: "HIS"
-    global_log : Logger
-        Logger object for logging messages.
+        pdb_file : str
+            Path to the PDB file.
+        resname : str
+            Residue name to check the protonation state. Example: "HIS"
+        global_log : Logger
+            Logger object for logging messages.
 
     Returns
     -------
     
-    str: 
-        Protonation state of the specified residue name.
-        
-        Example: "0 1 0 1" 
+        List[str]: 
+            Protonation state of the specified residue name.
+            
+            Example: ["0 1 0 1", "", "0 1 0 1"] 
     """
     
     # Find the list of protonation state resnames for this residue
@@ -284,7 +286,9 @@ def read_protonation_states(pdb_file: str, resname: str, global_log) -> str:
     # Initialize
     line_count = 0
     old_pdb_resnum = 0
+    old_chain_id = ""
     protonation_states = ""
+    protonation_states_list = []
     
     # Parse the PDB structure manually
     with open(pdb_file, 'r') as f:
@@ -294,8 +298,24 @@ def read_protonation_states(pdb_file: str, resname: str, global_log) -> str:
             if len(line) > 26 and line.startswith("ATOM"):
                 # Read residue name columns (18-20) and column 21 (to read 4-letter resnames)
                 pdb_resname = line[17:21].strip()
+                # Read chain ID column (22)
+                pdb_chain_id = line[21:22].strip()
                 # Read residue sequence number columns (23-26)
                 pdb_resnum = line[22:26].strip()
+                
+                # Update old chain ID on first line
+                if old_chain_id == "":
+                    old_chain_id = pdb_chain_id
+                
+                # If this line is a new chain, add protonation states to the list
+                if pdb_chain_id != old_chain_id:
+                    # Add the protonation states to the list
+                    protonation_states_list.append(protonation_states.strip())
+                    # Reset the protonation states
+                    protonation_states = ""
+                    # Update the old chain ID
+                    old_chain_id = pdb_chain_id
+                
                 try:
                     pdb_resnum = int(pdb_resnum)
                 except ValueError:
@@ -308,11 +328,11 @@ def read_protonation_states(pdb_file: str, resname: str, global_log) -> str:
                     protonation_states += f"{protonation_resnames.index(pdb_resname)} "
                     # Update the old residue number
                     old_pdb_resnum = pdb_resnum
-                
-    # Remove the last space
-    protonation_states = protonation_states.strip()
+        
+        # Add the last protonation states to the list
+        protonation_states_list.append(protonation_states.strip())
     
-    return protonation_states
+    return protonation_states_list
     
 # Set additional general properties not considered by the configuration reader
 def set_gromacs_path(global_properties: dict, binary_path: str) -> None:
@@ -1191,6 +1211,8 @@ def main_wf(configuration_path: Optional[str] = None,
         ###########################################
                
         # STEP 3B: add H atoms, generate coordinate (.gro) and topology (.top) file for the system
+        # Histidine protonation state are determined from resname
+        # Other protonation states are chosen interactively
         global_log.info("step3B_structure_topology: Generate the topology")
         global_paths["step3B_structure_topology"]["input_pdb_path"] = input_pdb_path
         global_prop["step3B_structure_topology"]["force_field"]=forcefield
