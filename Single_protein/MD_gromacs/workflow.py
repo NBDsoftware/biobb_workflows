@@ -1070,12 +1070,14 @@ def main_wf(configuration_path: Optional[str] = None,
             setup_only: bool = False, 
             input_gro_path: str = None, 
             input_top_path: str = None, 
+            dt: float = 0.002,
+            equil_nsteps: int = 500000,
             equil_only: bool = False, 
-            nsteps: float = None,              # NOTE: set here the default  
+            nsteps: float = 50000000,
             num_parts: int = 1, 
             num_replicas: int = 1, 
             skip_traj_processing: bool = False, 
-            output_path: str = None             # NOTE: set here the default
+            output_path: str = None
     ):
     '''
     Main MD setup and run workflow with GROMACS. Can be used to prepare and launch an MD simulation.
@@ -1104,10 +1106,14 @@ def main_wf(configuration_path: Optional[str] = None,
             path to already-prepared input structure file (.gro)
         input_top_path: 
             path to already-prepared input topology file (.zip)
+        dt:
+            time step to be used in the simulation. Default: 0.002 (2 fs).
+        equil_nsteps:
+            number of steps of the equilibration simulations. NVT and NPT. Default: 500000 (1 ns).
         equil_only: 
             whether to only run the equilibration or also run the production simulations
         nsteps: 
-            Total number of steps of the production simulation
+            Total number of steps of the production simulation. Default: 50000000 (100 ns).
         num_parts: 
             number of parts of the trajectory 
         num_replicas: 
@@ -1394,6 +1400,8 @@ def main_wf(configuration_path: Optional[str] = None,
         global_prop["step4E_grompp_nvt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions"
     global_prop["step4E_grompp_nvt"]["mdp"]["define"] = eq_posres
     global_prop["step4E_grompp_nvt"]["mdp"]["ref-t"] = f"{temperature} {temperature}"
+    global_prop["step4E_grompp_nvt"]["mdp"]["nsteps"] = equil_nsteps
+    global_prop["step4E_grompp_nvt"]["mdp"]["dt"] = dt
     global_log.info("step4E_grompp_nvt: Preprocess system temperature equilibration")
     grompp(**global_paths["step4E_grompp_nvt"], properties=global_prop["step4E_grompp_nvt"])
 
@@ -1410,6 +1418,8 @@ def main_wf(configuration_path: Optional[str] = None,
         global_prop["step4H_grompp_npt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions"
     global_prop["step4H_grompp_npt"]["mdp"]["define"] = eq_posres
     global_prop["step4H_grompp_npt"]["mdp"]["ref-t"] = f"{temperature} {temperature}"
+    global_prop["step4H_grompp_npt"]["mdp"]["nsteps"] = equil_nsteps
+    global_prop["step4H_grompp_npt"]["mdp"]["dt"] = dt
     global_log.info("step4H_grompp_npt: Preprocess system pressure equilibration")
     grompp(**global_paths["step4H_grompp_npt"], properties=global_prop["step4H_grompp_npt"])
 
@@ -1460,9 +1470,8 @@ def main_wf(configuration_path: Optional[str] = None,
         traj_paths['step6C_rgyr']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
         traj_paths['step6D_rmsf']['input_top_path'] = global_paths["step3O_gro2pdb"]['output_str_path']
         
-        # Enforce nsteps if provided
-        if nsteps is not None:
-            traj_prop['step5A_grompp_md']['mdp']['nsteps']=nsteps
+        traj_prop['step5A_grompp_md']['mdp']['nsteps']=nsteps
+        traj_prop['step5A_grompp_md']['mdp']['dt'] = dt
             
         # Simulations are replicas
         if num_replicas:
@@ -1673,13 +1682,21 @@ if __name__ == "__main__":
     # NOTE: using input gro and top we don't have access to the pdb and thus we don't know which POSRES to apply - 
     # chains_dict and ligands_dict are not created
     
+    parser.add_argument('--dt', dest='dt', type=float,
+                        help="Time step in ps. Default: 0.002",
+                        required=False, default=0.002)
+    
+    parser.add_argument('--equil_nsteps', dest='equil_nsteps', type=int,
+                        help="Number of steps of the equilibration simulations. NVT and NPT. Default: 500000",
+                        required=False, default=500000)
+    
     parser.add_argument('--equil_only', action='store_true',
                         help="Only run the equilibration steps. Default: False",
                         required=False, default=False)
     
     parser.add_argument('--nsteps', dest='nsteps', type=int,
-                        help="Number of steps of the production simulation",
-                        required=False)
+                        help="Number of steps of the production simulation. Default: 50000000",
+                        required=False, default=50000000)
     
     parser.add_argument('--num_parts', dest='num_parts', type=int,
                         help="Number of parts to divide the simulation into. Default: 1",
@@ -1733,7 +1750,9 @@ if __name__ == "__main__":
             temperature=args.temperature,
             setup_only=args.setup_only, 
             input_gro_path=args.input_gro_path, 
-            input_top_path=args.input_top_path, 
+            input_top_path=args.input_top_path,
+            dt=args.dt, 
+            equil_nsteps=args.equil_nsteps,
             equil_only=args.equil_only, 
             nsteps=args.nsteps,  
             num_parts=args.num_parts, 
