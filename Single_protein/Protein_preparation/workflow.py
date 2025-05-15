@@ -34,19 +34,19 @@ from biobb_chemistry.ambertools.reduce_remove_hydrogens import reduce_remove_hyd
 
 # Titratable residues in GROMACS
 gmx_titra_resnames = {
-    'LYS': ('LYSN', 'LYS'),                 # deprotonated, protonated
-    'ARG': ('ARGN', 'ARG'),                 # deprotonated, protonated
-    'ASP': ('ASP', 'ASPH'),                 # deprotonated, protonated
-    'GLU': ('GLU', 'GLUH'),                 # deprotonated, protonated
-    'HIS': ('HISD', 'HISE', 'HISH', 'HIS1') # delta, epsilon, protonated, bound to HEME
+    'LYS': ['LYSN', 'LYS'],                 # deprotonated, protonated
+    'ARG': ['ARGN', 'ARG'],                 # deprotonated, protonated
+    'ASP': ['ASP', 'ASPH'],                 # deprotonated, protonated
+    'GLU': ['GLU', 'GLUH'],                 # deprotonated, protonated
+    'HIS': ['HISD', 'HISE', 'HISH', 'HIS1'] # delta, epsilon, protonated, bound to HEME
 }
 
 # Titratable residues in AMBER
 amber_titra_resnames = {
-    'LYS': ('LYN', 'LYS'),                  # deprotonated, protonated
-    'ASP': ('ASP', 'ASH'),                  # deprotonated, protonated
-    'GLU': ('GLU', 'GLH'),                  # deprotonated, protonated  
-    'HIS': ('HID', 'HIE', 'HIP')            # delta, epsilon, protonated
+    'LYS': ['LYN', 'LYS'],                  # deprotonated, protonated
+    'ASP': ['ASP', 'ASH'],                  # deprotonated, protonated
+    'GLU': ['GLU', 'GLH'],                  # deprotonated, protonated  
+    'HIS': ['HID', 'HIE', 'HIP']            # delta, epsilon, protonated
 }
 
 # Mapping between residue names and their protonation states
