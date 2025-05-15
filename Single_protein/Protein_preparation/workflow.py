@@ -206,18 +206,27 @@ def get_pdb_code(pdb_file: str) -> Union[str, None]:
     return pdb_code
 
 # Other helpers
-def rename_CYX(pdb_file: str) -> str:
+def rename_ss_bonds(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -> str:
     """ 
-    Read a pdb file and rename all CYX residues to CYS2 residues.
+    Read a pdb file and rename CYS residues marking disulfide bonds
+    
+    Formats:
+    
+        - gromacs:
+            CYS -> CYS2
+        - amber:
+            CYS -> CYX
     
     CYX residues are recognized as cysteine residues with a disulfide bond only from GROMACS version 2024.
-    Older versions will need CYS2 as cysteine name to form bonds in the topology.
+    Older versions will need CYS2 or CYS as cysteine name to form bonds in the topology.
     
     Parameters
     ----------
     
     pdb_file : str
         Path to the PDB file.
+    format : str
+        Format to rename the CYS residues. Can be 'standard', 'gromacs' or 'amber'
     
     Outputs
     -------
@@ -226,6 +235,10 @@ def rename_CYX(pdb_file: str) -> str:
         Path to the new PDB file with the renamed CYX residues.    
     """
     
+    # Check requested format
+    if format not in ['standard', 'gromacs', 'amber']:
+        raise ValueError("Format must be 'standard', 'gromacs' or 'amber'")
+    
     # Find parent path of the pdb file
     parent_path = Path(pdb_file).parent
     
@@ -233,23 +246,118 @@ def rename_CYX(pdb_file: str) -> str:
     pdb_name = Path(pdb_file).stem
     
     # Create a path to the new pdb file
-    new_pdb_file = os.path.join(parent_path, f"{pdb_name}_CYS2.pdb")
+    new_pdb_file = os.path.join(parent_path, f"{pdb_name}_CYX.pdb")
     
-    # Read the input PDB file
+    # Parse the PDB manually
     with open(pdb_file, 'r') as f:
         lines = f.readlines()
     
     # Replace all CYX residues with CYS2
     with open(new_pdb_file, 'w') as f:
         for line in lines:
-            # If line contains CYX, replace it with CYS2
-            if 'CYX' in line:
-                line = line.replace('CYX ', 'CYS2')
+            
+            if format == 'amber':
+                if 'CYS2' in line:
+                    line = line.replace('CYS2', 'CYX ')
+            if format == 'gromacs':
+                if 'CYX' in line:
+                    line = line.replace('CYX ', 'CYS2')
+            if format == 'standard':
+                if 'CYS2' in line:
+                    line = line.replace('CYS2', 'CYS ')
+                if 'CYX' in line:
+                    line = line.replace('CYX', 'CYS')
+                    
             f.write(line)
     
     return new_pdb_file
 
-def rename_ter(pdb_file: str, format: Literal['other', 'amber']) -> str:
+def rename_his(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -> str:
+    """ 
+    Read a pdb file and rename HIS residues to the corresponding format.
+    
+    Formats:
+    
+        - gromacs:
+            HID -> HISD
+            HIE -> HISE
+            HIP -> HISH
+        - amber:
+            HISD -> HID  
+            HISE -> HIE 
+            HISH -> HIP 
+            HIS1 -> HIS
+        - standard:
+            HID -> HIS
+            HIE -> HIS
+            HIP -> HIS
+            HISD -> HIS
+            HISE -> HIS
+            HISH -> HIS
+            
+        HIS -> HIS
+    
+    Paramaters
+    ----------
+    
+    pdb_file : str
+        Path to the PDB file.
+    format : str
+        Format to rename the HIS residues. Can be 'standard', 'gromacs' or 'amber'
+    
+    Outputs
+    -------
+    
+    new_pdb_file : str
+        Path to the new PDB file with the renamed HIS residues.
+    """
+    
+    gmx_names   = ['HISD', 'HISE', 'HISH', 'HIS1']
+    amber_names = ['HID ', 'HIE ', 'HIP ', 'HIS ']
+    non_standard_names = ['HISD', 'HISE', 'HISH', 'HIS1', 'HID', 'HIE', 'HIP']
+    
+    # Check requested format
+    if format not in ['standard', 'gromacs', 'amber']:
+        raise ValueError("Format must be 'standard', 'gromacs' or 'amber'")
+    
+    # Find parent path of the pdb file
+    parent_path = Path(pdb_file).parent
+    
+    # Find the name of the pdb file
+    pdb_name = Path(pdb_file).stem
+    
+    # Create a path to the new pdb file
+    new_pdb_file = os.path.join(parent_path, f"{pdb_name}_HIS.pdb")
+    
+    # Parse the PDB manually
+    with open(pdb_file, 'r') as f:
+        lines = f.readlines()
+    
+    # Replace all HIS residues with the corresponding format
+    with open(new_pdb_file, 'w') as f:
+        for line in lines:
+            # If line contains a residue atom
+            if len(line) > 20 and line.startswith("ATOM"):
+                # Read the residue name, including 4 letter resnames
+                pdb_resname = line[17:21]
+                # Check if the residue is HIS
+                if pdb_resname.strip() in non_standard_names:
+                    if format == 'amber':
+                        if pdb_resname in gmx_names:
+                            line = line.replace(pdb_resname, amber_names[gmx_names.index(pdb_resname)])
+                    elif format == 'gromacs':
+                        if pdb_resname in amber_names:
+                            line = line.replace(pdb_resname, gmx_names[amber_names.index(pdb_resname)])
+                    elif format == 'standard':
+                        if (pdb_resname in gmx_names) or (pdb_resname in amber_names):
+                            line = line.replace(pdb_resname, 'HIS ')
+                        
+            # Write the modified line to the new PDB file
+            f.write(line)
+            
+    return new_pdb_file
+
+def rename_ter(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -> str:
     """ 
     Rename atoms from terminal residues (ACE/NME) to the corresponding format.
     
@@ -877,6 +985,10 @@ def main_wf(configuration_path: Optional[str] = None,
         global_prop["step2_fixaltlocs"]["modeller_key"] = modeller_key
     fix_altlocs(**global_paths["step2_fixaltlocs"], properties=global_prop["step2_fixaltlocs"])
 
+    # Standardize some residue names - NOTE: to be improved
+    last_pdb_path = rename_his(global_paths["step2_fixaltlocs"]["output_pdb_path"], 'standard')
+    last_pdb_path = rename_ss_bonds(last_pdb_path, 'standard')
+    
     # STEP 3: Add mutations if requested
     if mutation_list is not None:
         global_prop["step3_mutations"]["mutation_list"] = ",".join(mutation_list)
@@ -886,6 +998,7 @@ def main_wf(configuration_path: Optional[str] = None,
     if modeller_key is not None:
         global_prop["step3_mutations"]["modeller_key"] = modeller_key
         global_prop["step3_mutations"]["use_modeller"] = True
+    global_paths["step3_mutations"]["input_pdb_path"] = last_pdb_path
     mutate(**global_paths["step3_mutations"], properties=global_prop["step3_mutations"])
     last_pdb_path = global_paths["step3_mutations"]["output_pdb_path"]
     
@@ -1045,7 +1158,7 @@ def main_wf(configuration_path: Optional[str] = None,
         last_pdb_path = global_paths["step16_pdb4amber"]["output_pdb_path"]
     elif pdb_format == 'gromacs':
         # Rename atoms to gromacs format
-        last_pdb_path = rename_CYX(last_pdb_path)
+        last_pdb_path = rename_ss_bonds(last_pdb_path, format='gromacs')
     
     # NOTE: We should make sure that PDB complies with the PDB format (while considering 4 letter resnames)
     
