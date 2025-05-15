@@ -610,6 +610,8 @@ def biobb_titrate(input_structure_path: str, output_structure_path: str, propert
     his = properties.get("his", None)
     pdb_format = properties.get("pdb_format", 'amber')
     pKa_data = properties.get("pKa_results", None)
+    titra_resnames = titra_mapping[pdb_format]
+    amber_his_resnames = titra_mapping['amber']['HIS']
     
     # Read the input PDB file
     parser = PDBParser(QUIET=True)
@@ -631,34 +633,35 @@ def biobb_titrate(input_structure_path: str, output_structure_path: str, propert
                     pKa = pKa_data[res_key]['pKa']
                     
                     # ... and is titratable for this format
-                    if res_name in titra_mapping[pdb_format]:
+                    if res_name in titra_resnames:
                         
                         if res_name == 'HIS':    
                             if his is not None:
                                 # Manual selection 
-                                new_res_name = titra_mapping[pdb_format]['HIS'][int(his[his_count])]
+                                new_res_name = titra_resnames['HIS'][int(his[his_count])]
                                 his_count += 1
                             else:
+                                protonated_his_resname = titra_resnames['HIS'][2]
                                 # Automatic based on pKa
                                 if pH < pKa:
                                     # Protonated
-                                    new_res_name = titra_mapping[pdb_format]['HIS'][2]
+                                    new_res_name = protonated_his_resname
                                 if pH >= pKa:
                                     # Deprotonated
                                     reduce_resname = pKa_data[res_key].get('reduce_resname')
-                                    if reduce_resname is not None and reduce_resname is not titra_mapping[pdb_format]['HIS'][2]:
+                                    if (reduce_resname is not None) and (reduce_resname is not protonated_his_resname):
                                         # Given by reduce: epsilon or delta
-                                        new_res_name = reduce_resname
+                                        new_res_name = titra_resnames['HIS'][amber_his_resnames.index(reduce_resname)]
                                     else:
                                         # Default to epsilon protonated
-                                        new_res_name = titra_mapping[pdb_format]['HIS'][1]
+                                        new_res_name = titra_resnames['HIS'][1]
                         else:
                             if pH < pKa:
                                 # Protonated
-                                new_res_name = titra_mapping[pdb_format][res_name][1]
+                                new_res_name = titra_resnames[res_name][1]
                             else:
                                 # Deprotonated
-                                new_res_name = titra_mapping[pdb_format][res_name][0]
+                                new_res_name = titra_resnames[res_name][0]
                         
                         # Update the residue name
                         residue.resname = new_res_name
