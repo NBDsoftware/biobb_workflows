@@ -1014,14 +1014,12 @@ def main_wf(configuration_path: Optional[str] = None,
         # Find the PDB code of the input PDB file
         file_pdb_code = get_pdb_code(global_paths["step1_extractAtoms"]["input_structure_path"])
         if None not in [pdb_code, file_pdb_code]:
-            print(f"step4_canonical_fasta: Both PDB code and PDB file code found: {pdb_code} and {file_pdb_code}")
             # Make sure the PDB code provided is the same as the one in the input PDB file
             if pdb_code != file_pdb_code:
                 global_log.warning(f"step4_canonical_fasta: Provided PDB code ({pdb_code}) is different from the one in the input PDB file ({file_pdb_code}).")
                 global_log.warning(f"step4_canonical_fasta: Using the one in the input PDB file ({file_pdb_code}).")
                 pdb_code = file_pdb_code
         if file_pdb_code is not None:
-            print(f"step4_canonical_fasta: PDB code found in the input PDB file: {file_pdb_code}")
             pdb_code = file_pdb_code
             
         # If we have a PDB code, get the FASTA sequence from an http request to the PDB
