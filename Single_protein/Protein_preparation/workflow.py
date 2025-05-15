@@ -365,7 +365,7 @@ def rename_ter(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -
         - amber: 
             ACE: CH3, C, O
             NME: N, CH3
-        - other: 
+        - standard: 
             ACE: CA, C, O
             NME: N, CA 
             
@@ -375,7 +375,7 @@ def rename_ter(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -
     pdb_file : str
         Path to the PDB file.
     format : str
-        Format to rename the terminal residues. Can be 'amber' or 'other'.
+        Format to rename the terminal residues. Can be 'amber' or 'standard'.
     
     Outputs
     -------
@@ -385,9 +385,9 @@ def rename_ter(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -
     """
     
     # Check requested format
-    if format not in ['amber', 'other']:
-        raise ValueError("Format must be 'amber' or 'other'")
-    
+    if format not in ['standard', 'gromacs', 'amber']:
+        raise ValueError("Format must be 'standard', 'gromacs' or 'amber'")
+        
     # Find parent path of the pdb file
     parent_path = Path(pdb_file).parent
     
@@ -412,17 +412,17 @@ def rename_ter(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -
                 pdb_atomname = line[12:16].strip()
                 # Check if the residue is ACE or NME
                 if pdb_resname == "ACE":
-                    if format == "amber":
+                    if format == "amber" or format == "gromacs":
                         if pdb_atomname == "CA":
                             line = line.replace("CA ", "CH3")
-                    elif format == "other":
+                    elif format == "standard":
                         if pdb_atomname == "CH3":
                             line = line.replace("CH3", "CA ")
                 elif pdb_resname == "NME":
-                    if format == "amber":
+                    if format == "amber" or format == "gromacs":
                         if pdb_atomname == "CA":
                             line = line.replace("CA ", "CH3")
-                    elif format == "other":
+                    elif format == "standard":
                         if pdb_atomname == "CH3":
                             line = line.replace("CH3", "CA ")
                             
