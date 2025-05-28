@@ -320,92 +320,6 @@ def read_protonation_states(pdb_file: str, resname: str, global_log) -> List[str
         protonation_states_list.append(protonation_states.strip())
     
     return protonation_states_list
-    
-# Set additional general properties not considered by the configuration reader
-def set_gromacs_path(global_properties: dict, binary_path: str) -> None:
-    """
-    Set the path to the GROMACS binary for all steps using GROMACS.
-
-    NOTE: try if we can set this using global properties while keeping a different value for non-gmx steps
-    Inputs
-    ------
-
-        global_properties (dict): Dictionary containing the global_properties.
-        binary_path (str): Path to the GROMACS binary.
-    """
-
-    list_of_steps = ['step3B_structure_topology', 'step3C_make_ref_group', 'step3C_make_rest_group', 'step3H_make_ligand_ndx',
-                     'step3I_ligand_restraints', 'step3K_editconf', 'step3L_solvate', 'step3M_grompp_genion', 'step3N_genion',
-                     'step4A_grompp_min', 'step4B_mdrun_min', 'step4C_make_ndx', 'step4D_energy_min', 'step4E_grompp_nvt', 
-                     'step4F_mdrun_nvt', 'step4G_temp_nvt', 'step4H_grompp_npt', 'step4I_mdrun_npt', 'step4J_density_npt', 
-                     'step5A_grompp_md', 'step5B_mdrun_md', 'step6A_rmsd_equilibrated',
-                     'step6B_rmsd_experimental', 'step6C_rgyr', 'step7A_trjcat', 'step7B_dry_str', 'step7C_dry_traj', 
-                     'step7D_center', 'step7E_image_traj', 'step7F_fit_traj']
-
-    for step in list_of_steps:
-        global_properties[step]['binary_path'] = binary_path
-
-def set_mpi_path(global_properties: dict, mpi_bin: str, mpi_np: int) -> None:
-    """
-    Set the path to the MPI binary for all steps using MPI.
-
-    Inputs
-    ------
-
-        global_properties (dict): Dictionary containing the global_properties.
-        mpi_bin (str): Path to the MPI binary.
-        mpi_np (int): Number of processors to be used.
-    """
-
-    list_of_steps = ['step4B_mdrun_min', 'step4F_mdrun_nvt', 'step4I_mdrun_npt', 'step5B_mdrun_md']
-
-    for step in list_of_steps:
-        global_properties[step]['mpi_bin'] = mpi_bin
-        global_properties[step]['mpi_np'] = mpi_np
-
-def set_gpu_use(global_properties: dict, gpu_use: bool) -> None:
-    """
-    Set the use of GPU for all steps using GROMACS that support it.
-
-    Inputs
-    ------
-
-        global_properties (dict): Dictionary containing the global_properties.
-        gpu_use (bool): Whether to use GPU or not.
-    """
-
-    list_of_steps = ['step4F_mdrun_nvt', 'step4I_mdrun_npt', 'step5B_mdrun_md']
-
-    for step in list_of_steps:
-        global_properties[step]['use_gpu'] = gpu_use
-
-def set_global_gmx_properties(global_properties: dict, gmx_properties: dict, global_log) -> None:
-    """
-    Set all the gmx global properties of this workflow, i.e. those global properties included at the beginning 
-    of the YAML configuration file that are general to some gmx steps.
-    
-    Inputs
-    ------
-    
-        global_properties (dict): Dictionary containing the global_properties.
-        gmx_properties (dict): Dictionary containing the gmx properties.
-        global_log (Logger): Logger object for logging messages.
-    """
-    
-    # Enforce gromacs binary path for all steps using gromacs
-    if gmx_properties.get('binary_path'):
-        global_log.info(f"Using GROMACS binary path: {gmx_properties['binary_path']}")
-        set_gromacs_path(global_properties, gmx_properties['binary_path'])
-
-    # Enforce mpi binary path for all steps using mpi
-    if gmx_properties.get('mpi_bin'):
-        global_log.info(f"Using MPI binary path: {gmx_properties['mpi_bin']}")
-        set_mpi_path(global_properties, gmx_properties['mpi_bin'], gmx_properties.get('mpi_np'))
-
-    # Enforce gpu use for all steps using gromacs that support it
-    if gmx_properties.get('use_gpu'):
-        global_log.info(f"Using GPU for GROMACS steps")
-        set_gpu_use(global_properties, gmx_properties['use_gpu'])
 
 # Process topology - temporal solution 
 def process_ligand_top(input_path: str, output_path: str) -> None:
@@ -602,11 +516,57 @@ def concatenate_gmx_analysis(conf, simulation_folders: List[str], output_path: s
         merge_xvgtimeseries_files(file_paths, output_xvg_path)
 
 # YML construction
-def config_contents() -> str:
+def config_contents(
+    gmx_binary_path: str = 'gmx',
+    mpi_bin: str = 'null',
+    mpi_np: int = 1,
+    use_gpu: bool = False,
+    restart: bool = False,
+    forcefield: str = 'amber99sb-ildn',
+    salt_conc: float = 0.15,
+    temp: float = 300.0,
+    dt: float = 0.002,
+    equil_nsteps: int = 500000,
+    equil_traj_freq: Optional[int] = None,
+    nsteps: int = 50000000,
+    traj_freq: Optional[int] = None
+    ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
     
     The YAML file contains the configuration for the protein preparation workflow.
+    
+    Parameters
+    ----------
+    
+    gmx_binary_path : str
+        Path to the GROMACS binary. Default is 'gmx'.
+    mpi_bin : str
+        Path to the MPI binary. Default is 'null'.
+    mpi_np : int
+        Number of processors for MPI. Default is 1.
+    use_gpu : bool
+        Whether to use GPU for GROMACS. Default is False.
+    restart : bool
+        Whether to skip steps already performed. Default is True.
+    forcefield : str
+        Force field to use. Default is 'amber99sb-ildn'.
+    salt_conc : float
+        Concentration of salt in mols/L. Default is 0.15.
+    temp : float
+        Temperature in Kelvin. Default is 300.0.
+    dt : float
+        Time step in picoseconds. Default is 0.002.
+    equil_nsteps : int
+        Number of steps for equilibration. Default is 500000.
+    equil_traj_freq : int
+        Saving frequency of the trajectory during equilibration in number of steps. 
+        Default is equil_nsteps // 500
+    nsteps : int
+        Number of steps for production. Default is 50000000
+    traj_freq : int
+        Saving frequency of the trajectory during production in number of steps.
+        Default is nsteps // 1000
     
     Returns
     -------
@@ -614,17 +574,18 @@ def config_contents() -> str:
         The contents of the YAML configuration file.
     """
     
+    if equil_traj_freq is None:
+        equil_traj_freq = equil_nsteps // 500
+    
+    if traj_freq is None:
+        traj_freq = nsteps // 1000
+    
     return f""" 
 # Global properties (common for all steps)
 global_properties:
-  gmx:
-    binary_path: gmx                                                # GROMACS binary path
-    mpi_bin: null                                                   # MPI binary path, e.g. mpirun, srun... (should be left as null if gromacs already includes MPI support)
-    mpi_np: 1                                                       # Number of processors for MPI selected in the mpi_bin call
-    use_gpu: False                                                  # Wether to use GPU support or not
   working_dir_path: output                                          # Workflow default output directory
   can_write_console_log: False                                      # Verbose writing of log information
-  restart: True                                                     # Skip steps already performed
+  restart: {restart}                                                # Skip steps already performed
   remove_tmp: True                                                  # Remove temporal files
 
 ##################################################################
@@ -639,7 +600,8 @@ step3B_structure_topology:
     output_gro_path: structure.gro
     output_top_zip_path: structure_top.zip
   properties:
-    force_field: amber99sb-ildn   # Will be set by the workflow
+    binary_path: {gmx_binary_path}    # GROMACS binary path
+    force_field: {forcefield}     # Will be set by the workflow
     water_type: tip3p             # spc, spce, tip3p, tip4p, tip5p, tips3p
     ignh: False                   # Ignore hydrogens in the input structure
     merge: False                  # Merge all chains into one molecule
@@ -651,6 +613,7 @@ step3C_make_ref_group:
     input_structure_path: dependency/step3B_structure_topology/output_gro_path
     output_ndx_path: chain.ndx
   properties:
+    binary_path: {gmx_binary_path}   # GROMACS binary path
     selection:  "System"         # Will be set by the workflow
 
 # Add the restrained group to the index file
@@ -661,7 +624,8 @@ step3C_make_rest_group:
     input_ndx_path: dependency/step3C_make_ref_group/output_ndx_path
     output_ndx_path: calpha.ndx
   properties:
-    selection: "a CA"           # Will be set by the workflow
+    binary_path: {gmx_binary_path}   # GROMACS binary path
+    selection: "a CA"            # Will be set by the workflow
 
 # Append position restraints to the topology file using the reference and restrained groups of the index file
 step3D_append_posres:
@@ -679,13 +643,17 @@ step3E_structure_pdb:
     input_top_path: dependency/step3B_structure_topology/output_gro_path
     input_structure_path: dependency/step3B_structure_topology/output_gro_path
     output_str_path: structure.pdb
+  properties:
+    binary_path: {gmx_binary_path}   # GROMACS binary path
 
 step3F_ligand_pdb:
   tool: gmx_trjconv_str
   paths: 
     input_top_path: path/to/ligand.gro        # Will be set by the workflow
     input_structure_path: path/to/ligand.gro  # Will be set by the workflow
-    output_str_path: ligand.pdb   
+    output_str_path: ligand.pdb
+  properties:   
+    binary_path: {gmx_binary_path}   # GROMACS binary path
 
 step3G_complex_pdb:
   tool: cat_pdb
@@ -700,6 +668,7 @@ step3H_make_ligand_ndx:
     input_structure_path: path/to/ligand.gro  # Will be set by the workflow
     output_ndx_path: ligand_heavy_atoms.ndx
   properties:
+    binary_path: {gmx_binary_path}  # GROMACS binary path
     selection: "0 & ! a H*"
 
 step3I_ligand_restraints:
@@ -709,6 +678,7 @@ step3I_ligand_restraints:
     input_ndx_path: dependency/step3H_make_ligand_ndx/output_ndx_path
     output_itp_path: ligand_restraints.itp    # Will be set by the workflow
   properties:
+    binary_path: {gmx_binary_path} 
     restrained_group: "System_&_!H*"
     force_constants: "500 500 500"
 
@@ -726,6 +696,7 @@ step3K_editconf:
     input_gro_path: dependency/step3B_structure_topology/output_gro_path
     output_gro_path: editconf.gro
   properties:
+    binary_path: {gmx_binary_path}   # GROMACS binary path
     box_type: octahedron         # cubic, triclinic, octahedron, dodecahedron
     distance_to_molecule: 1.0    # Distance of the box from the outermost atom in nm
 
@@ -736,6 +707,8 @@ step3L_solvate:
     input_top_zip_path: dependency/step3D_append_posres/output_top_zip_path
     output_top_zip_path: solvate_top.zip
     output_gro_path: solvate.gro
+  properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     
 step3M_grompp_genion:
   tool: grompp
@@ -744,8 +717,9 @@ step3M_grompp_genion:
     input_top_zip_path: dependency/step3L_solvate/output_top_zip_path
     output_tpr_path: gppion.tpr
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     simulation_type: minimization
-    maxwarn: 10                      # NOTE: this will be ligand dependent!! :o - the warning is for each atom with redefined parameters
+    maxwarn: 10                    # NOTE: this will be ligand dependent!! :o - the warning is for each atom with redefined parameters
 
 step3N_genion:
   tool: genion
@@ -755,8 +729,9 @@ step3N_genion:
     output_top_zip_path: genion_top.zip
     output_gro_path: genion.gro
   properties:
-    neutral: True             # Neutralize charge of the system
-    concentration: 0.15       # Concentration of ions in mols/L
+    binary_path: {gmx_binary_path}    # GROMACS binary path
+    neutral: True                 # Neutralize charge of the system
+    concentration: {salt_conc}    # Concentration of ions in mols/L
 
 step3O_gro2pdb:
   tool: gmx_trjconv_str
@@ -764,6 +739,8 @@ step3O_gro2pdb:
     input_top_path: dependency/step3N_genion/output_gro_path
     input_structure_path: dependency/step3N_genion/output_gro_path
     output_str_path: topology.pdb
+  properties:
+    binary_path: {gmx_binary_path}   # GROMACS binary path
 
 #############################################################################
 # Section 4 (Steps A-I): Minimize and equilibrate the initial configuration #
@@ -778,6 +755,7 @@ step4A_grompp_min:
     input_top_zip_path: dependency/step3N_genion/output_top_zip_path
     output_tpr_path: gppmin.tpr
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     simulation_type: minimization
     mdp:
       integrator: steep
@@ -793,6 +771,10 @@ step4B_mdrun_min:
     output_gro_path: min.gro
     output_edr_path: min.edr
     output_log_path: min.log
+  properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
+    mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)                                               
+    mpi_np: {mpi_np}               # Number of processors for MPI selected in the MPI call
     
 step4C_make_ndx:
   tool: make_ndx 
@@ -800,6 +782,7 @@ step4C_make_ndx:
     input_structure_path: dependency/step4B_mdrun_min/output_gro_path
     output_ndx_path: index.ndx
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     selection: '"System"'
 
 step4D_energy_min:
@@ -808,6 +791,7 @@ step4D_energy_min:
     input_energy_path: dependency/step4B_mdrun_min/output_edr_path
     output_xvg_path: min_ene.xvg
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     terms: ["Potential"]
     xvg: xmgr 
 
@@ -819,13 +803,17 @@ step4E_grompp_nvt:
     input_top_zip_path: dependency/step3N_genion/output_top_zip_path
     output_tpr_path: gppnvt.tpr
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     simulation_type: nvt
     mdp:
-      ref-t: 300 300
+      ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
-      nsteps: 500000
-      dt: 0.002
-
+      nsteps: {equil_nsteps} 
+      dt: {dt}
+      nstxout: 0           
+      nstvout: 0
+      nstxout-compressed: {equil_traj_freq}
+      
 step4F_mdrun_nvt:
   tool: mdrun
   paths:
@@ -835,13 +823,19 @@ step4F_mdrun_nvt:
     output_edr_path: nvt.edr
     output_log_path: nvt.log
     output_cpt_path: nvt.cpt
-
+  properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
+    mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)      
+    mpi_np: {mpi_np}               # Number of processors for MPI selected in the MPI call
+    use_gpu: {use_gpu}             # Wether to use GPU support or not
+    
 step4G_temp_nvt:
   tool: gmx_energy
   paths:
     input_energy_path: dependency/step4F_mdrun_nvt/output_edr_path
     output_xvg_path: nvt_temp.xvg
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     terms: ["Temperature"]
     xvg: xmgr 
 
@@ -854,12 +848,17 @@ step4H_grompp_npt:
     input_cpt_path: dependency/step4F_mdrun_nvt/output_cpt_path
     output_tpr_path: gppnpt.tpr
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     simulation_type: npt
     mdp:
       pcoupltype: isotropic
-      nsteps: 500000 
-      ref-t: 300 300
+      nsteps: {equil_nsteps} 
+      dt: {dt}
+      ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
+      nstxout: 0           
+      nstvout: 0
+      nstxout-compressed: {equil_traj_freq}
 
 step4I_mdrun_npt:
   tool: mdrun
@@ -870,13 +869,19 @@ step4I_mdrun_npt:
     output_edr_path: npt.edr
     output_log_path: npt.log
     output_cpt_path: npt.cpt
-
+  properties: 
+    binary_path: {gmx_binary_path}     # GROMACS binary path
+    mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)      
+    mpi_np: {mpi_np}               # Number of processors for MPI selected in the MPI call
+    use_gpu: {use_gpu}             # Wether to use GPU support or not
+    
 step4J_density_npt:
   tool: gmx_energy
   paths:
     input_energy_path: dependency/step4I_mdrun_npt/output_edr_path
     output_xvg_path: npt_press_den.xvg
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     terms: ["Pressure", "Density"]
     xvg: xmgr 
 
@@ -893,15 +898,16 @@ step5A_grompp_md:
     input_top_zip_path: dependency/step3N_genion/output_top_zip_path
     output_tpr_path: gppmd.tpr
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     simulation_type: free
     mdp:
-      nsteps: 50000000
-      dt: 0.002 
-      ref-t: 300 300
+      nsteps: {nsteps}
+      dt: {dt} 
+      ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
-      nstxout: 500      # freq. of trajectory (coordinates) writing in time steps 
-      nstvout: 500      # freq. of trajectory (velocities) writing in time steps
-      nstfout: 500
+      nstxout: 0           
+      nstvout: 0
+      nstxout-compressed: {traj_freq}
       nstenergy: 500
       continuation: 'yes'
       gen-vel: 'no'          
@@ -916,7 +922,12 @@ step5B_mdrun_md:
     output_edr_path: md.edr
     output_log_path: md.log
     output_cpt_path: md.cpt
-
+  properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
+    mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)      
+    mpi_np: {mpi_np}               # Number of processors for MPI selected in the MPI call
+    use_gpu: {use_gpu}             # Wether to use GPU support or not
+    
 #########################################
 # Section 6 (Steps A-D): Basic analysis #
 #########################################
@@ -928,6 +939,7 @@ step6A_rmsd_equilibrated:
     input_traj_path: dependency/step5B_mdrun_md/output_trr_path
     output_xvg_path: md_rmsdfirst.xvg
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     selection: Backbone
     xvg: xmgr 
 
@@ -938,6 +950,7 @@ step6B_rmsd_experimental:
     input_traj_path: dependency/step5B_mdrun_md/output_trr_path
     output_xvg_path: md_rmsdexp.xvg
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     selection: Backbone
     xvg: xmgr 
   
@@ -948,6 +961,7 @@ step6C_rgyr:
     input_traj_path: dependency/step5B_mdrun_md/output_trr_path
     output_xvg_path: md_rgyr.xvg
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     selection: Backbone
     xvg: xmgr 
 
@@ -974,6 +988,7 @@ step7A_trjcat:
     input_trj_zip_path: all_trajectories_trr.zip
     output_trj_path: all_trajectories.xtc
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     concatenate: True
 
 step7B_dry_str:
@@ -984,6 +999,7 @@ step7B_dry_str:
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
     output_str_path: dry_structure.gro
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     selection: Protein
     center: True
     pbc: mol
@@ -997,6 +1013,7 @@ step7C_dry_traj:
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
     output_traj_path: dry_traj.xtc
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     selection: Protein
 
 step7D_center:
@@ -1007,6 +1024,7 @@ step7D_center:
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
     output_traj_path: center_traj.xtc
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     center_selection: Protein
     output_selection: Protein
     center: True
@@ -1021,6 +1039,7 @@ step7E_image_traj:
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
     output_traj_path: imaged_traj.xtc
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     output_selection: Protein
     cluster_selection: Protein
     center_selection: Protein  # NOTE: why is this used??
@@ -1036,6 +1055,7 @@ step7F_fit_traj:
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc
   properties:
+    binary_path: {gmx_binary_path}     # GROMACS binary path
     fit_selection: Protein
     center_selection: Protein
     output_selection: Protein
@@ -1043,7 +1063,7 @@ step7F_fit_traj:
     fit: rot+trans
 """
 
-def create_config_file(config_path: str) -> None:
+def create_config_file(config_path: str, **config_args) -> None:
     """
     Create a YAML configuration file for the workflow if needed.
     
@@ -1051,6 +1071,8 @@ def create_config_file(config_path: str) -> None:
     ----------
     config_path : str
         Path to the configuration file to be created.
+    config_args : dict
+        Arguments to be used in the configuration file.
     
     Returns
     -------
@@ -1064,13 +1086,18 @@ def create_config_file(config_path: str) -> None:
     
     # Write the contents to the file
     with open(config_path, 'w') as f:
-        f.write(config_contents())
+        f.write(config_contents(**config_args))
     
-         
+    
 # Main workflow
 def main_wf(configuration_path: Optional[str] = None, 
             input_pdb_path: Optional[str] = None, 
             ligands_top_folder: Optional[str] = None, 
+            gmx_binary_path: str = 'gmx',
+            mpi_bin: str = 'null',
+            mpi_np: int = 1,
+            use_gpu: bool = False,
+            restart: bool = False,
             forcefield: str = 'amber99sb-ildn', 
             salt_concentration: float = 0.15,
             temperature: float = 300.0,
@@ -1079,8 +1106,10 @@ def main_wf(configuration_path: Optional[str] = None,
             input_top_path: str = None, 
             dt: float = 0.002,
             equil_nsteps: int = 500000,
+            equil_traj_freq: Optional[int] = None,
             equil_only: bool = False, 
             nsteps: float = 50000000,
+            traj_freq: Optional[int] = None,
             num_parts: int = 1, 
             num_replicas: int = 1, 
             skip_traj_processing: bool = False, 
@@ -1098,6 +1127,16 @@ def main_wf(configuration_path: Optional[str] = None,
             path to input PDB file
         ligands_top_folder:
             path to folder with ligands topology files (.itp) and coordinates (.gro)
+        gmx_binary_path:
+            path to GROMACS binary
+        mpi_bin:
+            path to MPI binary (e.g. mpirun, srun...) (should be null if gromacs already includes MPI support)
+        mpi_np:
+            number of processors for MPI selected in the MPI call
+        use_gpu:
+            whether to use GPU support or not
+        restart:
+            whether to restart the workflow from the last completed step or start from the beginning.
         forcefield: 
             forcefield to be used in the simulation. Default: amber99sb-ildn. 
             See values supported by pdb2gmx (gromos45a3, charmm27, gromos53a6, amber96, amber99, 
@@ -1116,11 +1155,17 @@ def main_wf(configuration_path: Optional[str] = None,
         dt:
             time step to be used in the simulation. Default: 0.002 (2 fs).
         equil_nsteps:
-            number of steps of the equilibration simulations. NVT and NPT. Default: 500000 (1 ns).
+            number of steps of the equilibration simulations. For NVT and for NPT. Default: 500000 (1 ns).
+        equil_traj_freq:
+            Saving frequency of the trajectory during equilibration in number of steps.
+            Default: equil_nsteps // 500.
         equil_only: 
             whether to only run the equilibration or also run the production simulations
         nsteps: 
             Total number of steps of the production simulation. Default: 50000000 (100 ns).
+        traj_freq:
+            Saving frequency of the trajectory during production in number of steps.
+            Default: nsteps // 1000.
         num_parts: 
             number of parts of the trajectory 
         num_replicas: 
@@ -1151,7 +1196,22 @@ def main_wf(configuration_path: Optional[str] = None,
     if configuration_path is None:
         default_config = True
         configuration_path = "config.yml"
-        create_config_file(configuration_path)
+        config_args = {
+            'gmx_binary_path': gmx_binary_path,
+            'mpi_bin': mpi_bin,
+            'mpi_np': mpi_np,
+            'use_gpu': use_gpu,
+            'restart': restart,
+            'forcefield': forcefield,
+            'salt_conc': salt_concentration,
+            'temp': temperature,
+            'dt': dt,
+            'equil_nsteps': equil_nsteps,
+            'equil_traj_freq': equil_traj_freq,
+            'nsteps': nsteps,
+            'traj_freq': traj_freq
+        }
+        create_config_file(configuration_path, **config_args)
         
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
@@ -1162,9 +1222,6 @@ def main_wf(configuration_path: Optional[str] = None,
         conf.working_dir_path = output_path
     else:
         output_path = conf.get_working_dir_path()
-        
-    # Remove gmx-specific properties from global properties - otherwise they will be applied to all steps
-    gmx_properties = conf.global_properties.pop('gmx', None)
 
     # Initializing a global log file
     global_log, _ = fu.get_logs(path=output_path, light_format=True)
@@ -1413,8 +1470,6 @@ def main_wf(configuration_path: Optional[str] = None,
         global_prop["step4E_grompp_nvt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions"
     global_prop["step4E_grompp_nvt"]["mdp"]["define"] = eq_posres
     global_prop["step4E_grompp_nvt"]["mdp"]["ref-t"] = f"{temperature} {temperature}"
-    global_prop["step4E_grompp_nvt"]["mdp"]["nsteps"] = equil_nsteps
-    global_prop["step4E_grompp_nvt"]["mdp"]["dt"] = dt
     global_log.info("step4E_grompp_nvt: Preprocess system temperature equilibration")
     grompp(**global_paths["step4E_grompp_nvt"], properties=global_prop["step4E_grompp_nvt"])
 
@@ -1431,8 +1486,6 @@ def main_wf(configuration_path: Optional[str] = None,
         global_prop["step4H_grompp_npt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions"
     global_prop["step4H_grompp_npt"]["mdp"]["define"] = eq_posres
     global_prop["step4H_grompp_npt"]["mdp"]["ref-t"] = f"{temperature} {temperature}"
-    global_prop["step4H_grompp_npt"]["mdp"]["nsteps"] = equil_nsteps
-    global_prop["step4H_grompp_npt"]["mdp"]["dt"] = dt
     global_log.info("step4H_grompp_npt: Preprocess system pressure equilibration")
     grompp(**global_paths["step4H_grompp_npt"], properties=global_prop["step4H_grompp_npt"])
 
@@ -1470,9 +1523,6 @@ def main_wf(configuration_path: Optional[str] = None,
         traj_prop = conf.get_prop_dic(prefix=simulation)
         traj_paths = conf.get_paths_dic(prefix=simulation)
 
-        # Set general properties for all steps
-        set_global_gmx_properties(traj_prop, gmx_properties, global_log)
-
         # Update previous global paths needed by simulation-specific steps
         traj_paths['step5A_grompp_md']['input_gro_path'] = global_paths["step5A_grompp_md"]['input_gro_path']
         traj_paths['step5A_grompp_md']['input_cpt_path'] = global_paths["step5A_grompp_md"]['input_cpt_path']
@@ -1483,9 +1533,8 @@ def main_wf(configuration_path: Optional[str] = None,
         traj_paths['step6C_rgyr']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
         traj_paths['step6D_rmsf']['input_top_path'] = global_paths["step3O_gro2pdb"]['output_str_path']
         
-        traj_prop['step5A_grompp_md']['mdp']['nsteps']=nsteps
-        traj_prop['step5A_grompp_md']['mdp']['dt'] = dt
-            
+        # NOTE: num_replicas and num_parts will always have a value - review this
+        
         # Simulations are replicas
         if num_replicas:
             # Change seed and velocities for each replica
@@ -1493,7 +1542,7 @@ def main_wf(configuration_path: Optional[str] = None,
             traj_prop['step5A_grompp_md']['mdp']['continuation'] = 'no'
             traj_prop['step5A_grompp_md']['mdp']['gen-vel'] = 'yes'
 
-        # Simulations are parts of a single trajectory
+        # Simulations are parts of a single trajectory 
         if num_parts:
             # Divide the number of steps by the number of parts
             traj_prop['step5A_grompp_md']['mdp']['nsteps']=int(traj_prop['step5A_grompp_md']['mdp']['nsteps']/num_parts)
@@ -1591,9 +1640,6 @@ def main_wf(configuration_path: Optional[str] = None,
                 traj_prop = conf.get_prop_dic(prefix=simulation)
                 traj_paths = conf.get_paths_dic(prefix=simulation)
                 
-                # Set general properties for all steps
-                set_global_gmx_properties(traj_prop, gmx_properties, global_log)
-                
                 # NOTE: we are hard-coding the kind of traj that we are using with these paths: output_trr_path
                 # Update previous global paths needed by simulation-specific steps
                 traj_paths['step7B_dry_str']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
@@ -1667,12 +1713,32 @@ if __name__ == "__main__":
                         ligands correspond to the PDB used. Default: None""",
                         required=False)
 
+    parser.add_argument('--gmx_bin', dest='gmx_binary_path', type=str,
+                        help="Path to GROMACS binary. Default: gmx",
+                        required=False, default='gmx')
+    
+    parser.add_argument('--mpi_bin', dest='mpi_bin', type=str,
+                        help="Path to MPI binary. Default: null",
+                        required=False, default='null')
+    
+    parser.add_argument('--mpi_np', dest='mpi_np', type=int,
+                        help="Number of MPI processes. Default: 1",
+                        required=False, default=1)
+
+    parser.add_argument('--use_gpu', action='store_true',
+                        help="Use GPU for GROMACS. Default: False",
+                        required=False, default=False)
+    
+    parser.add_argument('--restart', action='store_true',
+                        help="Restart the workflow from the last completed step. Default: False",
+                        required=False, default=False)
+
     parser.add_argument('--forcefield', dest='forcefield', type=str,
                         help="Forcefield to use. Default: amber99sb-ildn",
                         required=False, default='amber99sb-ildn')
 
     parser.add_argument('--salt_conc', dest='salt_concentration', type=float,
-                        help="Concentration of salt in the system. Default: 0.15",
+                        help="Concentration of ions in the system. Default: 0.15",
                         required=False, default=0.15)
     
     parser.add_argument('--temp', dest='temperature', type=float,
@@ -1700,8 +1766,12 @@ if __name__ == "__main__":
                         required=False, default=0.002)
     
     parser.add_argument('--equil_nsteps', dest='equil_nsteps', type=int,
-                        help="Number of steps of the equilibration simulations. NVT and NPT. Default: 500000",
+                        help="Number of steps of the equilibration simulations. For NVT and for NPT. Default: 500000",
                         required=False, default=500000)
+    
+    parser.add_argument('--equil_traj_freq', dest='equil_traj_freq', type=int,
+                        help="Saving frequency of the trajectory during equilibration in number of steps. Default: equil_nsteps // 500.",
+                        required=False)
     
     parser.add_argument('--equil_only', action='store_true',
                         help="Only run the equilibration steps. Default: False",
@@ -1710,6 +1780,10 @@ if __name__ == "__main__":
     parser.add_argument('--nsteps', dest='nsteps', type=int,
                         help="Number of steps of the production simulation. Default: 50000000",
                         required=False, default=50000000)
+    
+    parser.add_argument('--traj_freq', dest='traj_freq', type=int,
+                        help="Saving frequency of the trajectory during production in number of steps. Default: nsteps // 1000.",
+                        required=False)
     
     parser.add_argument('--num_parts', dest='num_parts', type=int,
                         help="Number of parts to divide the simulation into. Default: 1",
@@ -1758,6 +1832,11 @@ if __name__ == "__main__":
     main_wf(configuration_path=args.config_path, 
             input_pdb_path=args.input_pdb_path, 
             ligands_top_folder=args.ligands_top_folder, 
+            gmx_binary_path=args.gmx_binary_path,
+            mpi_bin=args.mpi_bin,
+            mpi_np=args.mpi_np,
+            use_gpu=args.use_gpu,
+            restart=args.restart,
             forcefield=args.forcefield, 
             salt_concentration=args.salt_concentration,
             temperature=args.temperature,
@@ -1766,8 +1845,10 @@ if __name__ == "__main__":
             input_top_path=args.input_top_path,
             dt=args.dt, 
             equil_nsteps=args.equil_nsteps,
+            equil_traj_freq=args.equil_traj_freq,
             equil_only=args.equil_only, 
-            nsteps=args.nsteps,  
+            nsteps=args.nsteps, 
+            traj_freq=args.traj_freq, 
             num_parts=args.num_parts, 
             num_replicas=args.num_replicas, 
             skip_traj_processing=args.skip_traj_processing, 
