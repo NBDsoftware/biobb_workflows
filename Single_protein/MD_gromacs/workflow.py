@@ -43,6 +43,67 @@ gmx_titra_resnames = {
     'GLU': ('GLU', 'GLUH')                  # deprotonated, protonated
 }
 
+def check_inputs(
+    input_pdb_path: Optional[str], 
+    input_gro_path: Optional[str], 
+    input_top_path: Optional[str], 
+    ligands_top_folder: Optional[str], 
+    global_log
+    ) -> None:
+    """
+    Check the inputs for the workflow. The function checks if either the input PDB or the gro and top files
+    exist. If the ligands_top_folder is provided, it checks if the folder exists and if it's not empty. 
+    If any of the checks fail, an error is raised.
+    
+    Inputs
+    ------
+    
+        input_pdb_path (str): Path to the input PDB file.
+        input_gro_path (str): Path to the input GRO file.
+        input_top_path (str): Path to the input topology file.
+        ligands_top_folder (str): Path to the folder with the ligands .itp files.
+        global_log: Logger object for logging messages.
+    """
+    
+    # Check if the input PDB file exists
+    if input_pdb_path is not None:
+        if not os.path.exists(input_pdb_path):
+            global_log.error(f"Input PDB file {input_pdb_path} not found")
+            raise FileNotFoundError(f"Input PDB file {input_pdb_path} not found")
+    
+    # Check if the input GRO file exists
+    if input_gro_path is not None:
+        if not os.path.exists(input_gro_path):
+            global_log.error(f"Input GRO file {input_gro_path} not found")
+            raise FileNotFoundError(f"Input GRO file {input_gro_path} not found")
+    
+    # Check if the input topology file exists
+    if input_top_path is not None:
+        if not os.path.exists(input_top_path):
+            global_log.error(f"Input topology file {input_top_path} not found")
+            raise FileNotFoundError(f"Input topology file {input_top_path} not found")
+    
+    # Check if the user is not providing both input PDB and GRO/Top files
+    if input_pdb_path is not None and (input_gro_path is not None or input_top_path is not None):
+        global_log.error("You cannot provide both input PDB and GRO/Top files. Please provide only one of them.")
+        raise ValueError("You cannot provide both input PDB and GRO/Top files. Please provide only one of them.")
+
+    # Check if the user is not providing any input PDB or GRO/Top files
+    if input_pdb_path is None and (input_gro_path is None or input_top_path is None):
+        global_log.error("You must provide either an input PDB file or both input GRO and Top files.")
+        raise ValueError("You must provide either an input PDB file or both input GRO and Top files.")
+
+    # Check if the ligands topology folder exists
+    if ligands_top_folder is not None:
+        if not os.path.exists(ligands_top_folder):
+            global_log.error(f"Ligands topology folder {ligands_top_folder} not found")
+            raise FileNotFoundError(f"Ligands topology folder {ligands_top_folder} not found")
+        
+        # Check if the ligands topology folder is empty
+        if not os.listdir(ligands_top_folder):
+            global_log.error(f"Ligands topology folder {ligands_top_folder} is empty")
+            raise ValueError(f"Ligands topology folder {ligands_top_folder} is empty")
+
 # Biopython helpers
 def get_ligands(ligands_top_folder: Union[str, None], global_log) -> List[Dict[str, str]]:
     """
@@ -1195,9 +1256,13 @@ def main_wf(configuration_path: Optional[str] = None,
     # Dividing it in global paths and global properties
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
-
-    # Set properties for gmx steps
-    set_global_gmx_properties(global_prop, gmx_properties, global_log)
+    
+    # Check input files
+    check_inputs(input_pdb_path, 
+                 input_gro_path, 
+                 input_top_path, 
+                 ligands_top_folder, 
+                 global_log)
     
     # If prepared structure is not provided
     if input_gro_path is None:
