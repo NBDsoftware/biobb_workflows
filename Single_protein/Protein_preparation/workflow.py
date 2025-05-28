@@ -882,7 +882,7 @@ def main_wf(configuration_path: Optional[str] = None,
             pH: float = 7.0,
             his: Optional[List] = None, 
             keep_hs: bool = False, 
-            pdb_format: Literal['amber', 'gromacs'] = 'amber',
+            output_format: Literal['amber', 'gromacs'] = 'amber',
             output_path: Optional[str] = None
     ):
     '''
@@ -929,6 +929,8 @@ def main_wf(configuration_path: Optional[str] = None,
             Default: None. Example: '0 1 1'
         keep_hs: 
             Keep hydrogen atoms in the input PDB file. Otherwise they will be removed. Default: False
+        output_format:
+            Output format of the PDB file. Can be 'amber' or 'gromacs'. Default: 'amber'.
         output_path: 
             path to output folder
 
@@ -1144,20 +1146,20 @@ def main_wf(configuration_path: Optional[str] = None,
     global_paths["step15_titrate"]["input_structure_path"] = last_pdb_path
     global_prop["step15_titrate"]["pH"] = pH
     global_prop["step15_titrate"]["his"] = his
-    global_prop["step15_titrate"]["pdb_format"] = pdb_format
+    global_prop["step15_titrate"]["pdb_format"] = output_format
     global_prop["step15_titrate"]["pKa_results"] = pKa_results
     biobb_titrate(**global_paths["step15_titrate"], properties=global_prop["step15_titrate"], global_log=global_log)
     last_pdb_path = global_paths["step15_titrate"]["output_structure_path"]
     
     # NOTE: Manually add Glutamine protonation states - assume model pKa value 
     
-    if pdb_format == 'amber':
+    if output_format == 'amber':
         # STEP 16: run pdb4amber to generate final PDB file (with hydrogens?)
         # NOTE: will this protonate according to the residue names? 
         global_log.info("step16_pdb4amber: Generate final PDB file with hydrogens")
         pdb4amber_run(**global_paths["step16_pdb4amber"], properties=global_prop["step16_pdb4amber"])
         last_pdb_path = global_paths["step16_pdb4amber"]["output_pdb_path"]
-    elif pdb_format == 'gromacs':
+    elif output_format == 'gromacs':
         # Rename atoms to gromacs format
         last_pdb_path = rename_ss_bonds(last_pdb_path, format='gromacs')
     
@@ -1212,7 +1214,7 @@ if __name__ == "__main__":
                         required=False)
 
     parser.add_argument('--skip_bc_fix', action='store_true', dest='skip_bc_fix', 
-                        help="""Skip the backbone modeling of missing atoms. Otherwise the missing atoms in the backbone 
+                        help="""Skip the modeling of missing backbone atoms. Otherwise the missing atoms in the backbone 
                         of the PDB structure will be modeled using 'biobb_structure_checking' and the 'Modeller suite' 
                         (if the Modeller key is given). Note that modeling of missing loops is only possible if the Modeller 
                         key is provided. To obtain one register at: https://salilab.org/modeller/registration.html. Default: False""",
@@ -1225,7 +1227,7 @@ if __name__ == "__main__":
                         required=False, default=None)
     
     parser.add_argument('--cap_ter', action='store_true', dest='cap_ter',
-                        help="Add terminal residues ACE and NME as necessary, preserving existing atoms. Default: False",
+                        help="Cap the termini of the PDB file with ACE and NME residues, preserving existing atoms. Default: False",
                         required=False, default=False)
     
     parser.add_argument('--skip_sc_fix', action='store_true', dest='skip_sc_fix',
@@ -1262,7 +1264,7 @@ if __name__ == "__main__":
                         help="""Keep hydrogen atoms in the input PDB file. Otherwise they will be discarded. Default: False""",
                         required=False)
 
-    parser.add_argument('--pdb_format', dest='pdb_format', type=str,
+    parser.add_argument('--output_format', dest='output_format', type=str,
                         help="""PDB format to be used. Options: amber, gromacs. Default: 'amber'""",
                         required=False, default='amber')
     
@@ -1289,5 +1291,5 @@ if __name__ == "__main__":
             pH=args.ph,
             his=args.his,
             keep_hs=args.keep_hs, 
-            pdb_format=args.pdb_format,
+            output_format=args.output_format,
             output_path=args.output_path)
