@@ -818,6 +818,7 @@ step4F_mdrun_nvt:
   tool: mdrun
   paths:
     input_tpr_path: dependency/step4E_grompp_nvt/output_tpr_path
+    output_xtc_path: nvt.xtc
     output_trr_path: nvt.trr
     output_gro_path: nvt.gro
     output_edr_path: nvt.edr
@@ -864,6 +865,7 @@ step4I_mdrun_npt:
   tool: mdrun
   paths:
     input_tpr_path: dependency/step4H_grompp_npt/output_tpr_path
+    output_xtc_path: npt.xtc
     output_trr_path: npt.trr
     output_gro_path: npt.gro
     output_edr_path: npt.edr
@@ -917,6 +919,7 @@ step5B_mdrun_md:
   tool: mdrun
   paths:
     input_tpr_path: dependency/step5A_grompp_md/output_tpr_path
+    output_xtc_path: md.xtc
     output_trr_path: md.trr
     output_gro_path: md.gro
     output_edr_path: md.edr
@@ -985,7 +988,7 @@ step6D_rmsf:
 step7A_trjcat:
   tool: trjcat
   paths:
-    input_trj_zip_path: all_trajectories_trr.zip
+    input_trj_zip_path: all_trajectories.zip
     output_trj_path: all_trajectories.xtc
   properties:
     binary_path: {gmx_binary_path}     # GROMACS binary path
@@ -1008,7 +1011,7 @@ step7B_dry_str:
 step7C_dry_traj:
   tool: gmx_trjconv_trj
   paths: 
-    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
+    input_traj_path: dependency/step5B_mdrun_md/output_xtc_path
     input_top_path: dependency/step5A_grompp_md/output_tpr_path
     input_index_path: dependency/step4C_make_ndx/output_ndx_path
     output_traj_path: dry_traj.xtc
@@ -1564,7 +1567,7 @@ def main_wf(configuration_path: Optional[str] = None,
         mdrun(**traj_paths['step5B_mdrun_md'], properties=traj_prop['step5B_mdrun_md'])
         
         # Append the trajectory to the list
-        traj_list.append(traj_paths['step5B_mdrun_md']['output_trr_path'])
+        traj_list.append(traj_paths['step5B_mdrun_md']['output_xtc_path'])
         
         # Update the previous gro and cpt files
         previous_gro_path = traj_paths['step5B_mdrun_md']['output_gro_path']
@@ -1639,8 +1642,7 @@ def main_wf(configuration_path: Optional[str] = None,
                 # Get the properties and paths for the replica
                 traj_prop = conf.get_prop_dic(prefix=simulation)
                 traj_paths = conf.get_paths_dic(prefix=simulation)
-                
-                # NOTE: we are hard-coding the kind of traj that we are using with these paths: output_trr_path
+
                 # Update previous global paths needed by simulation-specific steps
                 traj_paths['step7B_dry_str']['input_structure_path'] = global_paths["step4I_mdrun_npt"]['output_gro_path']
                 traj_paths['step7B_dry_str']['input_index_path'] = global_paths["step4C_make_ndx"]['output_ndx_path']
