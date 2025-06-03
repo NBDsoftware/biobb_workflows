@@ -518,8 +518,9 @@ def concatenate_gmx_analysis(conf, simulation_folders: List[str], output_path: s
 # YML construction
 def config_contents(
     gmx_binary_path: str = 'gmx',
-    mpi_bin: str = 'null',
-    mpi_np: int = 1,
+    mpi_bin: Optional[str] = None,
+    num_threads_mpi: Optional[int] = None,
+    num_threads_omp: Optional[int] = None,
     use_gpu: bool = False,
     restart: bool = False,
     forcefield: str = 'amber99sb-ildn',
@@ -543,8 +544,10 @@ def config_contents(
         Path to the GROMACS binary. Default is 'gmx'.
     mpi_bin : str
         Path to the MPI binary. Default is 'null'.
-    mpi_np : int
-        Number of processors for MPI. Default is 1.
+    num_threads_mpi : int
+        Number of threads for MPI. Default is None.
+    num_threads_omp : int
+        Number of threads for OpenMP. Default is None.
     use_gpu : bool
         Whether to use GPU for GROMACS. Default is False.
     restart : bool
@@ -579,6 +582,21 @@ def config_contents(
     
     if traj_freq is None:
         traj_freq = nsteps // 1000
+    
+    if mpi_bin is None:
+        mpi_bin = 'null'
+        
+    if num_threads_mpi is None:
+        num_threads_mpi_config = ''
+        mpi_np_config = ''
+    else:
+        num_threads_mpi_config = f"num_threads_mpi: {num_threads_mpi}"
+        mpi_np_config = f"mpi_np: {num_threads_mpi}"
+
+    if num_threads_omp is None:
+        num_threads_omp_config = ''
+    else:
+        num_threads_omp_config = f"num_threads_omp: {num_threads_omp}"
     
     return f""" 
 # Global properties (common for all steps)
@@ -772,9 +790,11 @@ step4B_mdrun_min:
     output_edr_path: min.edr
     output_log_path: min.log
   properties:
-    binary_path: {gmx_binary_path}     # GROMACS binary path
+    binary_path: {gmx_binary_path} # GROMACS binary path
     mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)                                               
-    mpi_np: {mpi_np}               # Number of processors for MPI selected in the MPI call
+    {mpi_np_config}                # Number of processors for MPI selected in the MPI call
+    {num_threads_mpi_config}
+    {num_threads_omp_config}
     
 step4C_make_ndx:
   tool: make_ndx 
@@ -827,8 +847,10 @@ step4F_mdrun_nvt:
   properties:
     binary_path: {gmx_binary_path}     # GROMACS binary path
     mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)      
-    mpi_np: {mpi_np}               # Number of processors for MPI selected in the MPI call
+    {mpi_np_config}                # Number of processors for MPI selected in the MPI call
     use_gpu: {use_gpu}             # Wether to use GPU support or not
+    {num_threads_mpi_config}
+    {num_threads_omp_config}
     
 step4G_temp_nvt:
   tool: gmx_energy
@@ -874,9 +896,11 @@ step4I_mdrun_npt:
   properties: 
     binary_path: {gmx_binary_path}     # GROMACS binary path
     mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)      
-    mpi_np: {mpi_np}               # Number of processors for MPI selected in the MPI call
+    {mpi_np_config}                # Number of processors for MPI selected in the MPI call
     use_gpu: {use_gpu}             # Wether to use GPU support or not
-    
+    {num_threads_mpi_config}
+    {num_threads_omp_config}
+
 step4J_density_npt:
   tool: gmx_energy
   paths:
@@ -928,9 +952,11 @@ step5B_mdrun_md:
   properties:
     binary_path: {gmx_binary_path}     # GROMACS binary path
     mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)      
-    mpi_np: {mpi_np}               # Number of processors for MPI selected in the MPI call
+    {mpi_np_config}                # Number of processors for MPI selected in the MPI call
     use_gpu: {use_gpu}             # Wether to use GPU support or not
-    
+    {num_threads_mpi_config}
+    {num_threads_omp_config}
+        
 #########################################
 # Section 6 (Steps A-D): Basic analysis #
 #########################################
@@ -939,7 +965,7 @@ step6A_rmsd_equilibrated:
   tool: gmx_rms
   paths:
     input_structure_path: dependency/step4I_mdrun_npt/output_gro_path
-    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
+    input_traj_path: dependency/step5B_mdrun_md/output_xtc_path
     output_xvg_path: md_rmsdfirst.xvg
   properties:
     binary_path: {gmx_binary_path}     # GROMACS binary path
@@ -950,7 +976,7 @@ step6B_rmsd_experimental:
   tool: gmx_rms
   paths:
     input_structure_path: dependency/step4A_grompp_min/input_gro_path
-    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
+    input_traj_path: dependency/step5B_mdrun_md/output_xtc_path
     output_xvg_path: md_rmsdexp.xvg
   properties:
     binary_path: {gmx_binary_path}     # GROMACS binary path
@@ -961,7 +987,7 @@ step6C_rgyr:
   tool: gmx_rgyr
   paths:
     input_structure_path: dependency/step4I_mdrun_npt/output_gro_path
-    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
+    input_traj_path: dependency/step5B_mdrun_md/output_xtc_path
     output_xvg_path: md_rgyr.xvg
   properties:
     binary_path: {gmx_binary_path}     # GROMACS binary path
@@ -972,7 +998,7 @@ step6D_rmsf:
   tool: cpptraj_rmsf
   paths:
     input_top_path: dependency/step3O_gro2pdb/output_str_path
-    input_traj_path: dependency/step5B_mdrun_md/output_trr_path
+    input_traj_path: dependency/step5B_mdrun_md/output_xtc_path
     output_cpptraj_path: md_rmsf.xmgr   # .dat, .agr, .xmgr, .gnu
   properties:
     start: 1
@@ -1066,9 +1092,12 @@ step7F_fit_traj:
     fit: rot+trans
 """
 
-def create_config_file(config_path: str, **config_args) -> None:
+def create_config_file(config_path: str, **config_args) -> bool:
     """
     Create a YAML configuration file for the workflow if needed.
+    Check if the config_path is None or does not exist before creating the file.
+    If the file already exists, it will not be overwritten.
+    Return a boolean indicating whether the file was created or not.
     
     Parameters
     ----------
@@ -1079,17 +1108,30 @@ def create_config_file(config_path: str, **config_args) -> None:
     
     Returns
     -------
-    None
+    
+    bool
+        True if the file was created, False if it already exists.
     """
     
-    # Check if the file already exists
-    if os.path.exists(config_path):
-        print(f"Configuration file already exists at {config_path}.")
-        return
-    
+    # Check if the config_path is None
+    if config_path is not None:
+        # Check if the file already exists
+        if os.path.exists(config_path):
+            print(f"Configuration file already exists at {config_path}.")
+            return False
+        else:
+            print(f"Warning: Configuration file path is set to {config_path}, but it does not exist. Creating a new config.yml file.")
+        
+    config_path = 'config.yml'
+        
     # Write the contents to the file
     with open(config_path, 'w') as f:
         f.write(config_contents(**config_args))
+        
+    print(f"Configuration file created at {config_path}.")
+    
+    # Return True indicating the file was created
+    return True
     
     
 # Main workflow
@@ -1097,8 +1139,9 @@ def main_wf(configuration_path: Optional[str] = None,
             input_pdb_path: Optional[str] = None, 
             ligands_top_folder: Optional[str] = None, 
             gmx_binary_path: str = 'gmx',
-            mpi_bin: str = 'null',
-            mpi_np: int = 1,
+            mpi_bin: Optional[str] = None,
+            num_threads_mpi: Optional[int] = None,
+            num_threads_omp: Optional[int] = None,
             use_gpu: bool = False,
             restart: bool = False,
             forcefield: str = 'amber99sb-ildn', 
@@ -1134,8 +1177,10 @@ def main_wf(configuration_path: Optional[str] = None,
             path to GROMACS binary
         mpi_bin:
             path to MPI binary (e.g. mpirun, srun...) (should be null if gromacs already includes MPI support)
-        mpi_np:
-            number of processors for MPI selected in the MPI call
+        num_threads_mpi:
+            number of threads to be used by MPI
+        num_threads_omp:
+            number of threads to be used by OpenMP
         use_gpu:
             whether to use GPU support or not
         restart:
@@ -1194,27 +1239,26 @@ def main_wf(configuration_path: Optional[str] = None,
     
     start_time = time.time()
 
-    # Default configuration file
-    default_config = False
-    if configuration_path is None:
-        default_config = True
-        configuration_path = "config.yml"
-        config_args = {
-            'gmx_binary_path': gmx_binary_path,
-            'mpi_bin': mpi_bin,
-            'mpi_np': mpi_np,
-            'use_gpu': use_gpu,
-            'restart': restart,
-            'forcefield': forcefield,
-            'salt_conc': salt_concentration,
-            'temp': temperature,
-            'dt': dt,
-            'equil_nsteps': equil_nsteps,
-            'equil_traj_freq': equil_traj_freq,
-            'nsteps': nsteps,
-            'traj_freq': traj_freq
-        }
-        create_config_file(configuration_path, **config_args)
+    # Create a default configuration file if needed
+    config_args = {
+        'gmx_binary_path': gmx_binary_path,
+        'mpi_bin': mpi_bin,
+        'num_threads_mpi': num_threads_mpi,
+        'num_threads_omp': num_threads_omp,
+        'use_gpu': use_gpu,
+        'restart': restart,
+        'forcefield': forcefield,
+        'salt_conc': salt_concentration,
+        'temp': temperature,
+        'dt': dt,
+        'equil_nsteps': equil_nsteps,
+        'equil_traj_freq': equil_traj_freq,
+        'nsteps': nsteps,
+        'traj_freq': traj_freq
+    }
+    default_config = create_config_file(configuration_path, **config_args)
+    if default_config:
+        configuration_path = 'config.yml'  # Use the default config file if it was created
         
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
@@ -1724,10 +1768,14 @@ if __name__ == "__main__":
                         help="Path to MPI binary. Default: null",
                         required=False, default='null')
     
-    parser.add_argument('--mpi_np', dest='mpi_np', type=int,
-                        help="Number of MPI processes. Default: 1",
+    parser.add_argument('--num_threads_mpi', dest='num_threads_mpi', type=int,
+                        help="Number of MPI threads. Default: Let GROMACS guess",
                         required=False, default=1)
-
+    
+    parser.add_argument('--num_threads_omp', dest='num_threads_omp', type=int,
+                        help="Number of OpenMP threads. Default: Let GROMACS guess",
+                        required=False) 
+    
     parser.add_argument('--use_gpu', action='store_true',
                         help="Use GPU for GROMACS. Default: False",
                         required=False, default=False)
@@ -1837,7 +1885,8 @@ if __name__ == "__main__":
             ligands_top_folder=args.ligands_top_folder, 
             gmx_binary_path=args.gmx_binary_path,
             mpi_bin=args.mpi_bin,
-            mpi_np=args.mpi_np,
+            num_threads_mpi=args.num_threads_mpi,
+            num_threads_omp=args.num_threads_omp,
             use_gpu=args.use_gpu,
             restart=args.restart,
             forcefield=args.forcefield, 
