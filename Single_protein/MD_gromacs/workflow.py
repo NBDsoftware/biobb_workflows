@@ -1267,6 +1267,7 @@ def main_wf(configuration_path: Optional[str] = None,
         global_log.info("step3B_structure_topology: Generate the topology")
         global_paths["step3B_structure_topology"]["input_pdb_path"] = input_pdb_path
         global_prop["step3B_structure_topology"]["force_field"]=forcefield
+        global_log.info(f"step3B_structure_topology: Reading protonation states for titratable residues (0: deprotonated, 1: protonated)")
         for residue in gmx_titra_resnames.keys():
             global_prop["step3B_structure_topology"][residue.lower()] = read_protonation_states(input_pdb_path, residue, global_log)
             global_log.info(f"step3B_structure_topology: {residue} protonation state: {global_prop['step3B_structure_topology'][residue.lower()]}")
