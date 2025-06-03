@@ -868,8 +868,8 @@ def create_config_file(config_path: str) -> None:
         f.write(config_contents())
     
 # Main workflow
-def main_wf(configuration_path: Optional[str] = None, 
-            input_pdb_path: Optional[str] = None, 
+def main_wf(input_pdb_path: str,
+            configuration_path: Optional[str] = None,  
             pdb_code: Optional[str] = None, 
             pdb_chains: Optional[List] = None, 
             mutation_list: Optional[List] = None, 
@@ -971,8 +971,7 @@ def main_wf(configuration_path: Optional[str] = None,
     global_paths = conf.get_paths_dic()
 
     # If input PDB is given as argument
-    if input_pdb_path is not None:
-        global_paths["step1_extractAtoms"]["input_structure_path"] = input_pdb_path
+    global_paths["step1_extractAtoms"]["input_structure_path"] = input_pdb_path
 
     # If chains are given as argument
     if pdb_chains is not None:
@@ -1192,12 +1191,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("MD Simulation with GROMACS")
 
+    parser.add_argument('--input_pdb', dest='input_pdb_path', type=str,
+                        help="Input PDB file.",
+                        required=True)
+    
     parser.add_argument('--config', dest='config_path', type=str,
                         help="Configuration file (YAML)",
-                        required=False)
-
-    parser.add_argument('--input_pdb', dest='input_pdb_path', type=str,
-                        help="Input PDB file. If not given the workflow will look for it in the YAML config file. Default: None",
                         required=False)
 
     parser.add_argument('--pdb_code', dest='pdb_code', type=str,
@@ -1277,8 +1276,8 @@ if __name__ == "__main__":
     if args.ph:
         args.ph = float(args.ph)
     
-    main_wf(configuration_path=args.config_path, 
-            input_pdb_path=args.input_pdb_path, 
+    main_wf(input_pdb_path=args.input_pdb_path, 
+            configuration_path=args.config_path, 
             pdb_code=args.pdb_code, 
             pdb_chains=args.pdb_chains, 
             mutation_list=args.mutation_list, 
