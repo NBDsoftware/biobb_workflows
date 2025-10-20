@@ -970,7 +970,8 @@ def main_wf(input_pdb_path: str,
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
 
-    # If input PDB is given as argument
+    # Set input PDB
+    pdb_file_name = Path(input_pdb_path).stem
     global_paths["step1_extractAtoms"]["input_structure_path"] = input_pdb_path
 
     # If chains are given as argument
@@ -1165,7 +1166,7 @@ def main_wf(input_pdb_path: str,
     # NOTE: We should make sure that PDB complies with the PDB format (while considering 4 letter resnames)
     
     # Copy the final PDB file to the output path
-    final_pdb_path = os.path.join(output_path, 'prepared_structure.pdb')
+    final_pdb_path = os.path.join(output_path, f"{pdb_file_name}.pdb")
     shutil.copy(last_pdb_path, final_pdb_path)
     
     if default_config:
