@@ -512,6 +512,9 @@ def config_contents(
     else:
         num_threads_omp_config = f"num_threads_omp: {num_threads_omp}"
     
+    if seed is None:
+        seed = 1
+
     return f""" 
 # Global properties (common for all steps)
 global_properties:
@@ -1061,6 +1064,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
             forcefield: Optional[str] = 'amber99sb-ildn', 
             ions_concentration:  Optional[float] = 0.15,
             temperature:  Optional[float] = 300.0,
+            random_seed: Optional[int] = None,
             setup_only: Optional[bool] = False, 
             dt: Optional[float] = 2.0,
             equil_time: Optional[float] = 1,
@@ -1113,6 +1117,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
             salt concentration to be used in the simulation. Default: 0.15.
         temperature:
             temperature to be used in the simulation. Default: 300.0.
+        random_seed:
+            random seed to be used to generate velocities. Default: None.
         setup_only: 
             whether to only setup the system or also run the simulations
         dt:
@@ -1158,6 +1164,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
         'forcefield': forcefield,
         'ions_concentration': ions_concentration,
         'temp': temperature,
+        'seed': random_seed,
         'dt': dt,
         'equil_time': equil_time,
         'equil_traj_freq': equil_traj_freq,
@@ -1678,6 +1685,10 @@ if __name__ == "__main__":
                         help="Temperature of the system in K. Default: 300",
                         required=False, default=300)
     
+    parser.add_argument('--seed', dest='random_seed', type=int,
+                        help="Random seed for the simulations. If given, new velocities will be generated with this seed. Default: 1",
+                        required=False, default=1)
+    
     parser.add_argument('--setup_only', action='store_true',
                         help="Only setup the system. Default: False",
                         required=False, default=False)
@@ -1729,6 +1740,8 @@ if __name__ == "__main__":
         args.traj_freq = int(args.traj_freq)
     if args.equil_traj_freq:
         args.equil_traj_freq = int(args.equil_traj_freq)
+    if args.random_seed:
+        args.random_seed = int(args.random_seed)
         
     # Run the main workflow
     main_wf(input_pdb_path=args.input_pdb_path, 
@@ -1748,6 +1761,7 @@ if __name__ == "__main__":
             forcefield=args.forcefield, 
             ions_concentration=args.ions_concentration,
             temperature=args.temperature,
+            random_seed=args.random_seed,
             setup_only=args.setup_only, 
             dt=args.dt, 
             equil_time=args.equil_time,
