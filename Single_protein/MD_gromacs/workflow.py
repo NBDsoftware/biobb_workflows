@@ -737,7 +737,7 @@ step5_grompp_nvt:
       ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
       nsteps: {int(equil_time*1000000 // dt)}
-      dt: {dt}
+      dt: {dt/1000}              
       nstxout: 0           
       nstvout: 0
       nstxout-compressed: {equil_traj_freq}
@@ -784,7 +784,7 @@ step8_grompp_npt:
     mdp:
       pcoupltype: isotropic
       nsteps: {int(equil_time*1000000 // dt)}
-      dt: {dt}
+      dt: {dt/1000}
       ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
       nstxout: 0           
@@ -836,7 +836,7 @@ step1_grompp_md:
     simulation_type: free
     mdp:
       nsteps: {int(prod_time*1000000 // dt)}
-      dt: {dt} 
+      dt: {dt/1000} 
       ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
       nstxout: 0           
