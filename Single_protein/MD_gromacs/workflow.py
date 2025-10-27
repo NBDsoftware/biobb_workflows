@@ -736,7 +736,7 @@ step5_grompp_nvt:
     mdp:
       ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
-      nsteps: {equil_time*1000000 // dt}
+      nsteps: {int(equil_time*1000000 // dt)}
       dt: {dt}
       nstxout: 0           
       nstvout: 0
@@ -783,7 +783,7 @@ step8_grompp_npt:
     simulation_type: npt
     mdp:
       pcoupltype: isotropic
-      nsteps: {equil_time*1000000 // dt} 
+      nsteps: {int(equil_time*1000000 // dt)}
       dt: {dt}
       ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
@@ -835,7 +835,7 @@ step1_grompp_md:
     binary_path: {gmx_bin}     # GROMACS binary path
     simulation_type: free
     mdp:
-      nsteps: {prod_time*1000000 // dt}
+      nsteps: {int(prod_time*1000000 // dt)}
       dt: {dt} 
       ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
@@ -958,7 +958,6 @@ step7_dry_traj:
   properties:
     binary_path: {gmx_bin}     # GROMACS binary path
     selection: Protein
-    remove_tmp: False
 
 step8_center:
   tool: gmx_image 
