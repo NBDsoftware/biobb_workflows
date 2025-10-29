@@ -487,26 +487,38 @@ def config_contents(
         The contents of the YAML configuration file.
     """
     
-    nsteps_equil = int(equil_time*1000000 // dt)
-    nsteps_prod = int(prod_time*1000000 // dt)
+    # Check dt is between 1 and 4 fs
+    if dt < 1.0 or dt > 4.0:
+        raise ValueError("dt must be between 1 and 4 fs.")
+    
+    # Check equil_time and prod_time are larger than 0
+    if equil_time <= 0.0:
+        raise ValueError("equil_time must be larger than 0 ns.")
+    
+    if prod_time <= 0.0:
+        raise ValueError("prod_time must be larger than 0 ns.")
+    
+    # Calculate number of steps
+    nsteps_equil = int(equil_time*10**6 // dt)
+    nsteps_prod = int(prod_time*10**6 // dt)
     
     dt_in_ps = dt / 1000  # convert fs to ps
 
     if equil_traj_freq is None:
-        equil_traj_freq = int(equil_time * 1000000 / dt / 500) # 500 frames during equilibration
+        equil_traj_freq_steps = max(nsteps_equil // 500, 1)              # 500 frames during equilibration
     else:
-        equil_traj_freq = int(equil_traj_freq * 1000 / dt) # convert ps to number of steps
+        equil_traj_freq_steps = max(int(equil_traj_freq * 10**3 / dt), 1) # convert ps to number of steps
 
     # Make sure at least one frame is saved
-    equil_traj_freq = min(equil_traj_freq, nsteps_equil)
-    
+    equil_traj_freq_steps = min(equil_traj_freq_steps, nsteps_equil)
+
     if traj_freq is None:
-        traj_freq = int(prod_time * 1000000 / dt / 1000) # 1000 frames during production
+        traj_freq_steps = max(nsteps_prod // 1000, 1)              # 1000 frames during production
     else:
-        traj_freq = int(traj_freq * 1000 / dt) # convert ps to number of steps
+        traj_freq_steps = max(int(traj_freq * 1000 / dt), 1)       # convert ps to number of steps
 
     # Make sure at least one frame is saved
-    traj_freq = min(traj_freq, nsteps_prod)
+    traj_freq_steps = min(traj_freq_steps, nsteps_prod)
     
     if mpi_bin is None:
         mpi_bin = 'null'
@@ -751,7 +763,7 @@ step5_grompp_nvt:
       dt: {dt_in_ps}              
       nstxout: 0           
       nstvout: 0
-      nstxout-compressed: {equil_traj_freq}
+      nstxout-compressed: {equil_traj_freq_steps}
       
 step6_mdrun_nvt:
   tool: mdrun
@@ -800,7 +812,7 @@ step8_grompp_npt:
       tc-grps: "Protein Water_and_ions"
       nstxout: 0           
       nstvout: 0
-      nstxout-compressed: {equil_traj_freq}
+      nstxout-compressed: {equil_traj_freq_steps}
 
 step9_mdrun_npt:
   tool: mdrun
@@ -852,8 +864,8 @@ step1_grompp_md:
       tc-grps: "Protein Water_and_ions"
       nstxout: 0           
       nstvout: 0
-      nstxout-compressed: {traj_freq}
-      nstenergy: {traj_freq}
+      nstxout-compressed: {traj_freq_steps}
+      nstenergy: {traj_freq_steps}
       continuation: 'no'
       gen-vel: 'yes'          
       ld-seed: {seed}
@@ -1747,9 +1759,9 @@ if __name__ == "__main__":
     if args.dt:
         args.dt = float(args.dt)
     if args.traj_freq:
-        args.traj_freq = int(args.traj_freq)
+        args.traj_freq = float(args.traj_freq)
     if args.equil_traj_freq:
-        args.equil_traj_freq = int(args.equil_traj_freq)
+        args.equil_traj_freq = float(args.equil_traj_freq)
     if args.random_seed:
         args.random_seed = int(args.random_seed)
         
