@@ -487,16 +487,27 @@ def config_contents(
         The contents of the YAML configuration file.
     """
     
+    nsteps_equil = int(equil_time*1000000 // dt)
+    nsteps_prod = int(prod_time*1000000 // dt)
+    
+    dt_in_ps = dt / 1000  # convert fs to ps
+
     if equil_traj_freq is None:
         equil_traj_freq = int(equil_time * 1000000 / dt / 500) # 500 frames during equilibration
     else:
         equil_traj_freq = int(equil_traj_freq * 1000 / dt) # convert ps to number of steps
 
+    # Make sure at least one frame is saved
+    equil_traj_freq = min(equil_traj_freq, nsteps_equil)
+    
     if traj_freq is None:
         traj_freq = int(prod_time * 1000000 / dt / 1000) # 1000 frames during production
     else:
         traj_freq = int(traj_freq * 1000 / dt) # convert ps to number of steps
 
+    # Make sure at least one frame is saved
+    traj_freq = min(traj_freq, nsteps_prod)
+    
     if mpi_bin is None:
         mpi_bin = 'null'
         
@@ -736,8 +747,8 @@ step5_grompp_nvt:
     mdp:
       ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
-      nsteps: {int(equil_time*1000000 // dt)}
-      dt: {dt/1000}              
+      nsteps: {nsteps_equil}
+      dt: {dt_in_ps}              
       nstxout: 0           
       nstvout: 0
       nstxout-compressed: {equil_traj_freq}
@@ -783,8 +794,8 @@ step8_grompp_npt:
     simulation_type: npt
     mdp:
       pcoupltype: isotropic
-      nsteps: {int(equil_time*1000000 // dt)}
-      dt: {dt/1000}
+      nsteps: {nsteps_equil}
+      dt: {dt_in_ps}
       ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
       nstxout: 0           
@@ -835,14 +846,14 @@ step1_grompp_md:
     binary_path: {gmx_bin}     # GROMACS binary path
     simulation_type: free
     mdp:
-      nsteps: {int(prod_time*1000000 // dt)}
-      dt: {dt/1000} 
+      nsteps: {nsteps_prod}
+      dt: {dt_in_ps} 
       ref-t: {temp} {temp}
       tc-grps: "Protein Water_and_ions"
       nstxout: 0           
       nstvout: 0
       nstxout-compressed: {traj_freq}
-      nstenergy: 500
+      nstenergy: {traj_freq}
       continuation: 'no'
       gen-vel: 'yes'          
       ld-seed: {seed}
