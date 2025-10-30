@@ -1,12 +1,10 @@
 # Bioexcel building blocks workflows
 
-These workflows can be run together or as independent workflows. They use BioExcel Building Blocks (biobb) to integrate different popular biomolecular simulation tools.
+These workflows can be run together or as independent workflows. They use BioExcel Building Blocks (biobb) to integrate different popular biomolecular simulation tools. This software has been developed for the [European BioExcel](http://bioexcel.eu/), funded by the European Commission (EU Horizon Europe [101093290](https://cordis.europa.eu/project/id/101093290)).
 
-**Protein interface** workflows to study protein-protein interactions, analyze cavities and do a virtual screening on those cavities.
+**Protein interface** workflows to study protein-protein interactions.
 
 **Single protein** workflows to study the effect of mutations, disulfide bonds, starting conformation... on the conformation of an active site, do a cavity analysis and a virtual screening.
-
-**SuMD** contains workflows related to supervised MD simulations and their analysis.
 
 ## Licensing
 
@@ -34,3 +32,5 @@ A full copy of the license is available in the [LICENSE](LICENSE) file in this r
 If you wish to use this software in a commercial product, for-profit service, or any other commercial context, you must obtain a separate commercial license.
 
 Please contact **it@nostrumbiodiscovery.com** to inquire about purchasing a commercial license.
+
+![](https://bioexcel.eu/wp-content/uploads/2019/04/Bioexcell_logo_1080px_transp.png "Bioexcel")
