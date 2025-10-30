@@ -439,10 +439,10 @@ def config_contents(
     temp: float = 300.0,
     dt: float = 2.0,
     equil_time: float = 1.0,
-    equil_traj_freq: Optional[float] = None,
-    prod_time: float = 100.0,
-    traj_freq: Optional[float] = None,
-    seed: Optional[int] = 1              # NOTE: give from CLI
+    equil_frames: Optional[int] = 500,
+    prod_time: Optional[float] = 100.0,
+    prod_frames: Optional[int] = 2000,
+    seed: Optional[int] = -1
     ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
@@ -474,12 +474,14 @@ def config_contents(
         Time step in fs. Default is 2 fs.
     equil_time : float
        Time of each equilibration step in ns. Default: 1 ns
-    equil_traj_freq : float
-        Saving frequency of the trajectory during equilibration in ps. 
+    equil_frames : int
+        Number of frames to save during the equilibration steps. Default: 500 frames.
     prod_time : float
         Total time of the production simulation in ns. Default: 100 ns
-    traj_freq : float
-        Saving frequency of the trajectory during production in ps.
+    prod_frames : int
+        Number of frames to save during the production steps. Default: 2000 frames.
+    seed: int
+        Seed for random number generation. Default is -1 (random seed).
 
     Returns
     -------
@@ -504,21 +506,9 @@ def config_contents(
     
     dt_in_ps = dt / 1000  # convert fs to ps
 
-    if equil_traj_freq is None:
-        equil_traj_freq_steps = max(nsteps_equil // 500, 1)              # 500 frames during equilibration
-    else:
-        equil_traj_freq_steps = max(int(equil_traj_freq * 10**3 / dt), 1) # convert ps to number of steps
+    equil_traj_freq_steps = max(nsteps_equil // equil_frames, 1)  # equil_frames frames during equilibration
 
-    # Make sure at least one frame is saved
-    equil_traj_freq_steps = min(equil_traj_freq_steps, nsteps_equil)
-
-    if traj_freq is None:
-        traj_freq_steps = max(nsteps_prod // 1000, 1)              # 1000 frames during production
-    else:
-        traj_freq_steps = max(int(traj_freq * 1000 / dt), 1)       # convert ps to number of steps
-
-    # Make sure at least one frame is saved
-    traj_freq_steps = min(traj_freq_steps, nsteps_prod)
+    prod_traj_freq_steps = max(nsteps_prod // prod_frames, 1)      # prod_frames frames during production
     
     if mpi_bin is None:
         mpi_bin = 'null'
@@ -536,7 +526,7 @@ def config_contents(
         num_threads_omp_config = f"num_threads_omp: {num_threads_omp}"
     
     if seed is None:
-        seed = 1
+        seed = -1
 
     return f""" 
 # Global properties (common for all steps)
@@ -864,11 +854,12 @@ step1_grompp_md:
       tc-grps: "Protein Water_and_ions"
       nstxout: 0           
       nstvout: 0
-      nstxout-compressed: {traj_freq_steps}
-      nstenergy: {traj_freq_steps}
+      nstxout-compressed: {prod_traj_freq_steps}
+      nstenergy: {prod_traj_freq_steps}
       continuation: 'no'
       gen-vel: 'yes'          
       ld-seed: {seed}
+      gen-seed: {seed}
 
 step1B_convert_tpr:
     tool: convert-tpr
@@ -1090,10 +1081,10 @@ def main_wf(input_pdb_path: Optional[str] = None,
             setup_only: Optional[bool] = False, 
             dt: Optional[float] = 2.0,
             equil_time: Optional[float] = 1,
-            equil_traj_freq: Optional[float] = None,
+            equil_frames: Optional[int] = 500,
             equil_only: Optional[bool] = False, 
             prod_time: Optional[float] = 100,
-            traj_freq: Optional[float] = None,
+            prod_frames: Optional[int] = 2000,
             output_path: Optional[str] = None
     ):
     '''
@@ -1136,27 +1127,25 @@ def main_wf(input_pdb_path: Optional[str] = None,
             gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, 
             oplsaa, amber94, amber99sb-star-ildn-mut). 
         ions_concentration: 
-            salt concentration to be used in the simulation. Default: 0.15.
+            salt concentration to be used in the simulation in mols/L. Default: 0.15.
         temperature:
             temperature to be used in the simulation. Default: 300.0.
         random_seed:
-            random seed to be used to generate velocities. Default: None.
+            random seed to be used to generate velocities and control the temperature. Default: -1.
         setup_only: 
             whether to only setup the system or also run the simulations
         dt:
             time step to be used in the simulation. Default: 2 fs.
         equil_time:
             Time of each equilibration simulation in ns. Default: 1 ns.
-        equil_traj_freq:
-            Saving frequency of the trajectory during equilibration in ps.
-            Default: equil_time * 1000 // 500.
+        equil_frames:
+            Number of frames to save during the equilibration steps. Default: 500 frames.
         equil_only: 
             whether to only run the equilibration or also run the production simulations
         prod_time: 
             Time of production simulation in ns. Default: 100 ns.
-        traj_freq:
-            Saving frequency of the trajectory during production in ps.
-            Default:  prod_time * 1000 // 1000 ps.
+        prod_frames:
+            Number of frames to save during the production step. Default: 2000 frames.
         output_path: 
             path to output folder
 
@@ -1189,9 +1178,9 @@ def main_wf(input_pdb_path: Optional[str] = None,
         'seed': random_seed,
         'dt': dt,
         'equil_time': equil_time,
-        'equil_traj_freq': equil_traj_freq,
+        'equil_frames': equil_frames,
         'prod_time': prod_time,
-        'traj_freq': traj_freq
+        'prod_frames': prod_frames
     }
     default_config = create_config_file(configuration_path, **config_args)
     if default_config:
@@ -1654,13 +1643,11 @@ if __name__ == "__main__":
                         Default: None""",
                         required=False)
 
-    # NOTE: Add an option to remove raw data and just keep imaged and dry traj
+    # NOTE: Add an option to remove raw data and just keep prepared traj
+    # NOTE: Add an option to leave waters and ions in the prepared traj and top
     # NOTE: Add option for H mass repartitioning
-    
-    # NOTE:
-    #
-    #      - Recover index file optionally when restarting a simulation
-    #      - Update index file for analysis only if given
+    # NOTE: Add flag to determine what should remain restrained during the production run - currently everything is free always
+    # NOTE: Add progressive release of position restraints during equilibration (additional steps if needed)
 
     #########################
     # Configuration options #
@@ -1708,8 +1695,8 @@ if __name__ == "__main__":
                         required=False, default=300)
     
     parser.add_argument('--seed', dest='random_seed', type=int,
-                        help="Random seed for the simulations. If given, new velocities will be generated with this seed. Default: 1",
-                        required=False, default=1)
+                        help="Random seed for the simulations. If given, new velocities will be generated with this seed. Default: -1",
+                        required=False, default=-1)
     
     parser.add_argument('--setup_only', action='store_true',
                         help="Only setup the system. Default: False",
@@ -1723,9 +1710,9 @@ if __name__ == "__main__":
                         help="Time of each equilibration step in ns. Default: 1.0 ns",
                         required=False, default=1.0)
 
-    parser.add_argument('--equil_traj_freq', dest='equil_traj_freq', type=float,
-                        help="Saving frequency of the trajectory during the equilibration in ps. Default: equil_time * 1000 // 500 ps.",
-                        required=False)
+    parser.add_argument('--equil_frames', dest='equil_frames', type=int,
+                        help="Number of frames to save during the equilibration steps. Default: 500 frames",
+                        required=False, default=500)
     
     parser.add_argument('--equil_only', action='store_true',
                         help="Only run the equilibration steps. Default: False",
@@ -1735,15 +1722,13 @@ if __name__ == "__main__":
                         help="Total time of the production simulation in ns. Default: 100.0 ns",
                         required=False, default=100.0)
 
-    parser.add_argument('--traj_freq', dest='traj_freq', type=float,
-                        help="Saving frequency of the trajectory during production in ps. Default: prod_time * 1000 // 1000 ps.",
-                        required=False)
+    parser.add_argument('--prod_frames', dest='prod_frames', type=int,
+                        help="Number of frames to save during the production steps. Default: 2000 frames",
+                        required=False, default=2000)
 
     parser.add_argument('--output', dest='output_path', type=str,
                         help="Output path. Default: 'output' in the current working directory",
                         required=False, default='output')
-    
-    # NOTE: add flag to determine what should remain restrained during the production run - currently everything is free always
 
     args = parser.parse_args()
 
@@ -1758,10 +1743,10 @@ if __name__ == "__main__":
         args.equil_time = float(args.equil_time)
     if args.dt:
         args.dt = float(args.dt)
-    if args.traj_freq:
-        args.traj_freq = float(args.traj_freq)
-    if args.equil_traj_freq:
-        args.equil_traj_freq = float(args.equil_traj_freq)
+    if args.equil_frames:
+        args.equil_frames = int(args.equil_frames)
+    if args.prod_frames:
+        args.prod_frames = int(args.prod_frames)
     if args.random_seed:
         args.random_seed = int(args.random_seed)
         
@@ -1787,8 +1772,8 @@ if __name__ == "__main__":
             setup_only=args.setup_only, 
             dt=args.dt, 
             equil_time=args.equil_time,
-            equil_traj_freq=args.equil_traj_freq,
+            equil_frames=args.equil_frames,
             equil_only=args.equil_only, 
             prod_time=args.prod_time, 
-            traj_freq=args.traj_freq,
+            prod_frames=args.prod_frames,
             output_path=args.output_path)
