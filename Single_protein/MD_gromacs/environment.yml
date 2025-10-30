@@ -4,10 +4,10 @@ channels:
   - bioconda
   - salilab
 dependencies:
-  - python==3.10
+  - python==3.10.0
   - biobb_common==5.0.0
-  - biobb_structure_utils>=5.0.0
-  - biobb_model>=5.0.0
-  - biobb_gromacs>=5.0.0      # Needs NBDSoftware version
-  - biobb_amber>=5.0.3
-  - biobb_analysis>=5.0.1     # Needs NBDSoftware version
+  - biobb_structure_utils==5.0.0
+  - biobb_model==5.0.0
+  - biobb_gromacs==5.0.0      # Needs NBDSoftware version
+  - biobb_amber==5.0.4
+  - biobb_analysis==5.0.1     # Needs NBDSoftware version
