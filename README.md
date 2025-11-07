@@ -1,10 +1,6 @@
-# Bioexcel building blocks workflows
+# Bioexcel Building Block workflows
 
-These workflows can be run together or as independent workflows. They use BioExcel Building Blocks (biobb) to integrate different popular biomolecular simulation tools. This software has been developed for the [European BioExcel](http://bioexcel.eu/), funded by the European Commission (EU Horizon Europe [101093290](https://cordis.europa.eu/project/id/101093290)).
-
-**Protein interface** workflows to study protein-protein interactions.
-
-**Single protein** workflows to study the effect of mutations, disulfide bonds, starting conformation... on the conformation of an active site, do a cavity analysis and a virtual screening.
+These workflows can be run together or as independent workflows. They use BioExcel Building Blocks (BioBB) to integrate different popular biomolecular simulation tools. This software has been developed for the [European BioExcel](http://bioexcel.eu/), funded by the European Commission (EU Horizon Europe [101093290](https://cordis.europa.eu/project/id/101093290)).
 
 ## Licensing
 
