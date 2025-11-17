@@ -430,6 +430,7 @@ def process_ligand_top(input_path: str, output_path: str) -> None:
 def config_contents(
     gmx_bin: str = 'gmx',
     mpi_bin: Optional[str] = None,
+    mpi_np: Optional[int] = None,
     num_threads_mpi: Optional[int] = 0,
     num_threads_omp: Optional[int] = 0,
     use_gpu: bool = False,
@@ -456,6 +457,9 @@ def config_contents(
         Path to the GROMACS binary. Default is 'gmx'.
     mpi_bin : str
         Path to the MPI binary. Default is 'null'.
+    mpi_np : int
+        Number of MPI ranks to start by mpi binary (e.g. mpirun -np N). Only used when mpi_bin is provided. Use only when running multi-node with gmx_mpi.
+        When using srun, this parameter is not needed as srun automatically allocates the number of ranks specified by the job scheduler.
     num_threads_mpi : int
         Number of ranks for MPI. Default is None.
     num_threads_omp : int
@@ -512,18 +516,14 @@ def config_contents(
     
     if mpi_bin is None:
         mpi_bin = 'null'
-        
-    if num_threads_mpi is None:
-        num_threads_mpi_config = ''
+    
+    if mpi_np is None:
         mpi_np_config = ''
     else:
-        num_threads_mpi_config = f"num_threads_mpi: {num_threads_mpi}"
-        mpi_np_config = f"mpi_np: {num_threads_mpi}"
+        mpi_np_config = f"mpi_np: {mpi_np}"
 
-    if num_threads_omp is None:
-        num_threads_omp_config = ''
-    else:
-        num_threads_omp_config = f"num_threads_omp: {num_threads_omp}"
+    num_threads_mpi_config = f"num_threads_mpi: {num_threads_mpi}"
+    num_threads_omp_config = f"num_threads_omp: {num_threads_omp}"
     
     if seed is None:
         seed = -1
@@ -548,7 +548,7 @@ step1_pdb2gmx:
     output_gro_path: structure.gro
     output_top_zip_path: structure_top.zip
   properties:
-    binary_path: {gmx_bin}    # GROMACS binary path
+    binary_path: {gmx_bin}    
     force_field: {forcefield}     # Will be set by the workflow
     water_type: tip3p             # spc, spce, tip3p, tip4p, tip5p, tips3p
     ignh: False                   # Ignore hydrogens in the input structure
@@ -561,7 +561,7 @@ step1_make_ref_group:
     input_structure_path: dependency/step1_pdb2gmx/output_gro_path
     output_ndx_path: chain.ndx
   properties:
-    binary_path: {gmx_bin}   # GROMACS binary path
+    binary_path: {gmx_bin}   
     selection:  "System"         # Will be set by the workflow
 
 # Add the restrained group to the index file
@@ -572,7 +572,7 @@ step2_make_rest_group:
     input_ndx_path: dependency/step1_make_ref_group/output_ndx_path
     output_ndx_path: calpha.ndx
   properties:
-    binary_path: {gmx_bin}   # GROMACS binary path
+    binary_path: {gmx_bin}   
     selection: "a CA"            # Will be set by the workflow
 
 # Append position restraints to the topology file using the reference and restrained groups of the index file
@@ -592,7 +592,7 @@ step4_structure_pdb:
     input_structure_path: dependency/step1_pdb2gmx/output_gro_path
     output_str_path: structure.pdb
   properties:
-    binary_path: {gmx_bin}   # GROMACS binary path
+    binary_path: {gmx_bin}   
 
 step1_create_ligand_pdb:
   tool: gmx_trjconv_str
@@ -601,7 +601,7 @@ step1_create_ligand_pdb:
     input_structure_path: path/to/ligand.gro  # Will be set by the workflow
     output_str_path: ligand.pdb
   properties:   
-    binary_path: {gmx_bin}   # GROMACS binary path
+    binary_path: {gmx_bin}   
 
 step2_create_complex_pdb:
   tool: cat_pdb
@@ -616,7 +616,7 @@ step3_make_ligand_ndx:
     input_structure_path: path/to/ligand.gro  # Will be set by the workflow
     output_ndx_path: ligand_heavy_atoms.ndx
   properties:
-    binary_path: {gmx_bin}  # GROMACS binary path
+    binary_path: {gmx_bin}  
     selection: "0 & ! a H*"
 
 step4_create_ligand_restraints:
@@ -644,7 +644,7 @@ step6_editconf:
     input_gro_path: dependency/step1_pdb2gmx/output_gro_path
     output_gro_path: editconf.gro
   properties:
-    binary_path: {gmx_bin}   # GROMACS binary path
+    binary_path: {gmx_bin}   
     box_type: octahedron         # cubic, triclinic, octahedron, dodecahedron
     distance_to_molecule: 1.0    # Distance of the box from the outermost atom in nm
 
@@ -656,7 +656,7 @@ step7_solvate:
     output_top_zip_path: solvate_top.zip
     output_gro_path: solvate.gro
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     
 step8_grompp_genion:
   tool: grompp
@@ -665,7 +665,7 @@ step8_grompp_genion:
     input_top_zip_path: dependency/step7_solvate/output_top_zip_path
     output_tpr_path: gppion.tpr
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     simulation_type: minimization
     maxwarn: 10                    # NOTE: this will be ligand dependent!! :o - the warning is for each atom with redefined parameters
 
@@ -677,7 +677,7 @@ step9_genion:
     output_top_zip_path: genion_top.zip
     output_gro_path: genion.gro
   properties:
-    binary_path: {gmx_bin}    # GROMACS binary path
+    binary_path: {gmx_bin}    
     neutral: True                 # Neutralize charge of the system
     concentration: {ions_concentration}    # Concentration of ions in mols/L
 
@@ -694,7 +694,7 @@ step1_grompp_min:
     input_top_zip_path: dependency/step9_genion/output_top_zip_path
     output_tpr_path: gppmin.tpr
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     simulation_type: minimization
     mdp:
       integrator: steep
@@ -711,11 +711,11 @@ step2_mdrun_min:
     output_edr_path: min.edr
     output_log_path: min.log
   properties:
-    binary_path: {gmx_bin} # GROMACS binary path
-    mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)                                               
-    {mpi_np_config}                # Number of MPI ranks selected in the MPI call
+    binary_path: {gmx_bin} 
+    mpi_bin: {mpi_bin}
     {num_threads_mpi_config}
     {num_threads_omp_config}
+    {mpi_np_config}
     
 step3_make_ndx:
   tool: make_ndx 
@@ -723,7 +723,7 @@ step3_make_ndx:
     input_structure_path: dependency/step2_mdrun_min/output_gro_path
     output_ndx_path: index.ndx
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}
     selection: '"System"'
 
 step4_energy_min:
@@ -732,7 +732,7 @@ step4_energy_min:
     input_energy_path: dependency/step2_mdrun_min/output_edr_path
     output_xvg_path: min_ene.xvg
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     terms: ["Potential"]
     xvg: xmgr 
 
@@ -744,7 +744,7 @@ step5_grompp_nvt:
     input_top_zip_path: dependency/step9_genion/output_top_zip_path
     output_tpr_path: gppnvt.tpr
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     simulation_type: nvt
     mdp:
       ref-t: {temp} {temp}
@@ -766,12 +766,12 @@ step6_mdrun_nvt:
     output_log_path: nvt.log
     output_cpt_path: nvt.cpt
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
-    mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)      
-    {mpi_np_config}                # Number of MPI ranks selected in the MPI call
+    binary_path: {gmx_bin}     
+    mpi_bin: {mpi_bin}               
     use_gpu: {use_gpu}             # Wether to use GPU support or not
     {num_threads_mpi_config}
     {num_threads_omp_config}
+    {mpi_np_config}
     
 step7_temp_nvt:
   tool: gmx_energy
@@ -779,7 +779,7 @@ step7_temp_nvt:
     input_energy_path: dependency/step6_mdrun_nvt/output_edr_path
     output_xvg_path: nvt_temp.xvg
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     terms: ["Temperature"]
     xvg: xmgr 
 
@@ -792,7 +792,7 @@ step8_grompp_npt:
     input_cpt_path: dependency/step6_mdrun_nvt/output_cpt_path
     output_tpr_path: gppnpt.tpr
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     simulation_type: npt
     mdp:
       pcoupltype: isotropic
@@ -815,12 +815,12 @@ step9_mdrun_npt:
     output_log_path: npt.log
     output_cpt_path: npt.cpt
   properties: 
-    binary_path: {gmx_bin}     # GROMACS binary path
-    mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)      
-    {mpi_np_config}                # Number of MPI ranks selected in the MPI call
-    use_gpu: {use_gpu}             # Wether to use GPU support or not
+    binary_path: {gmx_bin}     
+    mpi_bin: {mpi_bin}               
+    use_gpu: {use_gpu}
     {num_threads_mpi_config}
     {num_threads_omp_config}
+    {mpi_np_config}
 
 step10_density_npt:
   tool: gmx_energy
@@ -828,7 +828,7 @@ step10_density_npt:
     input_energy_path: dependency/step9_mdrun_npt/output_edr_path
     output_xvg_path: npt_press_den.xvg
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     terms: ["Pressure", "Density"]
     xvg: xmgr 
 
@@ -845,7 +845,7 @@ step1_grompp_md:
     input_top_zip_path: dependency/step9_genion/output_top_zip_path
     output_tpr_path: gppmd.tpr
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     simulation_type: free
     mdp:
       nsteps: {nsteps_prod}
@@ -868,7 +868,7 @@ step1B_convert_tpr:
       output_tpr_path: new_run_file.tpr
     properties:
       extend: {prod_time*1000}   # Extend simulation by prod_time in ps
-      binary_path: {gmx_bin}     # GROMACS binary path
+      binary_path: {gmx_bin}     
 
 step2_mdrun_prod:
   tool: mdrun
@@ -881,12 +881,12 @@ step2_mdrun_prod:
     output_log_path: md.log
     output_cpt_path: md.cpt
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
-    mpi_bin: {mpi_bin}             # MPI binary path, e.g. mpirun, srun... (should be null if gromacs already includes MPI support)      
-    {mpi_np_config}                # Number of MPI ranks selected in the MPI call
-    use_gpu: {use_gpu}             # Wether to use GPU support or not
+    binary_path: {gmx_bin}     
+    mpi_bin: {mpi_bin}               
+    use_gpu: {use_gpu}
     {num_threads_mpi_config}
     {num_threads_omp_config}
+    {mpi_np_config}
         
 #########################################
 # Section 6 (Steps A-D): Basic analysis #
@@ -899,7 +899,7 @@ step1_gro2pdb:
     input_structure_path: dependency/step2_mdrun_prod/output_gro_path
     output_str_path: topology.pdb
   properties:
-    binary_path: {gmx_bin}   # GROMACS binary path
+    binary_path: {gmx_bin}   
     
 step2_rmsd_equilibrated:
   tool: gmx_rms
@@ -908,7 +908,7 @@ step2_rmsd_equilibrated:
     input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
     output_xvg_path: md_rmsdfirst.xvg
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     selection: Backbone
     xvg: xmgr 
 
@@ -919,7 +919,7 @@ step3_rmsd_experimental:
     input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
     output_xvg_path: md_rmsdexp.xvg
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     selection: Backbone
     xvg: xmgr 
 
@@ -930,7 +930,7 @@ step4_rgyr:
     input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
     output_xvg_path: md_rgyr.xvg
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     selection: Backbone
     xvg: xmgr 
     
@@ -957,7 +957,7 @@ step6_dry_str:
     input_top_path: dependency/step1_grompp_md/output_tpr_path
     output_str_path: dry_structure.gro
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     selection: Protein
     center: True
     pbc: mol
@@ -970,7 +970,7 @@ step7_dry_traj:
     input_top_path: dependency/step1_grompp_md/output_tpr_path
     output_traj_path: dry_traj.xtc
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     selection: Protein
 
 step8_center:
@@ -980,7 +980,7 @@ step8_center:
     input_top_path: dependency/step1_grompp_md/output_tpr_path
     output_traj_path: center_traj.xtc
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     center_selection: Protein
     output_selection: Protein
     center: True
@@ -994,7 +994,7 @@ step9_image_traj:
     input_top_path: dependency/step1_grompp_md/output_tpr_path
     output_traj_path: imaged_traj.xtc
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     output_selection: Protein
     cluster_selection: Protein
     center_selection: Protein  # NOTE: why is this used??
@@ -1009,7 +1009,7 @@ step10_fit_traj:
     input_top_path: dependency/step1_grompp_md/output_tpr_path
     output_traj_path: fitted_traj.xtc
   properties:
-    binary_path: {gmx_bin}     # GROMACS binary path
+    binary_path: {gmx_bin}     
     fit_selection: Protein
     center_selection: Protein
     output_selection: Protein
@@ -1070,6 +1070,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
             configuration_path: Optional[str] = None, 
             gmx_bin: Optional[str] = 'gmx',
             mpi_bin: Optional[str] = None,
+            mpi_np: Optional[int] = None,
             num_threads_mpi: Optional[int] = 0,
             num_threads_omp: Optional[int] = 0,
             use_gpu: Optional[bool] = False,
@@ -1110,19 +1111,22 @@ def main_wf(input_pdb_path: Optional[str] = None,
         configuration_path: 
             path to YAML configuration file
         gmx_bin:
-            path to GROMACS binary
+            path to GROMACS binary, either gmx (single-node) or gmx_mpi (multi-node)
         mpi_bin:
-            path to MPI binary (e.g. mpirun, srun...) (should be null if gromacs already includes MPI support)
+            path to MPI binary (e.g. mpirun, srun) if needed. Use only when running multi-node with gmx_mpi
+        mpi_np:
+            number of MPI ranks to start by mpi binary (e.g. mpirun -np N). Only used when mpi_bin is provided. Use only when running multi-node with gmx_mpi.
+            When using srun, this parameter is not needed as srun automatically allocates the number of ranks specified by the job scheduler.
         num_threads_mpi:
-            number of ranks to be used by MPI
+            number of thread-MPI ranks to start by gmx mdrun (-ntmpi). Use only with gmx binary. (0 is guess)
         num_threads_omp:
-            number of threads to be used by OpenMP
+            number of OpenMP threads per MPI rank to start by gmx mdrun (-ntomp) (0 is guess)
         use_gpu:
             whether to use GPU support or not
         restart:
             whether to restart the workflow from the last completed step or start from the beginning.
         forcefield: 
-            forcefield to be used in the simulation. Default: amber99sb-ildn. 
+            forcefield to be used by pdb2gmx to generate the topology. Default: amber99sb-ildn. 
             See values supported by pdb2gmx (gromos45a3, charmm27, gromos53a6, amber96, amber99, 
             gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, 
             oplsaa, amber94, amber99sb-star-ildn-mut). 
@@ -1168,6 +1172,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
     config_args = {
         'gmx_bin': gmx_bin,
         'mpi_bin': mpi_bin,
+        'mpi_np': mpi_np,
         'num_threads_mpi': num_threads_mpi,
         'num_threads_omp': num_threads_omp,
         'use_gpu': use_gpu,
@@ -1659,12 +1664,16 @@ if __name__ == "__main__":
                         required=False)
 
     parser.add_argument('--gmx_bin', dest='gmx_bin', type=str,
-                        help="Path to GROMACS binary. Default: gmx",
+                        help="Path to GROMACS binary (gmx for single node and gmx_mpi for multi-node). Default: gmx",
                         required=False, default='gmx')
     
     parser.add_argument('--mpi_bin', dest='mpi_bin', type=str,
                         help="Path to MPI binary. Default: null",
                         required=False, default='null')
+    
+    parser.add_argument('--mpi_np', dest='mpi_np', type=int,
+                        help="Number of MPI processes given to the mpi_bin. Default: None",
+                        required=False)
     
     parser.add_argument('--num_threads_mpi', dest='num_threads_mpi', type=int,
                         help="Number of MPI threads. Default: 0 (Let GROMACS guess)",
@@ -1675,7 +1684,8 @@ if __name__ == "__main__":
                         required=False, default=0)
 
     parser.add_argument('--use_gpu', action='store_true',
-                        help="Use GPU for GROMACS. Default: False",
+                        help="""Calculate non-bonding interactions and particle-mesh ewald in GPU by adding '-nb gpu -pme gpu' 
+                        to mdrun call. If not used, gmx will still use a GPU for these calculations if available. Default: False""",
                         required=False, default=False)
     
     parser.add_argument('--restart', action='store_true',
@@ -1761,6 +1771,7 @@ if __name__ == "__main__":
             configuration_path=args.config_path, 
             gmx_bin=args.gmx_bin,
             mpi_bin=args.mpi_bin,
+            mpi_np=args.mpi_np,
             num_threads_mpi=args.num_threads_mpi,
             num_threads_omp=args.num_threads_omp,
             use_gpu=args.use_gpu,
