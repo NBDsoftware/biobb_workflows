@@ -724,7 +724,7 @@ step3_make_ndx:
     output_ndx_path: index.ndx
   properties:
     binary_path: {gmx_bin}
-    selection: '"System"'
+    selection: '! "Water_and_ions"'
 
 step4_energy_min:
   tool: gmx_energy
@@ -748,7 +748,7 @@ step5_grompp_nvt:
     simulation_type: nvt
     mdp:
       ref-t: {temp} {temp}
-      tc-grps: "Protein Water_and_ions"
+      tc-grps: "!Water_and_ions Water_and_ions"
       nsteps: {nsteps_equil}
       dt: {dt_in_ps}              
       nstxout: 0           
@@ -799,7 +799,7 @@ step8_grompp_npt:
       nsteps: {nsteps_equil}
       dt: {dt_in_ps}
       ref-t: {temp} {temp}
-      tc-grps: "Protein Water_and_ions"
+      tc-grps: "!Water_and_ions Water_and_ions"
       nstxout: 0           
       nstvout: 0
       nstxout-compressed: {equil_traj_freq_steps}
@@ -841,7 +841,7 @@ step1_grompp_md:
   paths:
     input_gro_path: dependency/step9_mdrun_npt/output_gro_path
     input_cpt_path: dependency/step9_mdrun_npt/output_cpt_path 
-    input_ndx_path: dependency/step3_make_ndx/output_ndx_path
+    input_ndx_path: dependency/step3B_make_ndx/output_ndx_path
     input_top_zip_path: dependency/step9_genion/output_top_zip_path
     output_tpr_path: gppmd.tpr
   properties:
@@ -851,7 +851,7 @@ step1_grompp_md:
       nsteps: {nsteps_prod}
       dt: {dt_in_ps} 
       ref-t: {temp} {temp}
-      tc-grps: "Protein Water_and_ions"
+      tc-grps: "!Water_and_ions Water_and_ions"
       nstxout: 0           
       nstvout: 0
       nstxout-compressed: {prod_traj_freq_steps}
@@ -1222,7 +1222,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
     
     # Get ligands information
     ligands_dict = get_ligands(ligands_top_folder, global_log)
-    
+    chains_dict = {}
+
     # If prepared structure is not provided
     setup_needed = input_mode == 'input_pdb'
     if setup_needed:
@@ -1351,7 +1352,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
                 ligand_paths["step5_append_ligand_topology"]["input_top_zip_path"] = complex_topology_path
                 ligand_paths["step5_append_ligand_topology"]["input_itp_path"] = ligand_itp_path
                 ligand_paths["step5_append_ligand_topology"]["input_posres_itp_path"] = ligand_restraints_path
-                ligand_prop["step5_append_ligand_topology"]["posres_name"] = ligands_dict[ligand_id]["posres_name"]
+                ligand_prop["step5_append_ligand_topolofgy"]["posres_name"] = ligands_dict[ligand_id]["posres_name"]
                 global_log.info(f"{ligand_id} > Append ligand to the topology")
                 append_ligand(**ligand_paths["step5_append_ligand_topology"], properties=ligand_prop["step5_append_ligand_topology"])
                 
@@ -1413,8 +1414,6 @@ def main_wf(input_pdb_path: Optional[str] = None,
         mdrun(**equil_paths["step2_mdrun_min"], properties=equil_prop["step2_mdrun_min"])
 
         # STEP 3: create index file
-        if ligands_dict:
-            equil_prop["step3_make_ndx"]["selection"] = f'"Protein" | r {" | r ".join(list(ligands_dict.keys()))}'
         global_log.info("step3_make_ndx: Create index file")
         make_ndx(**equil_paths["step3_make_ndx"], properties=equil_prop["step3_make_ndx"])
 
@@ -1422,7 +1421,11 @@ def main_wf(input_pdb_path: Optional[str] = None,
         global_log.info("step4_energy_min: Compute potential energy during minimization")
         gmx_energy(**equil_paths["step4_energy_min"], properties=equil_prop["step4_energy_min"])
 
-        chain_posres = " ".join([f"-D{chains_dict[chain]['posres_name']}" for chain in chains_dict])
+        # Prepare position restraints definition for equilibration steps
+        if chains_dict:
+            chain_posres = " ".join([f"-D{chains_dict[chain]['posres_name']}" for chain in chains_dict])
+        else:
+            chain_posres = ""
         if ligands_dict:
             ligand_posres = " ".join([f"-D{ligands_dict[ligand]['posres_name']}" for ligand in ligands_dict])
         else:
@@ -1430,10 +1433,9 @@ def main_wf(input_pdb_path: Optional[str] = None,
         eq_posres = f"{chain_posres} {ligand_posres}"
         
         # STEP 5: NVT equilibration pre-processing
-        if ligands_dict:
-            equil_prop["step5_grompp_nvt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions"
-        equil_prop["step5_grompp_nvt"]["mdp"]["define"] = eq_posres
-        equil_prop["step5_grompp_nvt"]["mdp"]["ref-t"] = f"{temperature} {temperature}"
+        # Add position restraints if any
+        if eq_posres != " ":
+            equil_prop["step5_grompp_nvt"]["mdp"]["define"] = eq_posres
         global_log.info("step5_grompp_nvt: Preprocess NVT equilibration")
         grompp(**equil_paths["step5_grompp_nvt"], properties=equil_prop["step5_grompp_nvt"])
 
@@ -1446,10 +1448,9 @@ def main_wf(input_pdb_path: Optional[str] = None,
         gmx_energy(**equil_paths["step7_temp_nvt"], properties=equil_prop["step7_temp_nvt"])
 
         # STEP 8: NPT equilibration pre-processing
-        if ligands_dict:
-            equil_prop["step8_grompp_npt"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions"
-        equil_prop["step8_grompp_npt"]["mdp"]["define"] = eq_posres
-        equil_prop["step8_grompp_npt"]["mdp"]["ref-t"] = f"{temperature} {temperature}"
+        # Add position restraints if any
+        if eq_posres != " ":
+            equil_prop["step8_grompp_npt"]["mdp"]["define"] = eq_posres
         global_log.info("step8_grompp_npt: Preprocess NPT equilibration")
         grompp(**equil_paths["step8_grompp_npt"], properties=equil_prop["step8_grompp_npt"])
 
@@ -1494,10 +1495,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
         prod_paths['step1_grompp_md']['input_ndx_path'] = equil_paths["step3_make_ndx"]['output_ndx_path']
         input_ndx_path = equil_paths["step3_make_ndx"]['output_ndx_path']
         
-        if ligands_dict:
-            prod_prop["step1_grompp_md"]["mdp"]["tc-grps"] = f"Protein_{'_'.join(list(ligands_dict.keys()))} Water_and_ions" 
+        # Modify default temperature coupling groups
         prod_prop["step1_grompp_md"]["mdp"]["define"] = "" # NOTE: here restraint what is asked by the user
-        prod_prop["step1_grompp_md"]["mdp"]["ref-t"] = f"{temperature} {temperature}"
         global_log.info("step1_grompp_md: Preprocess production simulation")
         grompp(**prod_paths['step1_grompp_md'], properties=prod_prop["step1_grompp_md"])
         
@@ -1630,8 +1629,6 @@ if __name__ == "__main__":
                         help="""Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, 
                         use together with '--input_gro'. Default: None""",
                         required=False)
-    # NOTE: using input gro and top we don't have access to the pdb and thus we don't know which POSRES to apply - 
-    # chains_dict and ligands_dict are not created
     
     parser.add_argument('--input_tpr', dest='input_tpr_path', type=str,
                         help="""Input portable binary run input file (.tpr) to restart a simulation. Use together with '--input_cpt'.
