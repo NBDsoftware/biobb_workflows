@@ -1220,6 +1220,9 @@ def main_wf(input_pdb_path: Optional[str] = None,
                  equil_only,
                  global_log)
     
+    # Get ligands information
+    ligands_dict = get_ligands(ligands_top_folder, global_log)
+    
     # If prepared structure is not provided
     setup_needed = input_mode == 'input_pdb'
     if setup_needed:
@@ -1294,8 +1297,6 @@ def main_wf(input_pdb_path: Optional[str] = None,
         setup_prop["step3_append_posres"]["posres_names"] = posres_names
         setup_paths["step3_append_posres"]["input_ndx_path"] = master_index_file
         ndx2resttop(**setup_paths["step3_append_posres"], properties=setup_prop["step3_append_posres"])
-        
-        ligands_dict = get_ligands(ligands_top_folder, global_log)
         
         if ligands_dict:
             
