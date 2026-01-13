@@ -841,7 +841,7 @@ step1_grompp_md:
   paths:
     input_gro_path: dependency/step9_mdrun_npt/output_gro_path
     input_cpt_path: dependency/step9_mdrun_npt/output_cpt_path 
-    input_ndx_path: dependency/step3B_make_ndx/output_ndx_path
+    input_ndx_path: dependency/step3_make_ndx/output_ndx_path
     input_top_zip_path: dependency/step9_genion/output_top_zip_path
     output_tpr_path: gppmd.tpr
   properties:
@@ -1509,6 +1509,10 @@ def main_wf(input_pdb_path: Optional[str] = None,
     ############################
     # Post-processing analysis #
     ############################
+    
+    # NOTE: Make these steps fault-tolerant
+    # NOTE: Change the selections to make them more general
+    # NOTE: Improve the centering and fitting if needed using biopython to find specific atoms
     
     analysis_prefix = "step4_analysis"
     analysis_prop = conf.get_prop_dic(prefix=analysis_prefix)
