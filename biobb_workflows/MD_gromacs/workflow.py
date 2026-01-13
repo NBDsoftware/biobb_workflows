@@ -841,7 +841,7 @@ step1_grompp_md:
   paths:
     input_gro_path: dependency/step9_mdrun_npt/output_gro_path
     input_cpt_path: dependency/step9_mdrun_npt/output_cpt_path 
-    input_ndx_path: dependency/step3B_make_ndx/output_ndx_path
+    input_ndx_path: dependency/step3_make_ndx/output_ndx_path
     input_top_zip_path: dependency/step9_genion/output_top_zip_path
     output_tpr_path: gppmd.tpr
   properties:
@@ -955,10 +955,11 @@ step6_dry_str:
   paths: 
     input_structure_path: dependency/step1_gro2pdb/output_str_path
     input_top_path: dependency/step1_grompp_md/output_tpr_path
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_str_path: dry_structure.gro
   properties:
     binary_path: {gmx_bin}     
-    selection: Protein
+    selection: "!Water_and_ions"
     center: True
     pbc: mol
     ur: compact
@@ -968,21 +969,23 @@ step7_dry_traj:
   paths: 
     input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
     input_top_path: dependency/step1_grompp_md/output_tpr_path
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_traj_path: dry_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    selection: Protein
+    selection: "!Water_and_ions"
 
 step8_center:
   tool: gmx_image 
   paths:
     input_traj_path: dependency/step7_dry_traj/output_traj_path
     input_top_path: dependency/step1_grompp_md/output_tpr_path
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_traj_path: center_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    center_selection: Protein
-    output_selection: Protein
+    center_selection: "!Water_and_ions"
+    output_selection: "!Water_and_ions"
     center: True
     ur: compact
     pbc: none
@@ -992,12 +995,13 @@ step9_image_traj:
   paths:
     input_traj_path: dependency/step8_center/output_traj_path
     input_top_path: dependency/step1_grompp_md/output_tpr_path
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_traj_path: imaged_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    output_selection: Protein
-    cluster_selection: Protein
-    center_selection: Protein  # NOTE: why is this used??
+    output_selection: "!Water_and_ions"
+    cluster_selection: "!Water_and_ions"
+    center_selection: "!Water_and_ions"
     center: False
     ur: compact
     pbc: mol
@@ -1007,12 +1011,13 @@ step10_fit_traj:
   paths:
     input_traj_path: dependency/step9_image_traj/output_traj_path
     input_top_path: dependency/step1_grompp_md/output_tpr_path
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    fit_selection: Protein
-    center_selection: Protein
-    output_selection: Protein
+    fit_selection: "!Water_and_ions"
+    center_selection: "!Water_and_ions"
+    output_selection: "!Water_and_ions"
     center: False
     fit: rot+trans
 """
@@ -1352,7 +1357,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
                 ligand_paths["step5_append_ligand_topology"]["input_top_zip_path"] = complex_topology_path
                 ligand_paths["step5_append_ligand_topology"]["input_itp_path"] = ligand_itp_path
                 ligand_paths["step5_append_ligand_topology"]["input_posres_itp_path"] = ligand_restraints_path
-                ligand_prop["step5_append_ligand_topolofgy"]["posres_name"] = ligands_dict[ligand_id]["posres_name"]
+                ligand_prop["step5_append_ligand_topology"]["posres_name"] = ligands_dict[ligand_id]["posres_name"]
                 global_log.info(f"{ligand_id} > Append ligand to the topology")
                 append_ligand(**ligand_paths["step5_append_ligand_topology"], properties=ligand_prop["step5_append_ligand_topology"])
                 
