@@ -979,13 +979,12 @@ step8_center:
   tool: gmx_image 
   paths:
     input_traj_path: dependency/step7_dry_traj/output_traj_path
-    input_top_path: dependency/step1_grompp_md/output_tpr_path
-    input_index_path: dependency/step3_make_ndx/output_ndx_path
+    input_top_path: dependency/step6_dry_str/output_str_path
     output_traj_path: center_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    center_selection: "!Water_and_ions"
-    output_selection: "!Water_and_ions"
+    center_selection: System
+    output_selection: System
     center: True
     ur: compact
     pbc: none
@@ -994,14 +993,13 @@ step9_image_traj:
   tool: gmx_image
   paths:
     input_traj_path: dependency/step8_center/output_traj_path
-    input_top_path: dependency/step1_grompp_md/output_tpr_path
-    input_index_path: dependency/step3_make_ndx/output_ndx_path
+    input_top_path: dependency/step6_dry_str/output_str_path
     output_traj_path: imaged_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    output_selection: "!Water_and_ions"
-    cluster_selection: "!Water_and_ions"
-    center_selection: "!Water_and_ions"
+    output_selection: System
+    cluster_selection: System
+    center_selection: System
     center: False
     ur: compact
     pbc: mol
@@ -1010,14 +1008,13 @@ step10_fit_traj:
   tool: gmx_image
   paths:
     input_traj_path: dependency/step9_image_traj/output_traj_path
-    input_top_path: dependency/step1_grompp_md/output_tpr_path
-    input_index_path: dependency/step3_make_ndx/output_ndx_path
+    input_top_path: dependency/step6_dry_str/output_str_path
     output_traj_path: fitted_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    fit_selection: "!Water_and_ions"
-    center_selection: "!Water_and_ions"
-    output_selection: "!Water_and_ions"
+    fit_selection: System
+    center_selection: System
+    output_selection: System
     center: False
     fit: rot+trans
 """
@@ -1528,16 +1525,19 @@ def main_wf(input_pdb_path: Optional[str] = None,
     analysis_paths['step6_dry_str']['input_top_path'] = input_tpr_path
     analysis_paths['step7_dry_traj']['input_top_path'] = input_tpr_path
     analysis_paths['step7_dry_traj']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
-    analysis_paths['step8_center']['input_top_path'] = input_tpr_path
-    analysis_paths['step9_image_traj']['input_top_path'] = input_tpr_path
-    analysis_paths['step10_fit_traj']['input_top_path'] = input_tpr_path
+    analysis_paths['step8_center']['input_top_path'] = analysis_paths["step6_dry_str"]['output_str_path']
+    analysis_paths['step9_image_traj']['input_top_path'] = analysis_paths["step6_dry_str"]['output_str_path']
+    analysis_paths['step10_fit_traj']['input_top_path'] = analysis_paths["step6_dry_str"]['output_str_path']
+    # analysis_paths['step8_center']['input_top_path'] = input_tpr_path
+    # analysis_paths['step9_image_traj']['input_top_path'] = input_tpr_path
+    # analysis_paths['step10_fit_traj']['input_top_path'] = input_tpr_path
 
     if input_ndx_path:
         analysis_paths['step6_dry_str']['input_index_path'] = input_ndx_path
         analysis_paths['step7_dry_traj']['input_index_path'] = input_ndx_path
-        analysis_paths['step8_center']['input_index_path'] = input_ndx_path
-        analysis_paths['step9_image_traj']['input_index_path'] = input_ndx_path
-        analysis_paths['step10_fit_traj']['input_index_path'] = input_ndx_path
+        # analysis_paths['step8_center']['input_index_path'] = input_ndx_path
+        # analysis_paths['step9_image_traj']['input_index_path'] = input_ndx_path
+        # analysis_paths['step10_fit_traj']['input_index_path'] = input_ndx_path
     
     # STEP 1: conversion of topology from gro to pdb
     global_log.info("step1_gro2pdb: Convert topology from GRO to PDB")
