@@ -1559,33 +1559,54 @@ def main_wf(input_pdb_path: Optional[str] = None,
     cpptraj_rmsf(**analysis_paths['step5_rmsf'], properties=analysis_prop['step5_rmsf'])
 
     # STEP 6: obtain dry structure
-    global_log.info("step6_dry_str: Obtain dry structure")
-    gmx_trjconv_str(**analysis_paths["step6_dry_str"], properties=analysis_prop["step6_dry_str"])
-
-    # STEP 7: obtain dry trajectory
-    global_log.info("step7_dry_traj: Obtain dry trajectory")
-    gmx_trjconv_trj(**analysis_paths["step7_dry_traj"], properties=analysis_prop["step7_dry_traj"])
-
-    # STEP 8: center the trajectory
-    global_log.info("step8_center: Center the trajectory")
-    gmx_image(**analysis_paths['step8_center'], properties=analysis_prop['step8_center'])
-
-    # Remove intermediate trajectory
-    os.remove(analysis_paths["step7_dry_traj"]["output_traj_path"])
-
-    # STEP 9: image the trajectory
-    global_log.info("step9_image_traj: Imaging the trajectory")
-    gmx_image(**analysis_paths['step9_image_traj'], properties=analysis_prop['step9_image_traj'])
-
-    # Remove intermediate trajectory
-    os.remove(analysis_paths["step8_center"]["output_traj_path"])
+    try:
+        global_log.info("Starting step 6 to 10: trajectory processing")
+        global_log.info("step6_dry_str: Obtain dry structure")
+        gmx_trjconv_str(**analysis_paths["step6_dry_str"], properties=analysis_prop["step6_dry_str"])
+        global_log.info("step6_dry_str: Completed successfully")
     
-    # STEP 10: fit the trajectory
-    global_log.info("step10_fit_traj: Fit the trajectory")
-    gmx_image(**analysis_paths['step10_fit_traj'], properties=analysis_prop['step10_fit_traj'])
+    except SystemExit as e:
+        global_log.error(
+            f"step6_dry_str failed due to GMX exit "
+            f"(SystemExit, code={e.code})"
+        )
+    except Exception:
+        global_log.exception("step6_dry_str failed with unexpected exception")
 
-    # Remove intermediate trajectory
-    os.remove(analysis_paths["step9_image_traj"]["output_traj_path"])
+    # STEPS 7-10: process trajectory: dry, center, image, fit
+    try:
+        # STEP 7: obtain dry trajectory
+        global_log.info("step7_dry_traj: Obtain dry trajectory")
+        gmx_trjconv_trj(**analysis_paths["step7_dry_traj"], properties=analysis_prop["step7_dry_traj"])
+
+        # STEP 8: center the trajectory
+        global_log.info("step8_center: Center the trajectory")
+        gmx_image(**analysis_paths['step8_center'], properties=analysis_prop['step8_center'])
+
+        # Remove intermediate trajectory
+        os.remove(analysis_paths["step7_dry_traj"]["output_traj_path"])
+
+        # STEP 9: image the trajectory
+        global_log.info("step9_image_traj: Imaging the trajectory")
+        gmx_image(**analysis_paths['step9_image_traj'], properties=analysis_prop['step9_image_traj'])
+
+        # Remove intermediate trajectory
+        os.remove(analysis_paths["step8_center"]["output_traj_path"])
+        
+        # STEP 10: fit the trajectory
+        global_log.info("step10_fit_traj: Fit the trajectory")
+        gmx_image(**analysis_paths['step10_fit_traj'], properties=analysis_prop['step10_fit_traj'])
+
+        # Remove intermediate trajectory
+        os.remove(analysis_paths["step9_image_traj"]["output_traj_path"])
+
+    except SystemExit as e:
+        global_log.error(
+            f"steps 7 to 10 failed due to GMX exit "
+            f"(SystemExit, code={e.code})"
+        )
+    except Exception:
+        global_log.exception("steps 7 to 10 failed with unexpected exception")
 
     if default_config:
         # Move the default configuration file to the output path
