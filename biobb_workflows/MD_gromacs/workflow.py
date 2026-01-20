@@ -1560,7 +1560,6 @@ def main_wf(input_pdb_path: Optional[str] = None,
 
     # STEP 6: obtain dry structure
     try:
-        global_log.info("Starting step 6 to 10: trajectory processing")
         global_log.info("step6_dry_str: Obtain dry structure")
         gmx_trjconv_str(**analysis_paths["step6_dry_str"], properties=analysis_prop["step6_dry_str"])
         global_log.info("step6_dry_str: Completed successfully")
