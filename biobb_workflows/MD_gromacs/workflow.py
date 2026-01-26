@@ -1553,6 +1553,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
     # STEP 2: free NPT production run
     prod_paths['step2_mdrun_prod']['input_plumed_path'] = input_plumed_path
     prod_paths['step2_mdrun_prod']['input_plumed_folder'] = input_plumed_folder
+    prod_paths['step2_mdrun_prod']['output_plumed_folder'] = os.path.join(prod_prop['step2_mdrun_prod']['path'], 'plumed_outputs')
     global_log.info("step2_mdrun_prod: Execute production simulation")
     mdrun(**prod_paths['step2_mdrun_prod'], properties=prod_prop['step2_mdrun_prod'])
     
