@@ -478,7 +478,8 @@ def config_contents(
     equil_frames: Optional[int] = 500,
     prod_time: Optional[float] = 100.0,
     prod_frames: Optional[int] = 2000,
-    seed: Optional[int] = -1
+    seed: Optional[int] = -1,
+    debug: bool = False,
     ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
@@ -569,7 +570,7 @@ global_properties:
   working_dir_path: output                                          # Workflow default output directory
   can_write_console_log: False                                      # Verbose writing of log information
   restart: {restart}                                                # Skip steps already performed
-  remove_tmp: True                                                  # Remove temporal files
+  remove_tmp: {not debug}                                               # Remove temporal files
 
 ##################################################################
 # Section 3 (Steps A-I): Prepare topology and coordinates for MD #
@@ -1123,6 +1124,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
             equil_only: Optional[bool] = False, 
             prod_time: Optional[float] = 100,
             prod_frames: Optional[int] = 2000,
+            debug: Optional[bool] = False,
             output_path: Optional[str] = None
     ):
     '''
@@ -1191,6 +1193,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
             Time of production simulation in ns. Default: 100 ns.
         prod_frames:
             Number of frames to save during the production step. Default: 2000 frames.
+        debug:
+            whether to run the workflow in debug mode (keep temporary files)
         output_path: 
             path to output folder
 
@@ -1226,7 +1230,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
         'equil_time': equil_time,
         'equil_frames': equil_frames,
         'prod_time': prod_time,
-        'prod_frames': prod_frames
+        'prod_frames': prod_frames,
+        'debug': debug
     }
     default_config = create_config_file(configuration_path, **config_args)
     if default_config:
@@ -1813,6 +1818,10 @@ if __name__ == "__main__":
     parser.add_argument('--prod_frames', dest='prod_frames', type=int,
                         help="Number of frames to save during the production steps. Default: 2000 frames",
                         required=False, default=2000)
+    
+    parser.add_argument('--debug', action='store_true',
+                        help="Activate debug mode with more verbose logging. Default: False",
+                        required=False, default=False)
 
     parser.add_argument('--output', dest='output_path', type=str,
                         help="Output path. Default: 'output' in the current working directory",
@@ -1867,4 +1876,5 @@ if __name__ == "__main__":
             equil_only=args.equil_only, 
             prod_time=args.prod_time, 
             prod_frames=args.prod_frames,
+            debug=args.debug,
             output_path=args.output_path)
