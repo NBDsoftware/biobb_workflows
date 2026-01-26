@@ -13,7 +13,6 @@ from Bio.PDB import PDBParser
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
-from biobb_gromacs.gromacs.trjcat import trjcat
 from biobb_gromacs.gromacs.pdb2gmx import pdb2gmx
 from biobb_gromacs.gromacs.editconf import editconf
 from biobb_gromacs.gromacs.solvate import solvate
