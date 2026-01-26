@@ -13,7 +13,6 @@ from Bio.PDB import PDBParser
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
-from biobb_gromacs.gromacs.trjcat import trjcat
 from biobb_gromacs.gromacs.pdb2gmx import pdb2gmx
 from biobb_gromacs.gromacs.editconf import editconf
 from biobb_gromacs.gromacs.solvate import solvate
@@ -51,13 +50,20 @@ def check_inputs(
     ligands_top_folder: Optional[str], 
     input_tpr_path: Optional[str],
     input_cpt_path: Optional[str],
+    input_ndx_path: Optional[str],
+    input_plumed_path: Optional[str],
+    input_plumed_folder: Optional[str],
     setup_only: Optional[bool],
     equil_only: Optional[bool],
     global_log: Optional[logging.Logger]
 ) -> Literal['input_pdb', 'prepared_system', 'restart_simulation']:
     """
-    Check the inputs for the workflow. The function checks if either the input PDB or the gro and top files
-    exist. If the ligands_top_folder is provided, it checks if the folder exists and if it's not empty. 
+    Check the inputs for the workflow. 
+    
+    1. Check if any of the compulsory input files are provided and if they exist.
+    
+    2. Check if the provided optional input files exist.
+    
     If any of the checks fail, an error is raised.
     
     Inputs
@@ -69,6 +75,9 @@ def check_inputs(
         ligands_top_folder (str): Path to the folder with the ligands .itp files.
         input_tpr_path (str): Path to already-prepared binary input run file
         input_cpt_path (str): Path to checkpoint file.
+        input_ndx_path (str): Path to the index file.
+        input_plumed_path (str): Path to the plumed file.
+        input_plumed_folder (str): Path to the folder with the plumed files.
         setup_only (bool): Condition for the user to request just the setup of the simulation
         equil_only (bool): Condition for the user to request just the equilibration of the simulation
         global_log: Logger object for logging messages.
@@ -145,6 +154,31 @@ def check_inputs(
         global_log.info("Using restart files as input:")
         global_log.info(f"Input TPR file: {input_tpr_path}")
         global_log.info(f"Input CPT file: {input_cpt_path}")
+        
+    # If index file is provided, check it exists
+    if input_ndx_path:
+        global_log.info(f"Input NDX file: {input_ndx_path}")
+        if not os.path.exists(input_ndx_path):
+            global_log.error(f"File {input_ndx_path} not found.")
+            raise FileNotFoundError(f"File {input_ndx_path} not found.")
+    
+    # If plumed file is provided, check it exists
+    if input_plumed_path:
+        global_log.info(f"Input PLUMED file: {input_plumed_path}")
+        if not os.path.exists(input_plumed_path):
+            global_log.error(f"File {input_plumed_path} not found.")
+            raise FileNotFoundError(f"File {input_plumed_path} not found.")
+
+    # If plumed folder is provided, check it exists
+    if input_plumed_folder:
+        global_log.info(f"Input PLUMED folder: {input_plumed_folder}")
+        if not os.path.exists(input_plumed_folder):
+            global_log.error(f"Folder {input_plumed_folder} not found.")
+            raise FileNotFoundError(f"Folder {input_plumed_folder} not found.")
+        # Check the folder is not empty
+        if not os.listdir(input_plumed_folder):
+            global_log.error(f"Folder {input_plumed_folder} is empty.")
+            raise FileNotFoundError(f"Folder {input_plumed_folder} is empty.")
 
     return used_modes[0]
 
@@ -443,7 +477,8 @@ def config_contents(
     equil_frames: Optional[int] = 500,
     prod_time: Optional[float] = 100.0,
     prod_frames: Optional[int] = 2000,
-    seed: Optional[int] = -1
+    seed: Optional[int] = -1,
+    debug: bool = False,
     ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
@@ -534,7 +569,7 @@ global_properties:
   working_dir_path: output                                          # Workflow default output directory
   can_write_console_log: False                                      # Verbose writing of log information
   restart: {restart}                                                # Skip steps already performed
-  remove_tmp: True                                                  # Remove temporal files
+  remove_tmp: {not debug}                                               # Remove temporal files
 
 ##################################################################
 # Section 3 (Steps A-I): Prepare topology and coordinates for MD #
@@ -1067,6 +1102,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
             input_tpr_path: Optional[str] = None, 
             input_cpt_path: Optional[str] = None,
             input_ndx_path: Optional[str] = None,
+            input_plumed_path: Optional[str] = None,
+            input_plumed_folder: Optional[str] = None,
             configuration_path: Optional[str] = None, 
             gmx_bin: Optional[str] = 'gmx',
             mpi_bin: Optional[str] = None,
@@ -1086,6 +1123,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
             equil_only: Optional[bool] = False, 
             prod_time: Optional[float] = 100,
             prod_frames: Optional[int] = 2000,
+            debug: Optional[bool] = False,
             output_path: Optional[str] = None
     ):
     '''
@@ -1108,6 +1146,10 @@ def main_wf(input_pdb_path: Optional[str] = None,
             path to input checkpoint file (.cpt)
         input_ndx_path:
             path to input index file (.ndx)
+        input_plumed_path:
+            path to the main PLUMED input file. If provided, PLUMED will be used during the simulation. (.dat)
+        input_plumed_folder:
+            path to folder with PLUMED input files if needed
         configuration_path: 
             path to YAML configuration file
         gmx_bin:
@@ -1150,6 +1192,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
             Time of production simulation in ns. Default: 100 ns.
         prod_frames:
             Number of frames to save during the production step. Default: 2000 frames.
+        debug:
+            whether to run the workflow in debug mode (keep temporary files)
         output_path: 
             path to output folder
 
@@ -1185,7 +1229,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
         'equil_time': equil_time,
         'equil_frames': equil_frames,
         'prod_time': prod_time,
-        'prod_frames': prod_frames
+        'prod_frames': prod_frames,
+        'debug': debug
     }
     default_config = create_config_file(configuration_path, **config_args)
     if default_config:
@@ -1216,6 +1261,9 @@ def main_wf(input_pdb_path: Optional[str] = None,
                  ligands_top_folder, 
                  input_tpr_path,
                  input_cpt_path,
+                 input_ndx_path,
+                 input_plumed_path,
+                 input_plumed_folder,
                  setup_only,
                  equil_only,
                  global_log)
@@ -1503,6 +1551,9 @@ def main_wf(input_pdb_path: Optional[str] = None,
         input_tpr_path = prod_paths['step1_grompp_md']['output_tpr_path']
 
     # STEP 2: free NPT production run
+    prod_paths['step2_mdrun_prod']['input_plumed_path'] = input_plumed_path
+    prod_paths['step2_mdrun_prod']['input_plumed_folder'] = input_plumed_folder
+    prod_paths['step2_mdrun_prod']['output_plumed_folder'] = os.path.join(prod_prop['step2_mdrun_prod']['path'], 'plumed_outputs')
     global_log.info("step2_mdrun_prod: Execute production simulation")
     mdrun(**prod_paths['step2_mdrun_prod'], properties=prod_prop['step2_mdrun_prod'])
     
@@ -1670,6 +1721,16 @@ if __name__ == "__main__":
                         Default: None""",
                         required=False)
 
+    parser.add_argument('--input_plumed_path', dest='input_plumed_path', type=str,
+                        help="""Path to the main PLUMED input file (plumed.dat). If provided, PLUMED will be used during the production run.
+                        Default: None""",
+                        required=False)
+    
+    parser.add_argument('--input_plumed_folder', dest='input_plumed_folder', type=str,
+                        help="""Path to the folder with all files needed by the main PLUMED input file, see input_plumed_path.
+                        Default: None""",
+                        required=False)
+
     # NOTE: Add an option to remove raw data and just keep prepared traj
     # NOTE: Add an option to leave waters and ions in the prepared traj and top
     # NOTE: Add option for H mass repartitioning
@@ -1757,6 +1818,10 @@ if __name__ == "__main__":
     parser.add_argument('--prod_frames', dest='prod_frames', type=int,
                         help="Number of frames to save during the production steps. Default: 2000 frames",
                         required=False, default=2000)
+    
+    parser.add_argument('--debug', action='store_true',
+                        help="Activate debug mode with more verbose logging. Default: False",
+                        required=False, default=False)
 
     parser.add_argument('--output', dest='output_path', type=str,
                         help="Output path. Default: 'output' in the current working directory",
@@ -1790,6 +1855,8 @@ if __name__ == "__main__":
             input_tpr_path=args.input_tpr_path,
             input_cpt_path=args.input_cpt_path,
             input_ndx_path=args.input_ndx_path,
+            input_plumed_path=args.input_plumed_path,
+            input_plumed_folder=args.input_plumed_folder,
             configuration_path=args.config_path, 
             gmx_bin=args.gmx_bin,
             mpi_bin=args.mpi_bin,
@@ -1809,4 +1876,5 @@ if __name__ == "__main__":
             equil_only=args.equil_only, 
             prod_time=args.prod_time, 
             prod_frames=args.prod_frames,
+            debug=args.debug,
             output_path=args.output_path)

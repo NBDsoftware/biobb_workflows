@@ -5,9 +5,9 @@ channels:
   - salilab
 dependencies:
   - python==3.10.0
-  - biobb_common==5.1.0
-  - biobb_structure_utils==5.1.0
-  - biobb_model==5.1.0
-  - biobb_gromacs==5.1.1      # Needs NBDSoftware version: https://github.com/NBDsoftware/biobb_gromacs
-  - biobb_amber==5.1.0
-  - biobb_analysis==5.1.0
+  - biobb_common==5.2.0
+  - biobb_structure_utils==5.2.0
+  - biobb_model==5.2.0
+  - biobb_gromacs==5.2.0      # Needs NBDSoftware version: https://github.com/NBDsoftware/biobb_gromacs
+  - biobb_amber==5.2.0
+  - biobb_analysis==5.2.0
