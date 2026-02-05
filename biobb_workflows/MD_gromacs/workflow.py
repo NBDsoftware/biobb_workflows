@@ -43,6 +43,12 @@ gmx_titra_resnames = {
     'GLU': ('GLU', 'GLUH')                  # deprotonated, protonated
 }
 
+# Possible ion names in the input structure not recognized by GROMACS
+default_ion_names = ["K+", "CL-", "MG"]
+
+# All other solvent names in the input structure not recognized by GROMACS
+default_solvent_names = []
+
 def check_inputs(
     input_pdb_path: Optional[str], 
     input_gro_path: Optional[str], 
@@ -478,6 +484,8 @@ def config_contents(
     prod_time: Optional[float] = 100.0,
     prod_frames: Optional[int] = 2000,
     seed: Optional[int] = -1,
+    additional_ion_names: Optional[List] = default_ion_names,
+    additional_solvent_names: Optional[List] = default_solvent_names,
     debug: bool = False,
     ) -> str:
     """
@@ -521,6 +529,12 @@ def config_contents(
         Number of frames to save during the production steps. Default: 2000 frames.
     seed: int
         Seed for random number generation. Default is -1 (random seed).
+    additional_ion_names: list
+        Additional ion names that can be found in the input structure # NOTE: we'll make this an input to the workflow
+    additional_solvent_names: list
+        Additional solvent molecule residue names that can be found in the input structure # NOTE: idem
+    debug: bool
+        Avoid removing temporal files for debugging purposes
 
     Returns
     -------
@@ -562,7 +576,15 @@ def config_contents(
     
     if seed is None:
         seed = -1
-
+    
+    if additional_solvent_names:
+        solvent_selection = f'"SOL" | {" | ".join(f"r {solvent}" for solvent in additional_solvent_names)}'
+    else:
+        solvent_selection = f'"SOL"'
+    solvent_and_ions_selection = f'{solvent_selection} | {" | ".join(f"a {ion}" for ion in additional_ion_names)}'
+    solvent_and_ions_group = solvent_and_ions_selection.replace('"','')
+    solvent_and_ions_group = solvent_and_ions_group.replace('SOL', '')
+    solvent_and_ions_group = f'SOL{solvent_and_ions_group.replace(" | a ", "_").replace(" | r ", "_")}'
     return f""" 
 # Global properties (common for all steps)
 global_properties:
@@ -751,15 +773,27 @@ step2_mdrun_min:
     {num_threads_mpi_config}
     {num_threads_omp_config}
     {mpi_np_config}
-    
+
+# Here we add water and ions group
 step3_make_ndx:
   tool: make_ndx 
   paths:
     input_structure_path: dependency/step2_mdrun_min/output_gro_path
+    output_ndx_path: index.ndx   
+  properties:
+    binary_path: {gmx_bin}
+    selection: '{solvent_and_ions_selection}'
+
+# Here we add the complementary group
+step4_make_ndx:
+  tool: make_ndx 
+  paths:
+    input_structure_path: dependency/step2_mdrun_min/output_gro_path
+    input_ndx_path: dependency/step3_make_ndx/output_ndx_path
     output_ndx_path: index.ndx
   properties:
     binary_path: {gmx_bin}
-    selection: '! "Water_and_ions"'
+    selection: '! "{solvent_and_ions_group}"'
 
 step4_energy_min:
   tool: gmx_energy
@@ -775,7 +809,7 @@ step5_grompp_nvt:
   tool: grompp
   paths:
     input_gro_path: dependency/step2_mdrun_min/output_gro_path
-    input_ndx_path: dependency/step3_make_ndx/output_ndx_path
+    input_ndx_path: dependency/step4_make_ndx/output_ndx_path
     input_top_zip_path: dependency/step9_genion/output_top_zip_path
     output_tpr_path: gppnvt.tpr
   properties:
@@ -783,7 +817,7 @@ step5_grompp_nvt:
     simulation_type: nvt
     mdp:
       ref-t: {temp} {temp}
-      tc-grps: "!Water_and_ions Water_and_ions"
+      tc-grps: "!{solvent_and_ions_group} {solvent_and_ions_group}"
       nsteps: {nsteps_equil}
       dt: {dt_in_ps}              
       nstxout: 0           
@@ -822,7 +856,7 @@ step8_grompp_npt:
   tool: grompp
   paths:
     input_gro_path: dependency/step6_mdrun_nvt/output_gro_path
-    input_ndx_path: dependency/step3_make_ndx/output_ndx_path
+    input_ndx_path: dependency/step4_make_ndx/output_ndx_path
     input_top_zip_path: dependency/step9_genion/output_top_zip_path
     input_cpt_path: dependency/step6_mdrun_nvt/output_cpt_path
     output_tpr_path: gppnpt.tpr
@@ -834,7 +868,7 @@ step8_grompp_npt:
       nsteps: {nsteps_equil}
       dt: {dt_in_ps}
       ref-t: {temp} {temp}
-      tc-grps: "!Water_and_ions Water_and_ions"
+      tc-grps: "!{solvent_and_ions_group} {solvent_and_ions_group}"
       nstxout: 0           
       nstvout: 0
       nstxout-compressed: {equil_traj_freq_steps}
@@ -876,7 +910,7 @@ step1_grompp_md:
   paths:
     input_gro_path: dependency/step9_mdrun_npt/output_gro_path
     input_cpt_path: dependency/step9_mdrun_npt/output_cpt_path 
-    input_ndx_path: dependency/step3_make_ndx/output_ndx_path
+    input_ndx_path: dependency/step4_make_ndx/output_ndx_path
     input_top_zip_path: dependency/step9_genion/output_top_zip_path
     output_tpr_path: gppmd.tpr
   properties:
@@ -886,7 +920,7 @@ step1_grompp_md:
       nsteps: {nsteps_prod}
       dt: {dt_in_ps} 
       ref-t: {temp} {temp}
-      tc-grps: "!Water_and_ions Water_and_ions"
+      tc-grps: "!{solvent_and_ions_group} {solvent_and_ions_group}"
       nstxout: 0           
       nstvout: 0
       nstxout-compressed: {prod_traj_freq_steps}
@@ -990,10 +1024,11 @@ step6_dry_str:
   paths: 
     input_structure_path: dependency/step1_gro2pdb/output_str_path
     input_top_path: dependency/step1_grompp_md/output_tpr_path
+    input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_str_path: dry_structure.gro
   properties:
     binary_path: {gmx_bin}     
-    selection: Protein
+    selection: "!{solvent_and_ions_group}"
     center: True
     pbc: mol
     ur: compact
@@ -1003,21 +1038,23 @@ step7_dry_traj:
   paths: 
     input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
     input_top_path: dependency/step1_grompp_md/output_tpr_path
+    input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_traj_path: dry_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    selection: Protein
+    selection: "!{solvent_and_ions_group}"
 
 step8_center:
   tool: gmx_image 
   paths:
     input_traj_path: dependency/step7_dry_traj/output_traj_path
-    input_top_path: dependency/step1_grompp_md/output_tpr_path
+    input_top_path: dependency/step6_dry_str/output_str_path
+    input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_traj_path: center_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    center_selection: Protein
-    output_selection: Protein
+    center_selection: "!{solvent_and_ions_group}"
+    output_selection: "!{solvent_and_ions_group}"
     center: True
     ur: compact
     pbc: none
@@ -1026,13 +1063,14 @@ step9_image_traj:
   tool: gmx_image
   paths:
     input_traj_path: dependency/step8_center/output_traj_path
-    input_top_path: dependency/step1_grompp_md/output_tpr_path
+    input_top_path: dependency/step6_dry_str/output_str_path
+    input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_traj_path: imaged_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    output_selection: Protein
-    cluster_selection: Protein
-    center_selection: Protein  # NOTE: why is this used??
+    output_selection: "!{solvent_and_ions_group}"
+    cluster_selection: "!{solvent_and_ions_group}"
+    center_selection: "!{solvent_and_ions_group}"  # NOTE: why is this used??
     center: False
     ur: compact
     pbc: mol
@@ -1041,13 +1079,14 @@ step10_fit_traj:
   tool: gmx_image
   paths:
     input_traj_path: dependency/step9_image_traj/output_traj_path
-    input_top_path: dependency/step1_grompp_md/output_tpr_path
+    input_top_path: dependency/step6_dry_str/output_str_path
+    input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    fit_selection: Protein
-    center_selection: Protein
-    output_selection: Protein
+    fit_selection: "!{solvent_and_ions_group}"
+    center_selection: "!{solvent_and_ions_group}"
+    output_selection: "!{solvent_and_ions_group}"
     center: False
     fit: rot+trans
 """
@@ -1464,6 +1503,10 @@ def main_wf(input_pdb_path: Optional[str] = None,
         # STEP 3: create index file
         global_log.info("step3_make_ndx: Create index file")
         make_ndx(**equil_paths["step3_make_ndx"], properties=equil_prop["step3_make_ndx"])
+        
+        # STEP 4: create index file
+        global_log.info("step4_make_ndx: Create index file")
+        make_ndx(**equil_paths["step4_make_ndx"], properties=equil_prop["step4_make_ndx"])
 
         # STEP 4: dump potential energy evolution
         global_log.info("step4_energy_min: Compute potential energy during minimization")
@@ -1540,8 +1583,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
         prod_paths['step1_grompp_md']['input_gro_path'] = equil_paths["step9_mdrun_npt"]['output_gro_path']
         prod_paths['step1_grompp_md']['input_cpt_path'] = equil_paths["step9_mdrun_npt"]['output_cpt_path']
         prod_paths['step1_grompp_md']['input_top_zip_path'] = input_top_path
-        prod_paths['step1_grompp_md']['input_ndx_path'] = equil_paths["step3_make_ndx"]['output_ndx_path']
-        input_ndx_path = equil_paths["step3_make_ndx"]['output_ndx_path']
+        prod_paths['step1_grompp_md']['input_ndx_path'] = equil_paths["step4_make_ndx"]['output_ndx_path']
+        input_ndx_path = equil_paths["step4_make_ndx"]['output_ndx_path']
         
         # Modify default temperature coupling groups
         prod_prop["step1_grompp_md"]["mdp"]["define"] = "" # NOTE: here restraint what is asked by the user
@@ -1578,9 +1621,6 @@ def main_wf(input_pdb_path: Optional[str] = None,
     analysis_paths['step6_dry_str']['input_top_path'] = input_tpr_path
     analysis_paths['step7_dry_traj']['input_top_path'] = input_tpr_path
     analysis_paths['step7_dry_traj']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
-    analysis_paths['step8_center']['input_top_path'] = input_tpr_path
-    analysis_paths['step9_image_traj']['input_top_path'] = input_tpr_path
-    analysis_paths['step10_fit_traj']['input_top_path'] = input_tpr_path
 
     if input_ndx_path:
         analysis_paths['step6_dry_str']['input_index_path'] = input_ndx_path
@@ -1633,22 +1673,25 @@ def main_wf(input_pdb_path: Optional[str] = None,
         global_log.info("step8_center: Center the trajectory")
         gmx_image(**analysis_paths['step8_center'], properties=analysis_prop['step8_center'])
 
-        # Remove intermediate trajectory
-        os.remove(analysis_paths["step7_dry_traj"]["output_traj_path"])
+        if not debug:
+            # Remove intermediate trajectory
+            os.remove(analysis_paths["step7_dry_traj"]["output_traj_path"])
 
         # STEP 9: image the trajectory
         global_log.info("step9_image_traj: Imaging the trajectory")
         gmx_image(**analysis_paths['step9_image_traj'], properties=analysis_prop['step9_image_traj'])
 
-        # Remove intermediate trajectory
-        os.remove(analysis_paths["step8_center"]["output_traj_path"])
+        if not debug:
+            # Remove intermediate trajectory
+            os.remove(analysis_paths["step8_center"]["output_traj_path"])
         
         # STEP 10: fit the trajectory
         global_log.info("step10_fit_traj: Fit the trajectory")
         gmx_image(**analysis_paths['step10_fit_traj'], properties=analysis_prop['step10_fit_traj'])
 
-        # Remove intermediate trajectory
-        os.remove(analysis_paths["step9_image_traj"]["output_traj_path"])
+        if not debug:
+            # Remove intermediate trajectory
+            os.remove(analysis_paths["step9_image_traj"]["output_traj_path"])
 
     except SystemExit as e:
         global_log.error(
