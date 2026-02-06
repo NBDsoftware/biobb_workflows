@@ -44,10 +44,10 @@ gmx_titra_resnames = {
 }
 
 # Possible ion names in the input structure not recognized by GROMACS
-default_ion_names = ["K+", "CL-", "MG"]
+ions_library = ["K+", "CL-", "MG"]
 
 # All other solvent names in the input structure not recognized by GROMACS
-default_solvent_names = []
+solvent_library = []
 
 def check_inputs(
     input_pdb_path: Optional[str], 
@@ -410,6 +410,70 @@ def read_protonation_states(pdb_file: str, resname: str, global_log) -> List[str
     
     return protonation_states_list
 
+def get_residue_types(pdb_path: str, target_resnames: List[str]) -> List[str]:
+    """  
+    Load the pdb path with BioPython and find if any residue names from the 
+    target_resnames list exist in the structure.
+    
+    Inputs
+    ------
+        pdb_path (str): Path to the pdb file.
+        target_resnames (List[str]): List of residue names to search for (e.g., ions or solvents).
+    
+    Returns
+    -------
+        list
+            list of unique residue names found in the structure that match the target list.
+    """
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure("struct", pdb_path)
+    
+    found_residues = set()
+    
+    # We convert the target library to a set for O(1) lookup speed
+    # This is important if your structure has 50,000+ water molecules
+    target_set = set(target_resnames)
+    
+    for residue in structure.get_residues():
+        res_name = residue.get_resname().strip()
+        
+        if res_name in target_set:
+            found_residues.add(res_name)
+            
+    return list(found_residues)
+
+def get_atom_types(pdb_path: str, target_atom_names: List[str]) -> List[str]:
+    """  
+    Load the pdb path and find if any atom names from the target list exist 
+    in the structure.
+    
+    Inputs
+    ------
+        pdb_path (str): Path to the pdb file.
+        target_atom_names (List[str]): List of atom names to search for.
+    
+    Returns
+    -------
+        list
+            list of unique atom names found in the structure.
+    """
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure("struct", pdb_path)
+    
+    found_atoms = set()
+    # Convert list to set for faster lookup (O(1))
+    target_set = set(target_atom_names)
+    
+    # .get_atoms() is a generator that recursively yields every Atom in the structure
+    for atom in structure.get_atoms():
+        # Atom names in PDB are 4 chars. " CA " becomes "CA" after strip()
+        atom_name = atom.get_name().strip()
+        
+        if atom_name in target_set:
+            found_atoms.add(atom_name)
+            
+    return list(found_atoms)
+
 # Process topology - temporal solution 
 def process_ligand_top(input_path: str, output_path: str) -> None:
     """
@@ -465,6 +529,56 @@ def process_ligand_top(input_path: str, output_path: str) -> None:
     with open(output_path, 'w') as f:
         f.writelines(new_lines)
     
+# Process input coordinates
+def get_input_pdb(input_pdb_path: Optional[str],
+                  input_gro_path: Optional[str],
+                  input_tpr_path: Optional[str],
+                  input_cpt_path: Optional[str],
+                  output_path: str) -> str:
+    """
+    Convert input coordinates file to a PDB if needed
+    
+    Inputs
+    ------
+    
+        input_pdb_path (str): Path to the input PDB file.
+        input_gro_path (str): Path to the input GRO file.
+        input_top_path (str): Path to the input topology file.
+        input_tpr_path (str): Path to already-prepared binary input run file
+        input_cpt_path (str): Path to checkpoint file.
+    
+    Returns
+    -------
+
+        str
+            Path to input pdb file
+    """
+
+    # Create a directory for the pre-processing step
+    step_dir = os.path.join(output_path, 'step0_input_pdb')
+    os.makedirs(step_dir, exist_ok=True)
+    
+    if input_pdb_path:
+        return input_pdb_path
+    else:
+        input_pdb_path = os.path.join(step_dir, 'input.pdb')
+  
+    if input_gro_path:
+        paths = {
+            'input_gro_path': input_gro_path,
+            'output_gro_path': input_pdb_path
+        }
+        editconf(**paths, properties = {})
+    
+    if input_tpr_path:
+        paths = {
+            'input_structure_path': input_cpt_path,
+            'input_top_path': input_tpr_path,
+            'output_str_path': input_pdb_path
+        }
+        gmx_trjconv_str(**paths, properties = {})
+    
+    return input_pdb_path
 
 # YML construction
 def config_contents(
@@ -484,8 +598,8 @@ def config_contents(
     prod_time: Optional[float] = 100.0,
     prod_frames: Optional[int] = 2000,
     seed: Optional[int] = -1,
-    additional_ion_names: Optional[List] = default_ion_names,
-    additional_solvent_names: Optional[List] = default_solvent_names,
+    ion_names: Optional[List] = None, 
+    solvent_names: Optional[List] = None,
     debug: bool = False,
     ) -> str:
     """
@@ -529,10 +643,10 @@ def config_contents(
         Number of frames to save during the production steps. Default: 2000 frames.
     seed: int
         Seed for random number generation. Default is -1 (random seed).
-    additional_ion_names: list
-        Additional ion names that can be found in the input structure # NOTE: we'll make this an input to the workflow
-    additional_solvent_names: list
-        Additional solvent molecule residue names that can be found in the input structure # NOTE: idem
+    ion_names: list
+        Additional ion names that can be found in the input structure
+    solvent_names: list
+        Additional solvent molecule residue names that can be found in the input structure
     debug: bool
         Avoid removing temporal files for debugging purposes
 
@@ -577,21 +691,32 @@ def config_contents(
     if seed is None:
         seed = -1
     
-    if additional_solvent_names:
-        solvent_selection = f'"SOL" | {" | ".join(f"r {solvent}" for solvent in additional_solvent_names)}'
+    # Find the selection of default and additional solvent molecules
+    if solvent_names:
+        solvent_selection = f'"SOL" | {" | ".join(f"r {solvent}" for solvent in solvent_names)}'
     else:
         solvent_selection = f'"SOL"'
-    solvent_and_ions_selection = f'{solvent_selection} | {" | ".join(f"a {ion}" for ion in additional_ion_names)}'
+    
+    # Find the selection of default and additional ions
+    if ion_names:
+        ions_selection = f'"Ion" | {" | ".join(f"a {ion}" for ion in ion_names)}'
+    else:
+        ions_selection = f'"Ion"'
+    
+    # Join both selections
+    solvent_and_ions_selection = f'{solvent_selection} | {ions_selection}'
+    
+    # Convert selection to group name
     solvent_and_ions_group = solvent_and_ions_selection.replace('"','')
     solvent_and_ions_group = solvent_and_ions_group.replace('SOL', '')
-    solvent_and_ions_group = f'SOL{solvent_and_ions_group.replace(" | a ", "_").replace(" | r ", "_")}'
+    solvent_and_ions_group = f'SOL{solvent_and_ions_group.replace(" | a ", "_").replace(" | r ", "_").replace(" | ", "_")}'
     return f""" 
 # Global properties (common for all steps)
 global_properties:
   working_dir_path: output                                          # Workflow default output directory
   can_write_console_log: False                                      # Verbose writing of log information
   restart: {restart}                                                # Skip steps already performed
-  remove_tmp: {not debug}                                               # Remove temporal files
+  remove_tmp: {not debug}                                           # Remove temporal files
 
 ##################################################################
 # Section 3 (Steps A-I): Prepare topology and coordinates for MD #
@@ -1091,38 +1216,27 @@ step10_fit_traj:
     fit: rot+trans
 """
 
-def create_config_file(config_path: str, **config_args) -> bool:
+def create_config_file(output_path: str, **config_args) -> str:
     """
-    Create a YAML configuration file for the workflow if needed.
-    Check if the config_path is None or does not exist before creating the file.
-    If the file already exists, it will not be overwritten.
-    Return a boolean indicating whether the file was created or not.
+    Create a YAML configuration file for the workflow in the output path.
+    Return the path to the configuration file.
     
     Parameters
     ----------
-    config_path : str
-        Path to the configuration file to be created.
+    output_path : str
+        Path to the output folder
     config_args : dict
         Arguments to be used in the configuration file.
     
     Returns
     -------
     
-    bool
-        True if the file was created, False if it already exists.
+    str
+        Path to configuration file
     """
     
-    # Check if the config_path is None
-    if config_path is not None:
-        # Check if the file already exists
-        if os.path.exists(config_path):
-            print(f"Configuration file already exists at {config_path}.")
-            return False
-        else:
-            print(f"Warning: Configuration file path is set to {config_path}, but it does not exist. Creating a new config.yml file.")
-        
-    config_path = 'config.yml'
-        
+    config_path = os.path.join(output_path, 'config.yml')
+    
     # Write the contents to the file
     with open(config_path, 'w') as f:
         f.write(config_contents(**config_args))
@@ -1130,7 +1244,7 @@ def create_config_file(config_path: str, **config_args) -> bool:
     print(f"Configuration file created at {config_path}.")
     
     # Return True indicating the file was created
-    return True
+    return config_path
     
     
 # Main workflow
@@ -1142,8 +1256,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
             input_cpt_path: Optional[str] = None,
             input_ndx_path: Optional[str] = None,
             input_plumed_path: Optional[str] = None,
-            input_plumed_folder: Optional[str] = None,
-            configuration_path: Optional[str] = None, 
+            input_plumed_folder: Optional[str] = None, 
             gmx_bin: Optional[str] = 'gmx',
             mpi_bin: Optional[str] = None,
             mpi_np: Optional[int] = None,
@@ -1163,7 +1276,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
             prod_time: Optional[float] = 100,
             prod_frames: Optional[int] = 2000,
             debug: Optional[bool] = False,
-            output_path: Optional[str] = None
+            output_path: Optional[str] = 'output'
     ):
     '''
     Main MD setup and run workflow with GROMACS. Can be used to prepare and launch an MD simulation.
@@ -1189,8 +1302,6 @@ def main_wf(input_pdb_path: Optional[str] = None,
             path to the main PLUMED input file. If provided, PLUMED will be used during the simulation. (.dat)
         input_plumed_folder:
             path to folder with PLUMED input files if needed
-        configuration_path: 
-            path to YAML configuration file
         gmx_bin:
             path to GROMACS binary, either gmx (single-node) or gmx_mpi (multi-node)
         mpi_bin:
@@ -1250,8 +1361,35 @@ def main_wf(input_pdb_path: Optional[str] = None,
     ###########################
     
     start_time = time.time()
+    
+    # Determine final output path
+    output_path = fu.get_working_dir_path(output_path, restart=restart)
 
-    # Create a default configuration file if needed
+    # Initialize a global log file
+    global_log, _ = fu.get_logs(path=output_path, light_format=True)
+    
+    # Check input files
+    input_mode = check_inputs(input_pdb_path, 
+                 input_gro_path, 
+                 input_top_path, 
+                 ligands_top_folder, 
+                 input_tpr_path,
+                 input_cpt_path,
+                 input_ndx_path,
+                 input_plumed_path,
+                 input_plumed_folder,
+                 setup_only,
+                 equil_only,
+                 global_log)
+    
+    # Find coordinates file
+    input_pdb_path = get_input_pdb(input_pdb_path, 
+                                   input_gro_path,
+                                   input_tpr_path, 
+                                   input_cpt_path,
+                                   output_path)
+
+    # Create and load the configuration
     config_args = {
         'gmx_bin': gmx_bin,
         'mpi_bin': mpi_bin,
@@ -1269,43 +1407,18 @@ def main_wf(input_pdb_path: Optional[str] = None,
         'equil_frames': equil_frames,
         'prod_time': prod_time,
         'prod_frames': prod_frames,
+        'ion_names': get_atom_types(input_pdb_path, ions_library),
+        'solvent_names': get_residue_types(input_pdb_path, solvent_library),
         'debug': debug
     }
-    default_config = create_config_file(configuration_path, **config_args)
-    if default_config:
-        configuration_path = 'config.yml'  # Use the default config file if it was created
-        
-    # Receiving the input configuration file (YAML)
+    configuration_path = create_config_file(output_path, **config_args)
     conf = settings.ConfReader(configuration_path)
-
-    # Enforce output_path if provided
-    if output_path is not None:
-        output_path = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))
-        conf.working_dir_path = output_path
-    else:
-        output_path = conf.get_working_dir_path()
-
-    # Initializing a global log file
-    global_log, _ = fu.get_logs(path=output_path, light_format=True)
+    conf.working_dir_path = output_path
 
     # Parsing the input configuration file (YAML);
     # Dividing it in global paths and global properties
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
-    
-    # Check input files
-    input_mode = check_inputs(input_pdb_path, 
-                 input_gro_path, 
-                 input_top_path, 
-                 ligands_top_folder, 
-                 input_tpr_path,
-                 input_cpt_path,
-                 input_ndx_path,
-                 input_plumed_path,
-                 input_plumed_folder,
-                 setup_only,
-                 equil_only,
-                 global_log)
     
     # Get ligands information
     ligands_dict = get_ligands(ligands_top_folder, global_log)
@@ -1700,11 +1813,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
         )
     except Exception:
         global_log.exception("steps 7 to 10 failed with unexpected exception")
-
-    if default_config:
-        # Move the default configuration file to the output path
-        shutil.move(configuration_path, os.path.join(output_path, 'config.yml'))
-        configuration_path = os.path.join(output_path, 'config.yml')
+        
         
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -1775,10 +1884,11 @@ if __name__ == "__main__":
                         required=False)
 
     # NOTE: Add an option to remove raw data and just keep prepared traj
-    # NOTE: Add an option to leave waters and ions in the prepared traj and top
+    # NOTE: Add an option to leave waters and ions in the prepared traj and top - all
     # NOTE: Add option for H mass repartitioning
     # NOTE: Add flag to determine what should remain restrained during the production run - currently everything is free always
     # NOTE: Add progressive release of position restraints during equilibration (additional steps if needed)
+    # NOTE: Add option to keep specific ions in final dry trajectory
 
     #########################
     # Configuration options #
@@ -1899,8 +2009,7 @@ if __name__ == "__main__":
             input_cpt_path=args.input_cpt_path,
             input_ndx_path=args.input_ndx_path,
             input_plumed_path=args.input_plumed_path,
-            input_plumed_folder=args.input_plumed_folder,
-            configuration_path=args.config_path, 
+            input_plumed_folder=args.input_plumed_folder, 
             gmx_bin=args.gmx_bin,
             mpi_bin=args.mpi_bin,
             mpi_np=args.mpi_np,
