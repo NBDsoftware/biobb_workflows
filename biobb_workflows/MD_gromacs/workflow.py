@@ -1634,7 +1634,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
                 ligand_paths["step5_append_ligand_topology"]["input_top_zip_path"] = complex_topology_path
                 ligand_paths["step5_append_ligand_topology"]["input_itp_path"] = ligand_itp_path
                 ligand_paths["step5_append_ligand_topology"]["input_posres_itp_path"] = ligand_restraints_path
-                ligand_prop["step5_append_ligand_topolofgy"]["posres_name"] = ligands_dict[ligand_id]["posres_name"]
+                ligand_prop["step5_append_ligand_topology"]["posres_name"] = ligands_dict[ligand_id]["posres_name"]
                 global_log.info(f"{ligand_id} > Append ligand to the topology")
                 append_ligand(**ligand_paths["step5_append_ligand_topology"], properties=ligand_prop["step5_append_ligand_topology"])
                 
