@@ -1109,8 +1109,8 @@ step1_grompp_md:
       nstvout: 0
       nstxout-compressed: {prod_traj_freq_steps}
       nstenergy: {prod_traj_freq_steps}
-      continuation: 'no'
-      gen-vel: 'yes'          
+      continuation: 'yes'
+      gen-vel: 'no'          
       ld-seed: {seed}
       gen-seed: {seed}
 
