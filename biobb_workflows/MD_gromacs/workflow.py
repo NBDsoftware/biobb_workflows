@@ -501,7 +501,7 @@ def add_group(atom_indices: List, group_name: str, old_ndx_path: str, new_ndx_pa
     COLUMNS = 15
 
     # Format the group header
-    group_block = f"[ {group_name} ]\n"
+    group_block = f"\n[ {group_name} ]\n"
 
     # Format indices in rows of 15, right-justified to match GROMACS style
     for i, idx in enumerate(atom_indices):
