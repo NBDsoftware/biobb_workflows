@@ -3,9 +3,9 @@
 # Importing all the needed libraries
 from typing import List, Dict, Union, Optional, Literal
 from pathlib import Path
+import numpy as np
 import logging
 import argparse
-import shutil
 import time
 import os
 
@@ -454,6 +454,71 @@ def get_atom_types(pdb_path: str, target_atom_names: List[str]) -> List[str]:
             
     return list(found_atoms)
 
+def get_central_atom_index(pdb_path: str) -> int:
+    """
+    Find the index of the atom closest to the geometric center of a PDB file.
+    
+    Args:
+        pdb_path: Path to the PDB file
+        
+    Returns:
+        The atom index (1-based) of the atom closest to the geometric center
+    """
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure("protein", pdb_path)
+    
+    # Collect all atoms and their coordinates
+    atoms = list(structure.get_atoms())
+    coords = np.array([atom.get_vector().get_array() for atom in atoms])
+    
+    # Calculate geometric center
+    center = coords.mean(axis=0)
+    
+    # Find atom closest to center
+    distances = np.linalg.norm(coords - center, axis=1)
+    central_atom_index = int(np.argmin(distances))+1
+    
+    return central_atom_index
+
+def add_group(atom_indices: List, group_name: str, old_ndx_path: str, new_ndx_path: str) -> None:
+    """
+    Add all the atom indices to a new group at the end of the old ndx file. Save the new ndx file onto
+    a different path.
+
+    Args:
+        atom_indices (List): List of atom indices to add to the new group.
+        group_name (str): Name of the new group.
+        old_ndx_path (str): Path to the existing index file.
+        new_ndx_path (str): Path to save the new index file.
+
+    Returns:
+        None
+    """
+    COLUMNS = 15
+
+    # Format the group header
+    group_block = f"[ {group_name} ]\n"
+
+    # Format indices in rows of 15, right-justified to match GROMACS style
+    for i, idx in enumerate(atom_indices):
+        group_block += f"{idx:>4}"
+        if (i + 1) % COLUMNS == 0:
+            group_block += "\n"
+        else:
+            group_block += " " if (i + 1) < len(atom_indices) else ""
+
+    # Ensure the block ends with a newline
+    if len(atom_indices) % COLUMNS != 0:
+        group_block += "\n"
+
+    # Read old ndx file and append the new group
+    with open(old_ndx_path, 'r') as f:
+        old_content = f.read()
+
+    with open(new_ndx_path, 'w') as f:
+        f.write(old_content)
+        f.write(group_block)
+
 # Process topology - temporal solution 
 def process_ligand_top(input_path: str, output_path: str) -> None:
     """
@@ -516,7 +581,8 @@ def get_input_pdb(input_pdb_path: Optional[str],
                   input_cpt_path: Optional[str],
                   output_path: str) -> str:
     """
-    Convert input coordinates file to a PDB if needed
+    Get the path to the input structure in PDB format. 
+    Converts the input coordinates file to a PDB if needed
     
     Inputs
     ------
@@ -1375,7 +1441,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
                  equil_only,
                  global_log)
     
-    # Find coordinates file
+    # Find PDB coordinates file - used to define groups in configuration
     input_pdb_path = get_input_pdb(input_pdb_path, 
                                    input_gro_path,
                                    input_tpr_path, 
@@ -1610,13 +1676,14 @@ def main_wf(input_pdb_path: Optional[str] = None,
         global_log.info("step2_mdrun_min: Execute energy minimization")
         mdrun(**equil_paths["step2_mdrun_min"], properties=equil_prop["step2_mdrun_min"])
 
-        # STEP 3: create index file
+        # STEP 3: create index file with custom solvent and ions group
         global_log.info("step3_make_ndx: Create index file")
         make_ndx(**equil_paths["step3_make_ndx"], properties=equil_prop["step3_make_ndx"])
         
-        # STEP 4: create index file
+        # STEP 4: modify index file adding complementary group
         global_log.info("step4_make_ndx: Create index file")
         make_ndx(**equil_paths["step4_make_ndx"], properties=equil_prop["step4_make_ndx"])
+        input_ndx_path = equil_paths["step4_make_ndx"]['output_ndx_path']
 
         # STEP 4: dump potential energy evolution
         global_log.info("step4_energy_min: Compute potential energy during minimization")
@@ -1677,11 +1744,9 @@ def main_wf(input_pdb_path: Optional[str] = None,
     prod_prop = conf.get_prop_dic(prefix=production_prefix)
     prod_paths = conf.get_paths_dic(prefix=production_prefix)
     
-    # Connect production steps with previous ones
-    # STEP 1: Prepare the production run
-    if input_mode == 'restart_simulation':           # NOTE: remember to include -noapend when restarting from a cpt file!
-                                                     # NOTE: also remember to adapt the paths to the traj files from the plugin - names will change with replicas
-        # Extend the simulation time
+    if input_mode == 'restart_simulation': 
+          
+        # STEP 1: Extend the simulation time
         prod_paths['step1B_convert_tpr']['input_tpr_path'] = input_tpr_path
         global_log.info("step1B_convert_tpr: Extend the simulation time of the input TPR file")
         convert_tpr(**prod_paths['step1B_convert_tpr'], properties=prod_prop['step1B_convert_tpr'])
@@ -1690,17 +1755,19 @@ def main_wf(input_pdb_path: Optional[str] = None,
         prod_paths['step2_mdrun_prod']['input_cpt_path'] = input_cpt_path
         prod_prop['step2_mdrun_prod']['noappend'] = True
     else:
+        
+        # Connect production steps with previous ones
         prod_paths['step1_grompp_md']['input_gro_path'] = equil_paths["step9_mdrun_npt"]['output_gro_path']
         prod_paths['step1_grompp_md']['input_cpt_path'] = equil_paths["step9_mdrun_npt"]['output_cpt_path']
         prod_paths['step1_grompp_md']['input_top_zip_path'] = input_top_path
-        prod_paths['step1_grompp_md']['input_ndx_path'] = equil_paths["step4_make_ndx"]['output_ndx_path']
-        input_ndx_path = equil_paths["step4_make_ndx"]['output_ndx_path']
+        prod_paths['step1_grompp_md']['input_ndx_path'] = input_ndx_path
         
-        # Modify default temperature coupling groups
+        # STEP 1: Prepare production run
         prod_prop["step1_grompp_md"]["mdp"]["define"] = "" # NOTE: here restraint what is asked by the user
         global_log.info("step1_grompp_md: Preprocess production simulation")
         grompp(**prod_paths['step1_grompp_md'], properties=prod_prop["step1_grompp_md"])
         
+        # Update tpr topology
         input_tpr_path = prod_paths['step1_grompp_md']['output_tpr_path']
 
     # STEP 2: free NPT production run
@@ -1714,30 +1781,24 @@ def main_wf(input_pdb_path: Optional[str] = None,
     # Post-processing analysis #
     ############################
     
-    # NOTE: Make these steps fault-tolerant
-    # NOTE: Change the selections to make them more general
-    # NOTE: Improve the centering and fitting if needed using biopython to find specific atoms
-    
     analysis_prefix = "step4_analysis"
     analysis_prop = conf.get_prop_dic(prefix=analysis_prefix)
     analysis_paths = conf.get_paths_dic(prefix=analysis_prefix)
 
+    # Connect post-processing to previous steps
     analysis_paths['step1_gro2pdb']['input_top_path'] = prod_paths["step2_mdrun_prod"]['output_gro_path']
     analysis_paths['step1_gro2pdb']['input_structure_path'] = prod_paths["step2_mdrun_prod"]['output_gro_path']
     analysis_paths['step2_rmsd_equilibrated']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
     analysis_paths['step3_rmsd_experimental']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
     analysis_paths['step4_rgyr']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
     analysis_paths['step5_rmsf']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
-    analysis_paths['step6_dry_str']['input_top_path'] = input_tpr_path
-    analysis_paths['step7_dry_traj']['input_top_path'] = input_tpr_path
     analysis_paths['step7_dry_traj']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
 
-    if input_ndx_path:
-        analysis_paths['step6_dry_str']['input_index_path'] = input_ndx_path
-        analysis_paths['step7_dry_traj']['input_index_path'] = input_ndx_path
-        analysis_paths['step8_center']['input_index_path'] = input_ndx_path
-        analysis_paths['step9_image_traj']['input_index_path'] = input_ndx_path
-        analysis_paths['step10_fit_traj']['input_index_path'] = input_ndx_path
+    post_proces_steps = ['step6_dry_str', 'step7_dry_traj', 'step8_center', 'step9_image_traj', 'step10_fit_traj']
+    for step in post_proces_steps:
+        analysis_paths[step]['input_top_path'] = input_tpr_path
+    for step in post_proces_steps:
+        analysis_paths[step]['input_index_path'] = input_ndx_path
     
     # STEP 1: conversion of topology from gro to pdb
     global_log.info("step1_gro2pdb: Convert topology from GRO to PDB")
@@ -1772,7 +1833,16 @@ def main_wf(input_pdb_path: Optional[str] = None,
         )
     except Exception:
         global_log.exception("step6_dry_str failed with unexpected exception")
+    
+    # Find atom index of central atom in dry system 
+    # Assumption: all ions and waters appear after the dry system atoms, thus the atom index remains the same
+    central_index = get_central_atom_index(analysis_paths["step6_dry_str"]["output_str_path"])
 
+    # Create another index file including the central atom and use it to center the system
+    new_index_file = os.path.join(analysis_prop["step6_dry_str"]["path"], 'new_index.ndx')
+    add_group([central_index], 'Center', input_ndx_path, new_index_file)
+    analysis_paths['step8_center']['input_index_path'] = new_index_file
+        
     # STEPS 7-10: process trajectory: dry, center, image, fit
     try:
         # STEP 7: obtain dry trajectory
