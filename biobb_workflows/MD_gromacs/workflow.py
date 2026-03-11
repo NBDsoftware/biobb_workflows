@@ -3,9 +3,9 @@
 # Importing all the needed libraries
 from typing import List, Dict, Union, Optional, Literal
 from pathlib import Path
+import numpy as np
 import logging
 import argparse
-import shutil
 import time
 import os
 
@@ -93,15 +93,15 @@ def check_inputs(
     input_modes = {
         'input_pdb': {
             'compulsory' : [input_pdb_path],
-            'optional' : [ligands_top_folder]
+            'optional' : [ligands_top_folder, input_plumed_path, input_plumed_folder]
         },
         'prepared_system': {
             'compulsory' : [input_gro_path, input_top_path],
-            'optional' : []
+            'optional' : [input_plumed_path, input_plumed_folder]
         },
         'restart_simulation': {
             'compulsory' : [input_tpr_path, input_cpt_path],
-            'optional' : []
+            'optional' : [input_ndx_path, input_plumed_path, input_plumed_folder]
         }
     }
     
@@ -135,7 +135,12 @@ def check_inputs(
             if not os.path.exists(file):
                 global_log.error(f"File {file} not found.")
                 raise FileNotFoundError(f"File {file} not found.")
-    
+            
+            # Check folders are not empty
+            if os.path.isdir(file) and not os.listdir(file):
+                global_log.error(f"Folder {file} is empty.")
+                raise FileNotFoundError(f"Folder {file} is empty.")
+
     # Set up only option requires input pdb mode
     if setup_only:
         if not used_modes[0] == 'input_pdb':
@@ -160,31 +165,6 @@ def check_inputs(
         global_log.info("Using restart files as input:")
         global_log.info(f"Input TPR file: {input_tpr_path}")
         global_log.info(f"Input CPT file: {input_cpt_path}")
-        
-    # If index file is provided, check it exists
-    if input_ndx_path:
-        global_log.info(f"Input NDX file: {input_ndx_path}")
-        if not os.path.exists(input_ndx_path):
-            global_log.error(f"File {input_ndx_path} not found.")
-            raise FileNotFoundError(f"File {input_ndx_path} not found.")
-    
-    # If plumed file is provided, check it exists
-    if input_plumed_path:
-        global_log.info(f"Input PLUMED file: {input_plumed_path}")
-        if not os.path.exists(input_plumed_path):
-            global_log.error(f"File {input_plumed_path} not found.")
-            raise FileNotFoundError(f"File {input_plumed_path} not found.")
-
-    # If plumed folder is provided, check it exists
-    if input_plumed_folder:
-        global_log.info(f"Input PLUMED folder: {input_plumed_folder}")
-        if not os.path.exists(input_plumed_folder):
-            global_log.error(f"Folder {input_plumed_folder} not found.")
-            raise FileNotFoundError(f"Folder {input_plumed_folder} not found.")
-        # Check the folder is not empty
-        if not os.listdir(input_plumed_folder):
-            global_log.error(f"Folder {input_plumed_folder} is empty.")
-            raise FileNotFoundError(f"Folder {input_plumed_folder} is empty.")
 
     return used_modes[0]
 
@@ -474,6 +454,71 @@ def get_atom_types(pdb_path: str, target_atom_names: List[str]) -> List[str]:
             
     return list(found_atoms)
 
+def get_central_atom_index(pdb_path: str) -> int:
+    """
+    Find the index of the atom closest to the geometric center of a PDB file.
+    
+    Args:
+        pdb_path: Path to the PDB file
+        
+    Returns:
+        The atom index (1-based) of the atom closest to the geometric center
+    """
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure("protein", pdb_path)
+    
+    # Collect all atoms and their coordinates
+    atoms = list(structure.get_atoms())
+    coords = np.array([atom.get_vector().get_array() for atom in atoms])
+    
+    # Calculate geometric center
+    center = coords.mean(axis=0)
+    
+    # Find atom closest to center
+    distances = np.linalg.norm(coords - center, axis=1)
+    central_atom_index = int(np.argmin(distances))+1
+    
+    return central_atom_index
+
+def add_group(atom_indices: List, group_name: str, old_ndx_path: str, new_ndx_path: str) -> None:
+    """
+    Add all the atom indices to a new group at the end of the old ndx file. Save the new ndx file onto
+    a different path.
+
+    Args:
+        atom_indices (List): List of atom indices to add to the new group.
+        group_name (str): Name of the new group.
+        old_ndx_path (str): Path to the existing index file.
+        new_ndx_path (str): Path to save the new index file.
+
+    Returns:
+        None
+    """
+    COLUMNS = 15
+
+    # Format the group header
+    group_block = f"[ {group_name} ]\n"
+
+    # Format indices in rows of 15, right-justified to match GROMACS style
+    for i, idx in enumerate(atom_indices):
+        group_block += f"{idx:>4}"
+        if (i + 1) % COLUMNS == 0:
+            group_block += "\n"
+        else:
+            group_block += " " if (i + 1) < len(atom_indices) else ""
+
+    # Ensure the block ends with a newline
+    if len(atom_indices) % COLUMNS != 0:
+        group_block += "\n"
+
+    # Read old ndx file and append the new group
+    with open(old_ndx_path, 'r') as f:
+        old_content = f.read()
+
+    with open(new_ndx_path, 'w') as f:
+        f.write(old_content)
+        f.write(group_block)
+
 # Process topology - temporal solution 
 def process_ligand_top(input_path: str, output_path: str) -> None:
     """
@@ -536,7 +581,8 @@ def get_input_pdb(input_pdb_path: Optional[str],
                   input_cpt_path: Optional[str],
                   output_path: str) -> str:
     """
-    Convert input coordinates file to a PDB if needed
+    Get the path to the input structure in PDB format. 
+    Converts the input coordinates file to a PDB if needed
     
     Inputs
     ------
@@ -580,6 +626,38 @@ def get_input_pdb(input_pdb_path: Optional[str],
     
     return input_pdb_path
 
+def build_sol_ions_selection(solvent_names: List[str], ion_names: List[str]) -> str:
+    """ 
+    Create a GROMACS selection string based on the Default solvent and ion groups in 
+    GROMACS + the specific solvent and ion names provided. 
+    
+    These groups will be useful for Temperature coupling and post-processing of the traj
+    """
+
+    # Find the selection of default and additional solvent molecules
+    if solvent_names:
+        solvent_selection = f'"SOL" | {" | ".join(f"r {solvent}" for solvent in solvent_names)}'
+    else:
+        solvent_selection = f'"SOL"'
+    
+    # Find the selection of default and additional ions
+    if ion_names:
+        ions_selection = f'"Ion" | {" | ".join(f"a {ion}" for ion in ion_names)}'
+    else:
+        ions_selection = f'"Ion"'
+    
+    # Join both selections
+    return f'{solvent_selection} | {ions_selection}'
+
+def build_sol_ions_group(sol_ions_selection: str) -> str:
+    """ 
+    Create the solvent and ions group from the solvent and ions selection
+    """
+    
+    sol_ions_group = sol_ions_selection.replace('"','')
+    sol_ions_group = sol_ions_group.replace('SOL', '')
+    return f'SOL{sol_ions_group.replace(" | a ", "_").replace(" | r ", "_").replace(" | ", "_")}'
+    
 # YML construction
 def config_contents(
     gmx_bin: str = 'gmx',
@@ -598,8 +676,8 @@ def config_contents(
     prod_time: Optional[float] = 100.0,
     prod_frames: Optional[int] = 2000,
     seed: Optional[int] = -1,
-    ion_names: Optional[List] = None, 
-    solvent_names: Optional[List] = None,
+    sol_ions_selection: str = '"SOL" | "Ion"', 
+    sol_ions_group: str = 'SOL_Ion',
     debug: bool = False,
     ) -> str:
     """
@@ -643,10 +721,10 @@ def config_contents(
         Number of frames to save during the production steps. Default: 2000 frames.
     seed: int
         Seed for random number generation. Default is -1 (random seed).
-    ion_names: list
-        Additional ion names that can be found in the input structure
-    solvent_names: list
-        Additional solvent molecule residue names that can be found in the input structure
+    sol_ions_selection: str
+        GROMACS selection string including all solvent and ion molecules to use in the Temperature coupling and post-processing
+    sol_ions_group: str
+        GROMACS group string including all solvent and ion molecules to use in the Temperature coupling and post-processing
     debug: bool
         Avoid removing temporal files for debugging purposes
 
@@ -690,26 +768,7 @@ def config_contents(
     
     if seed is None:
         seed = -1
-    
-    # Find the selection of default and additional solvent molecules
-    if solvent_names:
-        solvent_selection = f'"SOL" | {" | ".join(f"r {solvent}" for solvent in solvent_names)}'
-    else:
-        solvent_selection = f'"SOL"'
-    
-    # Find the selection of default and additional ions
-    if ion_names:
-        ions_selection = f'"Ion" | {" | ".join(f"a {ion}" for ion in ion_names)}'
-    else:
-        ions_selection = f'"Ion"'
-    
-    # Join both selections
-    solvent_and_ions_selection = f'{solvent_selection} | {ions_selection}'
-    
-    # Convert selection to group name
-    solvent_and_ions_group = solvent_and_ions_selection.replace('"','')
-    solvent_and_ions_group = solvent_and_ions_group.replace('SOL', '')
-    solvent_and_ions_group = f'SOL{solvent_and_ions_group.replace(" | a ", "_").replace(" | r ", "_").replace(" | ", "_")}'
+
     return f""" 
 # Global properties (common for all steps)
 global_properties:
@@ -888,7 +947,7 @@ step2_mdrun_min:
   tool: mdrun
   paths:
     input_tpr_path: dependency/step1_grompp_min/output_tpr_path
-    output_trr_path: min.trr     # NOTE: Make sure we are not writing f***g trr files
+    output_trr_path: min.trr
     output_gro_path: min.gro
     output_edr_path: min.edr
     output_log_path: min.log
@@ -899,7 +958,7 @@ step2_mdrun_min:
     {num_threads_omp_config}
     {mpi_np_config}
 
-# Here we add water and ions group
+# Here we add solvent and ions group
 step3_make_ndx:
   tool: make_ndx 
   paths:
@@ -907,7 +966,7 @@ step3_make_ndx:
     output_ndx_path: index.ndx   
   properties:
     binary_path: {gmx_bin}
-    selection: '{solvent_and_ions_selection}'
+    selection: '{sol_ions_selection}'
 
 # Here we add the complementary group
 step4_make_ndx:
@@ -918,7 +977,7 @@ step4_make_ndx:
     output_ndx_path: index.ndx
   properties:
     binary_path: {gmx_bin}
-    selection: '! "{solvent_and_ions_group}"'
+    selection: '! "{sol_ions_group}"'
 
 step4_energy_min:
   tool: gmx_energy
@@ -942,7 +1001,7 @@ step5_grompp_nvt:
     simulation_type: nvt
     mdp:
       ref-t: {temp} {temp}
-      tc-grps: "!{solvent_and_ions_group} {solvent_and_ions_group}"
+      tc-grps: "!{sol_ions_group} {sol_ions_group}"
       nsteps: {nsteps_equil}
       dt: {dt_in_ps}              
       nstxout: 0           
@@ -993,7 +1052,7 @@ step8_grompp_npt:
       nsteps: {nsteps_equil}
       dt: {dt_in_ps}
       ref-t: {temp} {temp}
-      tc-grps: "!{solvent_and_ions_group} {solvent_and_ions_group}"
+      tc-grps: "!{sol_ions_group} {sol_ions_group}"
       nstxout: 0           
       nstvout: 0
       nstxout-compressed: {equil_traj_freq_steps}
@@ -1045,7 +1104,7 @@ step1_grompp_md:
       nsteps: {nsteps_prod}
       dt: {dt_in_ps} 
       ref-t: {temp} {temp}
-      tc-grps: "!{solvent_and_ions_group} {solvent_and_ions_group}"
+      tc-grps: "!{sol_ions_group} {sol_ions_group}"
       nstxout: 0           
       nstvout: 0
       nstxout-compressed: {prod_traj_freq_steps}
@@ -1150,14 +1209,14 @@ step6_dry_str:
     input_structure_path: dependency/step1_gro2pdb/output_str_path
     input_top_path: dependency/step1_grompp_md/output_tpr_path
     input_index_path: dependency/step4_make_ndx/output_ndx_path
-    output_str_path: dry_structure.gro
+    output_str_path: dry_structure.pdb
   properties:
     binary_path: {gmx_bin}     
-    selection: "!{solvent_and_ions_group}"
+    selection: "!{sol_ions_group}"
     center: True
     pbc: mol
     ur: compact
-
+    
 step7_dry_traj:
   tool: gmx_trjconv_trj
   paths: 
@@ -1167,19 +1226,19 @@ step7_dry_traj:
     output_traj_path: dry_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    selection: "!{solvent_and_ions_group}"
+    selection: "!{sol_ions_group}"
 
 step8_center:
   tool: gmx_image 
   paths:
     input_traj_path: dependency/step7_dry_traj/output_traj_path
-    input_top_path: dependency/step6_dry_str/output_str_path
+    input_top_path: dependency/step1_grompp_md/output_tpr_path
     input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_traj_path: center_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    center_selection: "!{solvent_and_ions_group}"
-    output_selection: "!{solvent_and_ions_group}"
+    center_selection: "Center"
+    output_selection: "!{sol_ions_group}"
     center: True
     ur: compact
     pbc: none
@@ -1188,14 +1247,14 @@ step9_image_traj:
   tool: gmx_image
   paths:
     input_traj_path: dependency/step8_center/output_traj_path
-    input_top_path: dependency/step6_dry_str/output_str_path
+    input_top_path: dependency/step1_grompp_md/output_tpr_path
     input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_traj_path: imaged_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    output_selection: "!{solvent_and_ions_group}"
-    cluster_selection: "!{solvent_and_ions_group}"
-    center_selection: "!{solvent_and_ions_group}"  # NOTE: why is this used??
+    output_selection: "!{sol_ions_group}"
+    cluster_selection: "!{sol_ions_group}"
+    center_selection: "!{sol_ions_group}"  # NOTE: why is this used??
     center: False
     ur: compact
     pbc: mol
@@ -1204,14 +1263,14 @@ step10_fit_traj:
   tool: gmx_image
   paths:
     input_traj_path: dependency/step9_image_traj/output_traj_path
-    input_top_path: dependency/step6_dry_str/output_str_path
+    input_top_path: dependency/step1_grompp_md/output_tpr_path
     input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    fit_selection: "!{solvent_and_ions_group}"
-    center_selection: "!{solvent_and_ions_group}"
-    output_selection: "!{solvent_and_ions_group}"
+    fit_selection: "!{sol_ions_group}"
+    center_selection: "!{sol_ions_group}"
+    output_selection: "!{sol_ions_group}"
     center: False
     fit: rot+trans
 """
@@ -1246,7 +1305,7 @@ def create_config_file(output_path: str, **config_args) -> str:
     # Return True indicating the file was created
     return config_path
     
-    
+  
 # Main workflow
 def main_wf(input_pdb_path: Optional[str] = None, 
             ligands_top_folder: Optional[str] = None, 
@@ -1382,13 +1441,18 @@ def main_wf(input_pdb_path: Optional[str] = None,
                  equil_only,
                  global_log)
     
-    # Find coordinates file
+    # Find PDB coordinates file - used to define groups in configuration
     input_pdb_path = get_input_pdb(input_pdb_path, 
                                    input_gro_path,
                                    input_tpr_path, 
                                    input_cpt_path,
                                    output_path)
 
+    solvent_names = get_residue_types(input_pdb_path, solvent_library)
+    ion_names = get_atom_types(input_pdb_path, ions_library)
+    sol_ions_selection = build_sol_ions_selection(solvent_names, ion_names)
+    sol_ions_group = build_sol_ions_group(sol_ions_selection)
+    
     # Create and load the configuration
     config_args = {
         'gmx_bin': gmx_bin,
@@ -1407,8 +1471,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
         'equil_frames': equil_frames,
         'prod_time': prod_time,
         'prod_frames': prod_frames,
-        'ion_names': get_atom_types(input_pdb_path, ions_library),
-        'solvent_names': get_residue_types(input_pdb_path, solvent_library),
+        'sol_ions_selection': sol_ions_selection, 
+        'sol_ions_group': sol_ions_group,
         'debug': debug
     }
     configuration_path = create_config_file(output_path, **config_args)
@@ -1583,6 +1647,9 @@ def main_wf(input_pdb_path: Optional[str] = None,
         if setup_only:
             global_log.info("Set up only: setup_only flag is set to True! Exiting...")
             return
+    
+        input_gro_path = setup_paths["step9_genion"]["output_gro_path"]
+        input_top_path = setup_paths["step9_genion"]["output_top_zip_path"]
         
     equil_needed = (input_mode == 'input_pdb') or (input_mode == 'prepared_system') 
     if equil_needed:
@@ -1594,10 +1661,6 @@ def main_wf(input_pdb_path: Optional[str] = None,
         equilibrate_prefix = "step2_equil"
         equil_prop = conf.get_prop_dic(prefix=equilibrate_prefix)
         equil_paths = conf.get_paths_dic(prefix=equilibrate_prefix)
-
-        if input_mode == 'input_pdb':
-            input_gro_path = setup_paths["step9_genion"]["output_gro_path"]
-            input_top_path = setup_paths["step9_genion"]["output_top_zip_path"]
             
         # Connect equil steps with previous ones
         equil_paths['step1_grompp_min']['input_gro_path'] = input_gro_path
@@ -1613,13 +1676,14 @@ def main_wf(input_pdb_path: Optional[str] = None,
         global_log.info("step2_mdrun_min: Execute energy minimization")
         mdrun(**equil_paths["step2_mdrun_min"], properties=equil_prop["step2_mdrun_min"])
 
-        # STEP 3: create index file
+        # STEP 3: create index file with custom solvent and ions group
         global_log.info("step3_make_ndx: Create index file")
         make_ndx(**equil_paths["step3_make_ndx"], properties=equil_prop["step3_make_ndx"])
         
-        # STEP 4: create index file
+        # STEP 4: modify index file adding complementary group
         global_log.info("step4_make_ndx: Create index file")
         make_ndx(**equil_paths["step4_make_ndx"], properties=equil_prop["step4_make_ndx"])
+        input_ndx_path = equil_paths["step4_make_ndx"]['output_ndx_path']
 
         # STEP 4: dump potential energy evolution
         global_log.info("step4_energy_min: Compute potential energy during minimization")
@@ -1672,6 +1736,27 @@ def main_wf(input_pdb_path: Optional[str] = None,
             global_log.info("Equilibration only: equil_only flag is set to True! Exiting...")
             return
     
+    elif input_mode == 'restart_simulation':
+        
+        # Create index file - reproduce step 3 and 4 from equil section
+        ndx_prefix = "step2_make_ndx"
+        ndx_prop = conf.get_prop_dic(prefix=ndx_prefix)
+        ndx_paths = conf.get_paths_dic(prefix=ndx_prefix)
+
+        ndx_paths['step3_make_ndx']['input_structure_path'] = input_pdb_path
+        ndx_paths['step4_make_ndx']['input_structure_path'] = input_pdb_path
+
+        # STEP 3: create index file with custom solvent and ions group
+        global_log.info("step3_make_ndx: Create index file")
+        make_ndx(**ndx_paths["step3_make_ndx"], properties=ndx_prop["step3_make_ndx"])
+        
+        # STEP 4: modify index file adding complementary group
+        global_log.info("step4_make_ndx: Create index file")
+        make_ndx(**ndx_paths["step4_make_ndx"], properties=ndx_prop["step4_make_ndx"])
+        
+        # Update ndx path
+        input_ndx_path = ndx_paths["step4_make_ndx"]['output_ndx_path']
+
     ##########################
     # Production simulations #
     ##########################
@@ -1680,11 +1765,9 @@ def main_wf(input_pdb_path: Optional[str] = None,
     prod_prop = conf.get_prop_dic(prefix=production_prefix)
     prod_paths = conf.get_paths_dic(prefix=production_prefix)
     
-    # Connect production steps with previous ones
-    # STEP 1: Prepare the production run
-    if input_mode == 'restart_simulation':           # NOTE: remember to include -noapend when restarting from a cpt file!
-                                                     # NOTE: also remember to adapt the paths to the traj files from the plugin - names will change with replicas
-        # Extend the simulation time
+    if input_mode == 'restart_simulation': 
+          
+        # STEP 1: Extend the simulation time
         prod_paths['step1B_convert_tpr']['input_tpr_path'] = input_tpr_path
         global_log.info("step1B_convert_tpr: Extend the simulation time of the input TPR file")
         convert_tpr(**prod_paths['step1B_convert_tpr'], properties=prod_prop['step1B_convert_tpr'])
@@ -1693,17 +1776,19 @@ def main_wf(input_pdb_path: Optional[str] = None,
         prod_paths['step2_mdrun_prod']['input_cpt_path'] = input_cpt_path
         prod_prop['step2_mdrun_prod']['noappend'] = True
     else:
+        
+        # Connect production steps with previous ones
         prod_paths['step1_grompp_md']['input_gro_path'] = equil_paths["step9_mdrun_npt"]['output_gro_path']
         prod_paths['step1_grompp_md']['input_cpt_path'] = equil_paths["step9_mdrun_npt"]['output_cpt_path']
         prod_paths['step1_grompp_md']['input_top_zip_path'] = input_top_path
-        prod_paths['step1_grompp_md']['input_ndx_path'] = equil_paths["step4_make_ndx"]['output_ndx_path']
-        input_ndx_path = equil_paths["step4_make_ndx"]['output_ndx_path']
+        prod_paths['step1_grompp_md']['input_ndx_path'] = input_ndx_path
         
-        # Modify default temperature coupling groups
+        # STEP 1: Prepare production run
         prod_prop["step1_grompp_md"]["mdp"]["define"] = "" # NOTE: here restraint what is asked by the user
         global_log.info("step1_grompp_md: Preprocess production simulation")
         grompp(**prod_paths['step1_grompp_md'], properties=prod_prop["step1_grompp_md"])
         
+        # Update tpr topology
         input_tpr_path = prod_paths['step1_grompp_md']['output_tpr_path']
 
     # STEP 2: free NPT production run
@@ -1717,30 +1802,24 @@ def main_wf(input_pdb_path: Optional[str] = None,
     # Post-processing analysis #
     ############################
     
-    # NOTE: Make these steps fault-tolerant
-    # NOTE: Change the selections to make them more general
-    # NOTE: Improve the centering and fitting if needed using biopython to find specific atoms
-    
     analysis_prefix = "step4_analysis"
     analysis_prop = conf.get_prop_dic(prefix=analysis_prefix)
     analysis_paths = conf.get_paths_dic(prefix=analysis_prefix)
 
+    # Connect post-processing to previous steps
     analysis_paths['step1_gro2pdb']['input_top_path'] = prod_paths["step2_mdrun_prod"]['output_gro_path']
     analysis_paths['step1_gro2pdb']['input_structure_path'] = prod_paths["step2_mdrun_prod"]['output_gro_path']
     analysis_paths['step2_rmsd_equilibrated']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
     analysis_paths['step3_rmsd_experimental']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
     analysis_paths['step4_rgyr']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
     analysis_paths['step5_rmsf']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
-    analysis_paths['step6_dry_str']['input_top_path'] = input_tpr_path
-    analysis_paths['step7_dry_traj']['input_top_path'] = input_tpr_path
     analysis_paths['step7_dry_traj']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
 
-    if input_ndx_path:
-        analysis_paths['step6_dry_str']['input_index_path'] = input_ndx_path
-        analysis_paths['step7_dry_traj']['input_index_path'] = input_ndx_path
-        analysis_paths['step8_center']['input_index_path'] = input_ndx_path
-        analysis_paths['step9_image_traj']['input_index_path'] = input_ndx_path
-        analysis_paths['step10_fit_traj']['input_index_path'] = input_ndx_path
+    post_proces_steps = ['step6_dry_str', 'step7_dry_traj', 'step8_center', 'step9_image_traj', 'step10_fit_traj']
+    for step in post_proces_steps:
+        analysis_paths[step]['input_top_path'] = input_tpr_path
+    for step in post_proces_steps:
+        analysis_paths[step]['input_index_path'] = input_ndx_path
     
     # STEP 1: conversion of topology from gro to pdb
     global_log.info("step1_gro2pdb: Convert topology from GRO to PDB")
@@ -1775,7 +1854,16 @@ def main_wf(input_pdb_path: Optional[str] = None,
         )
     except Exception:
         global_log.exception("step6_dry_str failed with unexpected exception")
+    
+    # Find atom index of central atom in dry system 
+    # Assumption: all ions and waters appear after the dry system atoms, thus the atom index remains the same
+    central_index = get_central_atom_index(analysis_paths["step6_dry_str"]["output_str_path"])
 
+    # Create another index file including the central atom and use it to center the system
+    new_index_file = os.path.join(analysis_prop["step6_dry_str"]["path"], 'new_index.ndx')
+    add_group([central_index], 'Center', input_ndx_path, new_index_file)
+    analysis_paths['step8_center']['input_index_path'] = new_index_file
+        
     # STEPS 7-10: process trajectory: dry, center, image, fit
     try:
         # STEP 7: obtain dry trajectory
