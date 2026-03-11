@@ -560,6 +560,38 @@ def get_input_pdb(input_pdb_path: Optional[str],
     
     return input_pdb_path
 
+def build_sol_ions_selection(solvent_names: List[str], ion_names: List[str]) -> str:
+    """ 
+    Create a GROMACS selection string based on the Default solvent and ion groups in 
+    GROMACS + the specific solvent and ion names provided. 
+    
+    These groups will be useful for Temperature coupling and post-processing of the traj
+    """
+
+    # Find the selection of default and additional solvent molecules
+    if solvent_names:
+        solvent_selection = f'"SOL" | {" | ".join(f"r {solvent}" for solvent in solvent_names)}'
+    else:
+        solvent_selection = f'"SOL"'
+    
+    # Find the selection of default and additional ions
+    if ion_names:
+        ions_selection = f'"Ion" | {" | ".join(f"a {ion}" for ion in ion_names)}'
+    else:
+        ions_selection = f'"Ion"'
+    
+    # Join both selections
+    return f'{solvent_selection} | {ions_selection}'
+
+def build_sol_ions_group(sol_ions_selection: str) -> str:
+    """ 
+    Create the solvent and ions group from the solvent and ions selection
+    """
+    
+    sol_ions_group = sol_ions_selection.replace('"','')
+    sol_ions_group = sol_ions_group.replace('SOL', '')
+    return f'SOL{sol_ions_group.replace(" | a ", "_").replace(" | r ", "_").replace(" | ", "_")}'
+    
 # YML construction
 def config_contents(
     gmx_bin: str = 'gmx',
@@ -578,8 +610,8 @@ def config_contents(
     prod_time: Optional[float] = 100.0,
     prod_frames: Optional[int] = 2000,
     seed: Optional[int] = -1,
-    ion_names: Optional[List] = None, 
-    solvent_names: Optional[List] = None,
+    sol_ions_selection: str = '"SOL" | "Ion"', 
+    sol_ions_group: str = 'SOL_Ion',
     debug: bool = False,
     ) -> str:
     """
@@ -623,10 +655,10 @@ def config_contents(
         Number of frames to save during the production steps. Default: 2000 frames.
     seed: int
         Seed for random number generation. Default is -1 (random seed).
-    ion_names: list
-        Additional ion names that can be found in the input structure
-    solvent_names: list
-        Additional solvent molecule residue names that can be found in the input structure
+    sol_ions_selection: str
+        GROMACS selection string including all solvent and ion molecules to use in the Temperature coupling and post-processing
+    sol_ions_group: str
+        GROMACS group string including all solvent and ion molecules to use in the Temperature coupling and post-processing
     debug: bool
         Avoid removing temporal files for debugging purposes
 
@@ -670,26 +702,7 @@ def config_contents(
     
     if seed is None:
         seed = -1
-    
-    # Find the selection of default and additional solvent molecules
-    if solvent_names:
-        solvent_selection = f'"SOL" | {" | ".join(f"r {solvent}" for solvent in solvent_names)}'
-    else:
-        solvent_selection = f'"SOL"'
-    
-    # Find the selection of default and additional ions
-    if ion_names:
-        ions_selection = f'"Ion" | {" | ".join(f"a {ion}" for ion in ion_names)}'
-    else:
-        ions_selection = f'"Ion"'
-    
-    # Join both selections
-    solvent_and_ions_selection = f'{solvent_selection} | {ions_selection}'
-    
-    # Convert selection to group name
-    solvent_and_ions_group = solvent_and_ions_selection.replace('"','')
-    solvent_and_ions_group = solvent_and_ions_group.replace('SOL', '')
-    solvent_and_ions_group = f'SOL{solvent_and_ions_group.replace(" | a ", "_").replace(" | r ", "_").replace(" | ", "_")}'
+
     return f""" 
 # Global properties (common for all steps)
 global_properties:
@@ -868,7 +881,7 @@ step2_mdrun_min:
   tool: mdrun
   paths:
     input_tpr_path: dependency/step1_grompp_min/output_tpr_path
-    output_trr_path: min.trr     # NOTE: Make sure we are not writing f***g trr files
+    output_trr_path: min.trr
     output_gro_path: min.gro
     output_edr_path: min.edr
     output_log_path: min.log
@@ -879,7 +892,7 @@ step2_mdrun_min:
     {num_threads_omp_config}
     {mpi_np_config}
 
-# Here we add water and ions group
+# Here we add solvent and ions group
 step3_make_ndx:
   tool: make_ndx 
   paths:
@@ -887,7 +900,7 @@ step3_make_ndx:
     output_ndx_path: index.ndx   
   properties:
     binary_path: {gmx_bin}
-    selection: '{solvent_and_ions_selection}'
+    selection: '{sol_ions_selection}'
 
 # Here we add the complementary group
 step4_make_ndx:
@@ -898,7 +911,7 @@ step4_make_ndx:
     output_ndx_path: index.ndx
   properties:
     binary_path: {gmx_bin}
-    selection: '! "{solvent_and_ions_group}"'
+    selection: '! "{sol_ions_group}"'
 
 step4_energy_min:
   tool: gmx_energy
@@ -922,7 +935,7 @@ step5_grompp_nvt:
     simulation_type: nvt
     mdp:
       ref-t: {temp} {temp}
-      tc-grps: "!{solvent_and_ions_group} {solvent_and_ions_group}"
+      tc-grps: "!{sol_ions_group} {sol_ions_group}"
       nsteps: {nsteps_equil}
       dt: {dt_in_ps}              
       nstxout: 0           
@@ -973,7 +986,7 @@ step8_grompp_npt:
       nsteps: {nsteps_equil}
       dt: {dt_in_ps}
       ref-t: {temp} {temp}
-      tc-grps: "!{solvent_and_ions_group} {solvent_and_ions_group}"
+      tc-grps: "!{sol_ions_group} {sol_ions_group}"
       nstxout: 0           
       nstvout: 0
       nstxout-compressed: {equil_traj_freq_steps}
@@ -1025,7 +1038,7 @@ step1_grompp_md:
       nsteps: {nsteps_prod}
       dt: {dt_in_ps} 
       ref-t: {temp} {temp}
-      tc-grps: "!{solvent_and_ions_group} {solvent_and_ions_group}"
+      tc-grps: "!{sol_ions_group} {sol_ions_group}"
       nstxout: 0           
       nstvout: 0
       nstxout-compressed: {prod_traj_freq_steps}
@@ -1130,14 +1143,14 @@ step6_dry_str:
     input_structure_path: dependency/step1_gro2pdb/output_str_path
     input_top_path: dependency/step1_grompp_md/output_tpr_path
     input_index_path: dependency/step4_make_ndx/output_ndx_path
-    output_str_path: dry_structure.gro
+    output_str_path: dry_structure.pdb
   properties:
     binary_path: {gmx_bin}     
-    selection: "!{solvent_and_ions_group}"
+    selection: "!{sol_ions_group}"
     center: True
     pbc: mol
     ur: compact
-
+    
 step7_dry_traj:
   tool: gmx_trjconv_trj
   paths: 
@@ -1147,19 +1160,19 @@ step7_dry_traj:
     output_traj_path: dry_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    selection: "!{solvent_and_ions_group}"
+    selection: "!{sol_ions_group}"
 
 step8_center:
   tool: gmx_image 
   paths:
     input_traj_path: dependency/step7_dry_traj/output_traj_path
-    input_top_path: dependency/step6_dry_str/output_str_path
+    input_top_path: dependency/step1_grompp_md/output_tpr_path
     input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_traj_path: center_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    center_selection: "!{solvent_and_ions_group}"
-    output_selection: "!{solvent_and_ions_group}"
+    center_selection: "Center"
+    output_selection: "!{sol_ions_group}"
     center: True
     ur: compact
     pbc: none
@@ -1168,14 +1181,14 @@ step9_image_traj:
   tool: gmx_image
   paths:
     input_traj_path: dependency/step8_center/output_traj_path
-    input_top_path: dependency/step6_dry_str/output_str_path
+    input_top_path: dependency/step1_grompp_md/output_tpr_path
     input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_traj_path: imaged_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    output_selection: "!{solvent_and_ions_group}"
-    cluster_selection: "!{solvent_and_ions_group}"
-    center_selection: "!{solvent_and_ions_group}"  # NOTE: why is this used??
+    output_selection: "!{sol_ions_group}"
+    cluster_selection: "!{sol_ions_group}"
+    center_selection: "!{sol_ions_group}"  # NOTE: why is this used??
     center: False
     ur: compact
     pbc: mol
@@ -1184,14 +1197,14 @@ step10_fit_traj:
   tool: gmx_image
   paths:
     input_traj_path: dependency/step9_image_traj/output_traj_path
-    input_top_path: dependency/step6_dry_str/output_str_path
+    input_top_path: dependency/step1_grompp_md/output_tpr_path
     input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    fit_selection: "!{solvent_and_ions_group}"
-    center_selection: "!{solvent_and_ions_group}"
-    output_selection: "!{solvent_and_ions_group}"
+    fit_selection: "!{sol_ions_group}"
+    center_selection: "!{sol_ions_group}"
+    output_selection: "!{sol_ions_group}"
     center: False
     fit: rot+trans
 """
@@ -1226,7 +1239,7 @@ def create_config_file(output_path: str, **config_args) -> str:
     # Return True indicating the file was created
     return config_path
     
-    
+  
 # Main workflow
 def main_wf(input_pdb_path: Optional[str] = None, 
             ligands_top_folder: Optional[str] = None, 
@@ -1369,6 +1382,11 @@ def main_wf(input_pdb_path: Optional[str] = None,
                                    input_cpt_path,
                                    output_path)
 
+    solvent_names = get_residue_types(input_pdb_path, solvent_library)
+    ion_names = get_atom_types(input_pdb_path, ions_library)
+    sol_ions_selection = build_sol_ions_selection(solvent_names, ion_names)
+    sol_ions_group = build_sol_ions_group(sol_ions_selection)
+    
     # Create and load the configuration
     config_args = {
         'gmx_bin': gmx_bin,
@@ -1387,8 +1405,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
         'equil_frames': equil_frames,
         'prod_time': prod_time,
         'prod_frames': prod_frames,
-        'ion_names': get_atom_types(input_pdb_path, ions_library),
-        'solvent_names': get_residue_types(input_pdb_path, solvent_library),
+        'sol_ions_selection': sol_ions_selection, 
+        'sol_ions_group': sol_ions_group,
         'debug': debug
     }
     configuration_path = create_config_file(output_path, **config_args)
