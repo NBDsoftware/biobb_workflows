@@ -60,7 +60,6 @@ def check_inputs(
     ligands_top_folder: Optional[str], 
     input_tpr_path: Optional[str],
     input_cpt_path: Optional[str],
-    input_ndx_path: Optional[str],
     input_plumed_path: Optional[str],
     input_plumed_folder: Optional[str],
     setup_only: Optional[bool],
@@ -85,7 +84,6 @@ def check_inputs(
         ligands_top_folder (str): Path to the folder with the ligands .itp files.
         input_tpr_path (str): Path to already-prepared binary input run file
         input_cpt_path (str): Path to checkpoint file.
-        input_ndx_path (str): Path to the index file.
         input_plumed_path (str): Path to the plumed file.
         input_plumed_folder (str): Path to the folder with the plumed files.
         setup_only (bool): Condition for the user to request just the setup of the simulation
@@ -105,7 +103,7 @@ def check_inputs(
         },
         'restart_simulation': {
             'compulsory' : [input_tpr_path, input_cpt_path],
-            'optional' : [input_ndx_path, input_plumed_path, input_plumed_folder]
+            'optional' : [input_plumed_path, input_plumed_folder]
         }
     }
     
@@ -1335,7 +1333,6 @@ def main_wf(input_pdb_path: Optional[str] = None,
             input_top_path: Optional[str] = None, 
             input_tpr_path: Optional[str] = None, 
             input_cpt_path: Optional[str] = None,
-            input_ndx_path: Optional[str] = None,
             input_plumed_path: Optional[str] = None,
             input_plumed_folder: Optional[str] = None, 
             gmx_bin: Optional[str] = 'gmx',
@@ -1377,8 +1374,6 @@ def main_wf(input_pdb_path: Optional[str] = None,
             path to already-prepared binary input run file (.tpr)
         input_cpt_path:
             path to input checkpoint file (.cpt)
-        input_ndx_path:
-            path to input index file (.ndx)
         input_plumed_path:
             path to the main PLUMED input file. If provided, PLUMED will be used during the simulation. (.dat)
         input_plumed_folder:
@@ -1456,7 +1451,6 @@ def main_wf(input_pdb_path: Optional[str] = None,
                  ligands_top_folder, 
                  input_tpr_path,
                  input_cpt_path,
-                 input_ndx_path,
                  input_plumed_path,
                  input_plumed_folder,
                  setup_only,
@@ -1981,12 +1975,6 @@ if __name__ == "__main__":
                         Default: None""",
                         required=False)
 
-    parser.add_argument('--input_ndx', dest='input_ndx_path', type=str,
-                        help="""Input index file (.ndx) to use in the simulation. If not provided no index file will be used
-                        for the analysis of the trajectories and only standard groups will be available.
-                        Default: None""",
-                        required=False)
-
     parser.add_argument('--input_plumed_path', dest='input_plumed_path', type=str,
                         help="""Path to the main PLUMED input file (plumed.dat). If provided, PLUMED will be used during the production run.
                         Default: None""",
@@ -2121,7 +2109,6 @@ if __name__ == "__main__":
             input_top_path=args.input_top_path,
             input_tpr_path=args.input_tpr_path,
             input_cpt_path=args.input_cpt_path,
-            input_ndx_path=args.input_ndx_path,
             input_plumed_path=args.input_plumed_path,
             input_plumed_folder=args.input_plumed_folder, 
             gmx_bin=args.gmx_bin,
