@@ -373,6 +373,8 @@ def read_protonation_states(pdb_file: str, resname: str, global_log) -> List[str
                     protonation_states = ""
                     # Update the old chain ID
                     old_chain_id = pdb_chain_id
+                    # Update the old pdb_resnum (new chain might start back at 1)
+                    old_pdb_resnum = 0
                 
                 try:
                     pdb_resnum = int(pdb_resnum)
