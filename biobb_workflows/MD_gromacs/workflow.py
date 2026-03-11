@@ -1736,6 +1736,27 @@ def main_wf(input_pdb_path: Optional[str] = None,
             global_log.info("Equilibration only: equil_only flag is set to True! Exiting...")
             return
     
+    elif input_mode == 'restart_simulation':
+        
+        # Create index file - reproduce step 3 and 4 from equil section
+        ndx_prefix = "step2_make_ndx"
+        ndx_prop = conf.get_prop_dic(prefix=ndx_prefix)
+        ndx_paths = conf.get_paths_dic(prefix=ndx_prefix)
+
+        ndx_paths['step3_make_ndx']['input_structure_path'] = input_pdb_path
+        ndx_paths['step4_make_ndx']['input_structure_path'] = input_pdb_path
+
+        # STEP 3: create index file with custom solvent and ions group
+        global_log.info("step3_make_ndx: Create index file")
+        make_ndx(**ndx_paths["step3_make_ndx"], properties=ndx_prop["step3_make_ndx"])
+        
+        # STEP 4: modify index file adding complementary group
+        global_log.info("step4_make_ndx: Create index file")
+        make_ndx(**ndx_paths["step4_make_ndx"], properties=ndx_prop["step4_make_ndx"])
+        
+        # Update ndx path
+        input_ndx_path = ndx_paths["step4_make_ndx"]['output_ndx_path']
+
     ##########################
     # Production simulations #
     ##########################
