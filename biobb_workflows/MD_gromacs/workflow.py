@@ -93,15 +93,15 @@ def check_inputs(
     input_modes = {
         'input_pdb': {
             'compulsory' : [input_pdb_path],
-            'optional' : [ligands_top_folder]
+            'optional' : [ligands_top_folder, input_plumed_path, input_plumed_folder]
         },
         'prepared_system': {
             'compulsory' : [input_gro_path, input_top_path],
-            'optional' : []
+            'optional' : [input_plumed_path, input_plumed_folder]
         },
         'restart_simulation': {
             'compulsory' : [input_tpr_path, input_cpt_path],
-            'optional' : []
+            'optional' : [input_ndx_path, input_plumed_path, input_plumed_folder]
         }
     }
     
@@ -135,7 +135,12 @@ def check_inputs(
             if not os.path.exists(file):
                 global_log.error(f"File {file} not found.")
                 raise FileNotFoundError(f"File {file} not found.")
-    
+            
+            # Check folders are not empty
+            if os.path.isdir(file) and not os.listdir(file):
+                global_log.error(f"Folder {file} is empty.")
+                raise FileNotFoundError(f"Folder {file} is empty.")
+
     # Set up only option requires input pdb mode
     if setup_only:
         if not used_modes[0] == 'input_pdb':
@@ -160,31 +165,6 @@ def check_inputs(
         global_log.info("Using restart files as input:")
         global_log.info(f"Input TPR file: {input_tpr_path}")
         global_log.info(f"Input CPT file: {input_cpt_path}")
-        
-    # If index file is provided, check it exists
-    if input_ndx_path:
-        global_log.info(f"Input NDX file: {input_ndx_path}")
-        if not os.path.exists(input_ndx_path):
-            global_log.error(f"File {input_ndx_path} not found.")
-            raise FileNotFoundError(f"File {input_ndx_path} not found.")
-    
-    # If plumed file is provided, check it exists
-    if input_plumed_path:
-        global_log.info(f"Input PLUMED file: {input_plumed_path}")
-        if not os.path.exists(input_plumed_path):
-            global_log.error(f"File {input_plumed_path} not found.")
-            raise FileNotFoundError(f"File {input_plumed_path} not found.")
-
-    # If plumed folder is provided, check it exists
-    if input_plumed_folder:
-        global_log.info(f"Input PLUMED folder: {input_plumed_folder}")
-        if not os.path.exists(input_plumed_folder):
-            global_log.error(f"Folder {input_plumed_folder} not found.")
-            raise FileNotFoundError(f"Folder {input_plumed_folder} not found.")
-        # Check the folder is not empty
-        if not os.listdir(input_plumed_folder):
-            global_log.error(f"Folder {input_plumed_folder} is empty.")
-            raise FileNotFoundError(f"Folder {input_plumed_folder} is empty.")
 
     return used_modes[0]
 
