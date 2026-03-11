@@ -1581,6 +1581,9 @@ def main_wf(input_pdb_path: Optional[str] = None,
         if setup_only:
             global_log.info("Set up only: setup_only flag is set to True! Exiting...")
             return
+    
+        input_gro_path = setup_paths["step9_genion"]["output_gro_path"]
+        input_top_path = setup_paths["step9_genion"]["output_top_zip_path"]
         
     equil_needed = (input_mode == 'input_pdb') or (input_mode == 'prepared_system') 
     if equil_needed:
@@ -1592,10 +1595,6 @@ def main_wf(input_pdb_path: Optional[str] = None,
         equilibrate_prefix = "step2_equil"
         equil_prop = conf.get_prop_dic(prefix=equilibrate_prefix)
         equil_paths = conf.get_paths_dic(prefix=equilibrate_prefix)
-
-        if input_mode == 'input_pdb':
-            input_gro_path = setup_paths["step9_genion"]["output_gro_path"]
-            input_top_path = setup_paths["step9_genion"]["output_top_zip_path"]
             
         # Connect equil steps with previous ones
         equil_paths['step1_grompp_min']['input_gro_path'] = input_gro_path
