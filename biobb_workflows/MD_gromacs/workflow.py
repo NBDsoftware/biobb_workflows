@@ -698,6 +698,7 @@ def config_contents(
     solvent_selection: str = '"SOL" | "Ion"', 
     solvent_group: str = 'SOL_Ion',
     solute_group: str = 'Protein',
+    keep_solvent: bool = False,
     debug: bool = False,
     ) -> str:
     """
@@ -747,6 +748,8 @@ def config_contents(
         GROMACS group string including all solvent and ion molecules to use in the Temperature coupling and post-processing
     solute_group: str
         GROMACS group string including all solute molecules to use in the Temperature coupling and post-processing
+    keep_solvent: bool
+        Keep solvent and ions in the final post-processed trajectory.
     debug: bool
         Avoid removing temporal files for debugging purposes
 
@@ -790,6 +793,9 @@ def config_contents(
     
     if seed is None:
         seed = -1
+        
+    # Define the output group based on the user's choice
+    output_group = "System" if keep_solvent else solute_group
 
     return f""" 
 # Global properties (common for all steps)
@@ -1234,7 +1240,7 @@ step6_dry_str:
     output_str_path: dry_structure.pdb
   properties:
     binary_path: {gmx_bin}     
-    selection: "{solute_group}"
+    selection: "{output_group}"
     center: True
     pbc: mol
     ur: compact
@@ -1248,7 +1254,7 @@ step7_dry_traj:
     output_traj_path: dry_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    selection: "{solute_group}"
+    selection: "{output_group}"
 
 step8_center:
   tool: gmx_image 
@@ -1260,7 +1266,7 @@ step8_center:
   properties:
     binary_path: {gmx_bin}     
     center_selection: "Center"
-    output_selection: "{solute_group}"
+    output_selection: "{output_group}"
     center: True
     ur: compact
     pbc: none
@@ -1274,8 +1280,7 @@ step9_image_traj:
     output_traj_path: imaged_traj.xtc
   properties:
     binary_path: {gmx_bin}     
-    output_selection: "{solute_group}"
-    cluster_selection: "{solute_group}"
+    output_selection: "{output_group}"
     center_selection: "{solute_group}"  # NOTE: is this used at all here?
     center: False
     ur: compact
@@ -1292,7 +1297,7 @@ step10_fit_traj:
     binary_path: {gmx_bin}     
     fit_selection: "{solute_group}"
     center_selection: "{solute_group}"
-    output_selection: "{solute_group}"
+    output_selection: "{output_group}"
     center: False
     fit: rot+trans
 """
@@ -1356,6 +1361,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
             prod_time: Optional[float] = 100,
             prod_frames: Optional[int] = 2000,
             remove_raw_traj: Optional[bool] = False,
+            keep_solvent: Optional[bool] = False,
             debug: Optional[bool] = False,
             output_path: Optional[str] = 'output'
     ):
@@ -1397,31 +1403,34 @@ def main_wf(input_pdb_path: Optional[str] = None,
         restart:
             whether to restart the workflow from the last completed step or start from the beginning.
         forcefield: 
-            forcefield to be used by pdb2gmx to generate the topology. Default: amber99sb-ildn. 
+            forcefield to be used by pdb2gmx to generate the topology. 
             See values supported by pdb2gmx (gromos45a3, charmm27, gromos53a6, amber96, amber99, 
             gromos43a2, gromos54a7, gromos43a1, amberGS, gromos53a5, amber99sb, amber03, amber99sb-ildn, 
             oplsaa, amber94, amber99sb-star-ildn-mut). 
         ions_concentration: 
-            salt concentration to be used in the simulation in mols/L. Default: 0.15.
+            salt concentration to be used in the simulation in mols/L.
         temperature:
-            temperature to be used in the simulation. Default: 300.0.
+            temperature to be used in the simulation.
         random_seed:
-            random seed to be used to generate velocities and control the temperature. Default: -1.
+            random seed to be used to generate velocities and control the temperature.
         setup_only: 
             whether to only setup the system or also run the simulations
         dt:
-            time step to be used in the simulation. Default: 2 fs.
+            time step to be used in the simulation.
         equil_time:
-            Time of each equilibration simulation in ns. Default: 1 ns.
+            Time of each equilibration simulation in ns.
         equil_frames:
-            Number of frames to save during the equilibration steps. Default: 500 frames.
+            Number of frames to save during the equilibration steps.
         equil_only: 
             whether to only run the equilibration or also run the production simulations
         prod_time: 
-            Time of production simulation in ns. Default: 100 ns.
+            Time of production simulation in ns.
         prod_frames:
+            Number of frames to save during the production step.
         remove_raw_traj:
             Delete the heavy, raw production trajectories after post-processing is complete to save disk space.
+        keep_solvent:
+            Keep solvent and ions in the final post-processed trajectory.
         debug:
             whether to run the workflow in debug mode (keep temporary files)
         output_path: 
@@ -1493,6 +1502,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
         'solvent_selection': solvent_selection, 
         'solvent_group': solvent_group,
         'solute_group': solute_group,
+        'keep_solvent': keep_solvent,
         'debug': debug
     }
     configuration_path = create_config_file(output_path, **config_args)
@@ -2000,12 +2010,12 @@ if __name__ == "__main__":
                         Default: None""",
                         required=False)
 
-    # NOTE: Add an option to remove raw data and just keep prepared traj
     # NOTE: Add an option to leave waters and ions in the prepared traj and top - all
+    # NOTE: Add option to keep specific ions in final dry trajectory
+
     # NOTE: Add option for H mass repartitioning
     # NOTE: Add flag to determine what should remain restrained during the production run - currently everything is free always
     # NOTE: Add progressive release of position restraints during equilibration (additional steps if needed)
-    # NOTE: Add option to keep specific ions in final dry trajectory
 
     #########################
     # Configuration options #
@@ -2016,23 +2026,23 @@ if __name__ == "__main__":
                         help="Configuration file (YAML)",
                         required=False)
 
-    parser.add_argument('--gmx_bin', dest='gmx_bin', type=str,
+    parser.add_argument('--gmx_bin', type=str,
                         help="Path to GROMACS binary (gmx for single node and gmx_mpi for multi-node). Default: gmx",
                         required=False, default='gmx')
     
-    parser.add_argument('--mpi_bin', dest='mpi_bin', type=str,
+    parser.add_argument('--mpi_bin', type=str,
                         help="Path to MPI binary. Default: null",
                         required=False, default='null')
     
-    parser.add_argument('--mpi_np', dest='mpi_np', type=int,
+    parser.add_argument('--mpi_np', type=int,
                         help="Number of MPI processes given to the mpi_bin. Default: None",
                         required=False)
     
-    parser.add_argument('--num_threads_mpi', dest='num_threads_mpi', type=int,
+    parser.add_argument('--num_threads_mpi', type=int,
                         help="Number of MPI threads. Default: 0 (Let GROMACS guess)",
                         required=False, default=0)
     
-    parser.add_argument('--num_threads_omp', dest='num_threads_omp', type=int,
+    parser.add_argument('--num_threads_omp', type=int,
                         help="Number of OpenMP threads. Default: 0 (Let GROMACS guess)",
                         required=False, default=0)
 
@@ -2045,11 +2055,11 @@ if __name__ == "__main__":
                         help="Restart the workflow from the last completed step. Default: False",
                         required=False, default=False)
 
-    parser.add_argument('--forcefield', dest='forcefield', type=str,
+    parser.add_argument('--forcefield', type=str,
                         help="Forcefield to use. Default: amber99sb-ildn",
                         required=False, default='amber99sb-ildn')
 
-    parser.add_argument('--ions_concentration', dest='ions_concentration', type=float,
+    parser.add_argument('--ions_concentration', type=float,
                         help="Concentration of ions in the system in mol/L (M). Default: 0.15 M",
                         required=False, default=0.15)
     
@@ -2065,15 +2075,15 @@ if __name__ == "__main__":
                         help="Only setup the system. Default: False",
                         required=False, default=False)
     
-    parser.add_argument('--dt', dest='dt', type=float,
+    parser.add_argument('--dt', type=float,
                         help="Time step in fs. Default: 2 fs",
                         required=False, default=2)
     
-    parser.add_argument('--equil_time', dest='equil_time', type=float,
+    parser.add_argument('--equil_time', type=float,
                         help="Time of each equilibration step in ns. Default: 1.0 ns",
                         required=False, default=1.0)
 
-    parser.add_argument('--equil_frames', dest='equil_frames', type=int,
+    parser.add_argument('--equil_frames', type=int,
                         help="Number of frames to save during the equilibration steps. Default: 500 frames",
                         required=False, default=500)
     
@@ -2081,16 +2091,20 @@ if __name__ == "__main__":
                         help="Only run the equilibration steps. Default: False",
                         required=False, default=False)
     
-    parser.add_argument('--prod_time', dest='prod_time', type=float,
+    parser.add_argument('--prod_time', type=float,
                         help="Total time of the production simulation in ns. Default: 100.0 ns",
                         required=False, default=100.0)
 
-    parser.add_argument('--prod_frames', dest='prod_frames', type=int,
+    parser.add_argument('--prod_frames', type=int,
                         help="Number of frames to save during the production steps. Default: 2000 frames",
                         required=False, default=2000)
     
     parser.add_argument('--remove_raw_traj', action='store_true',
                         help="Delete the heavy, raw production trajectories after post-processing is complete to save disk space. Default: False",
+                        required=False, default=False)
+    
+    parser.add_argument('--keep_solvent', action='store_true',
+                        help="Keep solvent and ions in the final post-processed trajectory. Default: False",
                         required=False, default=False)
     
     parser.add_argument('--debug', action='store_true',
@@ -2149,5 +2163,6 @@ if __name__ == "__main__":
             prod_time=args.prod_time, 
             prod_frames=args.prod_frames,
             remove_raw_traj=args.remove_raw_traj,
+            keep_solvent=args.keep_solvent,
             debug=args.debug,
             output_path=args.output_path)
