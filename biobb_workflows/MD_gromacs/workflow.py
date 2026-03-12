@@ -1355,6 +1355,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
             equil_only: Optional[bool] = False, 
             prod_time: Optional[float] = 100,
             prod_frames: Optional[int] = 2000,
+            remove_raw_traj: Optional[bool] = False,
             debug: Optional[bool] = False,
             output_path: Optional[str] = 'output'
     ):
@@ -1419,7 +1420,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
         prod_time: 
             Time of production simulation in ns. Default: 100 ns.
         prod_frames:
-            Number of frames to save during the production step. Default: 2000 frames.
+        remove_raw_traj:
+            Delete the heavy, raw production trajectories after post-processing is complete to save disk space.
         debug:
             whether to run the workflow in debug mode (keep temporary files)
         output_path: 
@@ -1915,6 +1917,17 @@ def main_wf(input_pdb_path: Optional[str] = None,
         if not debug:
             # Remove intermediate trajectory
             os.remove(analysis_paths["step9_image_traj"]["output_traj_path"])
+            
+        # Clean up raw trajectories if requested
+        if remove_raw_traj:
+            global_log.info("Cleaning up raw production trajectories to save space...")
+            raw_xtc = prod_paths["step2_mdrun_prod"]['output_xtc_path']
+            raw_trr = prod_paths["step2_mdrun_prod"]['output_trr_path']
+            
+            for file_to_remove in [raw_xtc, raw_trr]:
+                if os.path.exists(file_to_remove):
+                    os.remove(file_to_remove)
+                    global_log.info(f"Removed: {file_to_remove}")
 
     except SystemExit as e:
         global_log.error(
@@ -2076,6 +2089,10 @@ if __name__ == "__main__":
                         help="Number of frames to save during the production steps. Default: 2000 frames",
                         required=False, default=2000)
     
+    parser.add_argument('--remove_raw_traj', action='store_true',
+                        help="Delete the heavy, raw production trajectories after post-processing is complete to save disk space. Default: False",
+                        required=False, default=False)
+    
     parser.add_argument('--debug', action='store_true',
                         help="Activate debug mode with more verbose logging. Default: False",
                         required=False, default=False)
@@ -2131,5 +2148,6 @@ if __name__ == "__main__":
             equil_only=args.equil_only, 
             prod_time=args.prod_time, 
             prod_frames=args.prod_frames,
+            remove_raw_traj=args.remove_raw_traj,
             debug=args.debug,
             output_path=args.output_path)
