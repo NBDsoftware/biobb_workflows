@@ -459,6 +459,39 @@ def get_atom_types(pdb_path: str, target_atom_names: List[str]) -> List[str]:
             
     return list(found_atoms)
 
+def check_residues_exist(pdb_path: str, residues_to_keep: List[int], global_log) -> None:
+    """
+    Verify if the requested residue indices exist in the input structure.
+    Issues a warning if any of the specified residues are missing.
+    
+    Inputs
+    ------
+        pdb_path (str): Path to the PDB file.
+        residues_to_keep (List[int]): List of residue indices requested by the user.
+        global_log (logging.Logger): Logger object for workflow messages.
+    """
+    if not residues_to_keep:
+        return
+
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure("struct", pdb_path)
+    
+    # Extract all sequence numbers (residue IDs) from the PDB
+    found_residues = set()
+    for residue in structure.get_residues():
+        # residue.get_id() returns a tuple: (hetfield, resseq, icode)
+        found_residues.add(residue.get_id()[1])
+        
+    # Check for any requested residues that are not in the parsed structure
+    missing = [res for res in residues_to_keep if res not in found_residues]
+    
+    if missing:
+        global_log.warning(f"VALIDATION WARNING: The following requested residues "
+                           f"were NOT found in the structure: {missing}. "
+                           f"GROMACS make_ndx may fail or ignore these indices during post-processing.")
+    else:
+        global_log.info("Validation: All requested residues to keep are present in the structure.")
+        
 def get_central_atom_index(pdb_path: str) -> int:
     """
     Find the index of the atom closest to the geometric center of a PDB file.
