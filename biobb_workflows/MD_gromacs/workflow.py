@@ -486,11 +486,11 @@ def check_residues_exist(pdb_path: str, residues_to_keep: List[int], global_log)
     missing = [res for res in residues_to_keep if res not in found_residues]
     
     if missing:
-        global_log.warning(f"VALIDATION WARNING: The following requested residues "
+        global_log.warning(f"The following requested residues "
                            f"were NOT found in the structure: {missing}. "
-                           f"GROMACS make_ndx may fail or ignore these indices during post-processing.")
+                           f"GROMACS make_ndx will ignore these indices during post-processing.")
     else:
-        global_log.info("Validation: All requested residues to keep are present in the structure.")
+        global_log.info("All requested residues to keep are present in the structure.")
         
 def get_central_atom_index(pdb_path: str) -> int:
     """
@@ -662,7 +662,7 @@ def get_input_pdb(input_pdb_path: Optional[str],
     """
 
     # Create a directory for the pre-processing step
-    step_dir = os.path.join(output_path, 'step0_input_pdb')
+    step_dir = os.path.join(output_path, '0_input_pdb')
     os.makedirs(step_dir, exist_ok=True)
     
     if input_pdb_path:
@@ -848,9 +848,9 @@ global_properties:                                       # Workflow default outp
   working_dir_path: output                                     # Skip steps already performed
   remove_tmp: {not debug}                                           # Remove temporal files
 
-##################################################################
-# Section 3 (Steps A-I): Prepare topology and coordinates for MD #
-##################################################################
+######################################################
+# Section 1: Prepare topology and coordinates for MD #
+######################################################
 
 # Generate the topology of the structure with pdb2gmx
 step1_pdb2gmx:
@@ -867,7 +867,7 @@ step1_pdb2gmx:
     merge: False                  # Merge all chains into one molecule
 
 # Add the reference group to the index file
-step1_make_ref_group:
+step2_make_ref_group:
   tool: make_ndx
   paths:
     input_structure_path: dependency/step1_pdb2gmx/output_gro_path
@@ -877,27 +877,27 @@ step1_make_ref_group:
     selection:  "System"         # Will be set by the workflow
 
 # Add the restrained group to the index file
-step2_make_rest_group:
+step3_make_rest_group:
   tool: make_ndx
   paths:
     input_structure_path: dependency/step1_pdb2gmx/output_gro_path
-    input_ndx_path: dependency/step1_make_ref_group/output_ndx_path
+    input_ndx_path: dependency/step2_make_ref_group/output_ndx_path
     output_ndx_path: calpha.ndx
   properties:
     binary_path: {gmx_bin}   
     selection: "a CA"            # Will be set by the workflow
 
 # Append position restraints to the topology file using the reference and restrained groups of the index file
-step3_append_posres:
+step4_append_posres:
   tool: ndx2resttop
   paths:
-    input_ndx_path: dependency/step2_make_rest_group/output_ndx_path
+    input_ndx_path: dependency/step3_make_rest_group/output_ndx_path
     input_top_zip_path: dependency/step1_pdb2gmx/output_top_zip_path
     output_top_zip_path: structure_top.zip
   properties:
     force_constants: "500 500 500"
 
-step4_structure_pdb:
+step5_structure_pdb:
   tool: gmx_trjconv_str
   paths: 
     input_top_path: dependency/step1_pdb2gmx/output_gro_path
@@ -918,7 +918,7 @@ step1_create_ligand_pdb:
 step2_create_complex_pdb:
   tool: cat_pdb
   paths: 
-    input_structure1: dependency/step4_structure_pdb/output_str_path  # Will be set by the workflow
+    input_structure1: dependency/step5_structure_pdb/output_str_path  # Will be set by the workflow
     input_structure2: dependency/step1_create_ligand_pdb/output_str_path
     output_structure_path: complex.pdb
 
@@ -945,7 +945,7 @@ step4_create_ligand_restraints:
 step5_append_ligand_topology:
   tool: append_ligand
   paths:
-    input_top_zip_path: dependency/step3_append_posres/output_top_zip_path  # Will be set by the workflow
+    input_top_zip_path: dependency/step4_append_posres/output_top_zip_path  # Will be set by the workflow
     input_itp_path: path/to/ligand.itp                                            # Will be set by the workflow
     input_posres_itp_path: dependency/step4_create_ligand_restraints/output_itp_path    # Path to ligand position restraint topology file
     output_top_zip_path: complex_top.zip
@@ -964,7 +964,7 @@ step7_solvate:
   tool: solvate
   paths:
     input_solute_gro_path: dependency/step6_editconf/output_gro_path
-    input_top_zip_path: dependency/step3_append_posres/output_top_zip_path
+    input_top_zip_path: dependency/step4_append_posres/output_top_zip_path
     output_top_zip_path: solvate_top.zip
     output_gro_path: solvate.gro
   properties:
@@ -993,11 +993,9 @@ step9_genion:
     neutral: True                 # Neutralize charge of the system
     concentration: {ions_concentration}    # Concentration of ions in mols/L
 
-#############################################################################
-# Section 4 (Steps A-I): Minimize and equilibrate the initial configuration #
-#############################################################################
-
-# NOTE: Leverage hierarchy in mdp when creating new eq steps without restraints - you can overwrite the default mdp config from the type of simulation
+#################################################################
+# Section 2: Minimize and equilibrate the initial configuration #
+#################################################################
 
 step1_grompp_min:
   tool: grompp
@@ -1061,7 +1059,7 @@ step5_make_ndx:
     binary_path: {gmx_bin}
     selection: '{output_selection}'
 
-step4_energy_min:
+step6_energy_min:
   tool: gmx_energy
   paths:
     input_energy_path: dependency/step2_mdrun_min/output_edr_path
@@ -1071,7 +1069,7 @@ step4_energy_min:
     terms: ["Potential"]
     xvg: xmgr 
 
-step5_grompp_nvt:
+step7_grompp_nvt:
   tool: grompp
   paths:
     input_gro_path: dependency/step2_mdrun_min/output_gro_path
@@ -1090,10 +1088,10 @@ step5_grompp_nvt:
       nstvout: 0
       nstxout-compressed: {equil_traj_freq_steps}
       
-step6_mdrun_nvt:
+step8_mdrun_nvt:
   tool: mdrun
   paths:
-    input_tpr_path: dependency/step5_grompp_nvt/output_tpr_path
+    input_tpr_path: dependency/step7_grompp_nvt/output_tpr_path
     output_xtc_path: nvt.xtc
     output_trr_path: nvt.trr
     output_gro_path: nvt.gro
@@ -1108,23 +1106,23 @@ step6_mdrun_nvt:
     {num_threads_omp_config}
     {mpi_np_config}
     
-step7_temp_nvt:
+step9_temp_nvt:
   tool: gmx_energy
   paths:
-    input_energy_path: dependency/step6_mdrun_nvt/output_edr_path
+    input_energy_path: dependency/step8_mdrun_nvt/output_edr_path
     output_xvg_path: nvt_temp.xvg
   properties:
     binary_path: {gmx_bin}     
     terms: ["Temperature"]
     xvg: xmgr 
 
-step8_grompp_npt:
+step10_grompp_npt:
   tool: grompp
   paths:
-    input_gro_path: dependency/step6_mdrun_nvt/output_gro_path
+    input_gro_path: dependency/step8_mdrun_nvt/output_gro_path
     input_ndx_path: dependency/step4_make_ndx/output_ndx_path
     input_top_zip_path: dependency/step9_genion/output_top_zip_path
-    input_cpt_path: dependency/step6_mdrun_nvt/output_cpt_path
+    input_cpt_path: dependency/step8_mdrun_nvt/output_cpt_path
     output_tpr_path: gppnpt.tpr
   properties:
     binary_path: {gmx_bin}     
@@ -1139,10 +1137,10 @@ step8_grompp_npt:
       nstvout: 0
       nstxout-compressed: {equil_traj_freq_steps}
 
-step9_mdrun_npt:
+step11_mdrun_npt:
   tool: mdrun
   paths:
-    input_tpr_path: dependency/step8_grompp_npt/output_tpr_path
+    input_tpr_path: dependency/step10_grompp_npt/output_tpr_path
     output_xtc_path: npt.xtc
     output_trr_path: npt.trr
     output_gro_path: npt.gro
@@ -1157,25 +1155,25 @@ step9_mdrun_npt:
     {num_threads_omp_config}
     {mpi_np_config}
 
-step10_density_npt:
+step12_density_npt:
   tool: gmx_energy
   paths:
-    input_energy_path: dependency/step9_mdrun_npt/output_edr_path
+    input_energy_path: dependency/step11_mdrun_npt/output_edr_path
     output_xvg_path: npt_press_den.xvg
   properties:
     binary_path: {gmx_bin}     
     terms: ["Pressure", "Density"]
     xvg: xmgr 
 
-############################################
-# Section 5 (Steps A-B): MD production run #
-############################################
+################################
+# Section 3: MD production run #
+################################
 
 step1_grompp_md:
   tool: grompp
   paths:
-    input_gro_path: dependency/step9_mdrun_npt/output_gro_path
-    input_cpt_path: dependency/step9_mdrun_npt/output_cpt_path 
+    input_gro_path: dependency/step11_mdrun_npt/output_gro_path
+    input_cpt_path: dependency/step11_mdrun_npt/output_cpt_path 
     input_ndx_path: dependency/step4_make_ndx/output_ndx_path
     input_top_zip_path: dependency/step9_genion/output_top_zip_path
     output_tpr_path: gppmd.tpr
@@ -1223,9 +1221,9 @@ step2_mdrun_prod:
     {num_threads_omp_config}
     {mpi_np_config}
         
-#########################################
-# Section 6 (Steps A-D): Basic analysis #
-#########################################
+############################################################
+# Section 4: Basic analysis and Trajectory post-processing #
+############################################################
 
 step1_gro2pdb:
   tool: gmx_trjconv_str
@@ -1280,10 +1278,6 @@ step5_rmsf:
     end: -1
     steps: 1
     mask: "!@H=" # by default cpptraj already strips solvent atoms
-
-#####################################################
-# Section 7 (Steps A-D): Trajectory post-processing #
-#####################################################
 
 step6_dry_str:
   tool: gmx_trjconv_str
@@ -1586,16 +1580,15 @@ def main_wf(input_pdb_path: Optional[str] = None,
         # Prepare topology and coordinates for MD #
         ###########################################
         
-        setup_prefix = "step1_setup"
+        setup_prefix = "1_setup"
         setup_prop = conf.get_prop_dic(prefix=setup_prefix)
         setup_paths = conf.get_paths_dic(prefix=setup_prefix)
 
         setup_paths["step1_pdb2gmx"]["input_pdb_path"] = input_pdb_path
         setup_prop["step1_pdb2gmx"]["force_field"]=forcefield
-        # NOTE: I don't see the HIS protonation states
-        # Determine protonation state of titratable residues from resname in the input PDB file
         global_log.info(f"step1_pdb2gmx: Reading protonation states for titratable residues (0: deprotonated, 1: protonated)")
         for residue in gmx_titra_resnames.keys():
+            # Determine protonation state of titratable residues from resname in the input PDB file
             setup_prop["step1_pdb2gmx"][residue.lower()] = read_protonation_states(input_pdb_path, residue, global_log)
             global_log.info(f"step1_pdb2gmx: {residue} protonation state: {setup_prop['step1_pdb2gmx'][residue.lower()]}")
         
@@ -1606,7 +1599,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
         master_index_file = ""
         chains_dict = get_chains_dict(input_pdb_path) 
 
-        # STEP 2: Add chain groups to a master index file to be used for position restraints
+        # STEP 2 & 3: Add chain groups to a master index file to be used for position restraints
         for chain_id in chains_dict:
 
             prefix = f"{setup_prefix}/step2_adding_chain_{chain_id}_group"
@@ -1617,18 +1610,18 @@ def main_wf(input_pdb_path: Optional[str] = None,
             
             # If not the first chain, we need to append the group to the master index file
             if master_index_file:
-                chain_paths["step1_make_ref_group"]["input_ndx_path"] = master_index_file
+                chain_paths["step2_make_ref_group"]["input_ndx_path"] = master_index_file
 
             # Create index file for chain
             global_log.info(f"{chain_id} > Create index group for the chain")
-            chain_paths["step1_make_ref_group"]["input_structure_path"] = structure_path
-            chain_prop["step1_make_ref_group"]["selection"] = f"ri {chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
-            make_ndx(**chain_paths["step1_make_ref_group"], properties=chain_prop["step1_make_ref_group"])
+            chain_paths["step2_make_ref_group"]["input_structure_path"] = structure_path
+            chain_prop["step2_make_ref_group"]["selection"] = f"ri {chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
+            make_ndx(**chain_paths["step2_make_ref_group"], properties=chain_prop["step2_make_ref_group"])
             
             global_log.info(f"{chain_id} > Create index group for the chain's C-alpha atoms")
-            chain_paths["step2_make_rest_group"]["input_structure_path"] = structure_path
-            chain_prop["step2_make_rest_group"]["selection"] = f"a CA & ri {chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
-            make_ndx(**chain_paths["step2_make_rest_group"], properties=chain_prop["step2_make_rest_group"])  
+            chain_paths["step3_make_rest_group"]["input_structure_path"] = structure_path
+            chain_prop["step3_make_rest_group"]["selection"] = f"a CA & ri {chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
+            make_ndx(**chain_paths["step3_make_rest_group"], properties=chain_prop["step3_make_rest_group"])  
             
             # Save group names for each chain
             chains_dict[chain_id]["reference_group"] = f"r_{chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
@@ -1638,7 +1631,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
             chains_dict[chain_id]["posres_name"] = f"CHAIN_{chain_id}_POSRES"
             
             # Update master index file
-            master_index_file = chain_paths["step2_make_rest_group"]["output_ndx_path"]
+            master_index_file = chain_paths["step3_make_rest_group"]["output_ndx_path"]
 
         # Reference, restraint and chain triplet list to add restraints to the topology with ndx2resttop
         ref_rest_chain_triplet_list = ", ".join([f"({chains_dict[chain]['reference_group']}, {chains_dict[chain]['restrain_group']}, {chain})" for chain in chains_dict])
@@ -1646,26 +1639,26 @@ def main_wf(input_pdb_path: Optional[str] = None,
         # POSRES names for each chain
         posres_names = " ".join([chains_dict[chain]["posres_name"] for chain in chains_dict])
         
-        # STEP 3: Append position restraints to the topology file
-        global_log.info(f"step3_append_posres: Append restraints to the topology")
-        setup_prop["step3_append_posres"]["ref_rest_chain_triplet_list"] = ref_rest_chain_triplet_list
-        setup_prop["step3_append_posres"]["posres_names"] = posres_names
-        setup_paths["step3_append_posres"]["input_ndx_path"] = master_index_file
-        ndx2resttop(**setup_paths["step3_append_posres"], properties=setup_prop["step3_append_posres"])
+        # STEP 4: Append position restraints to the topology file
+        global_log.info(f"step4_append_posres: Append restraints to the topology")
+        setup_prop["step4_append_posres"]["ref_rest_chain_triplet_list"] = ref_rest_chain_triplet_list
+        setup_prop["step4_append_posres"]["posres_names"] = posres_names
+        setup_paths["step4_append_posres"]["input_ndx_path"] = master_index_file
+        ndx2resttop(**setup_paths["step4_append_posres"], properties=setup_prop["step4_append_posres"])
         
         if ligands_dict:
             
-            # STEP 4: Convert gro of main structure to pdb - to concatenate with ligands
-            global_log.info("step4_structure_pdb: Convert GRO to PDB")
-            gmx_trjconv_str(**setup_paths["step4_structure_pdb"], properties=setup_prop["step4_structure_pdb"])
+            # STEP 5: Convert gro of main structure to pdb - to concatenate with ligands
+            global_log.info("step5_structure_pdb: Convert GRO to PDB")
+            gmx_trjconv_str(**setup_paths["step5_structure_pdb"], properties=setup_prop["step5_structure_pdb"])
             
-            complex_topology_path = setup_paths["step3_append_posres"]["output_top_zip_path"]
-            complex_pdb_path = setup_paths["step4_structure_pdb"]["output_str_path"]
+            complex_topology_path = setup_paths["step4_append_posres"]["output_top_zip_path"]
+            complex_pdb_path = setup_paths["step5_structure_pdb"]["output_str_path"]
             
             # STEP 5: Add each ligand to the PDB and topology files
             for ligand_id in ligands_dict:
 
-                prefix = f"{setup_prefix}/step5_add_ligand_{ligand_id}"
+                prefix = f"{setup_prefix}/step6_add_ligand_{ligand_id}"
                 ligand_prop = conf.get_prop_dic(prefix=prefix)
                 ligand_paths = conf.get_paths_dic(prefix=prefix)
                 
@@ -1748,15 +1741,15 @@ def main_wf(input_pdb_path: Optional[str] = None,
         # Minimize and equilibrate the system #
         #######################################
         
-        equilibrate_prefix = "step2_equil"
+        equilibrate_prefix = "2_equil"
         equil_prop = conf.get_prop_dic(prefix=equilibrate_prefix)
         equil_paths = conf.get_paths_dic(prefix=equilibrate_prefix)
             
         # Connect equil steps with previous ones
         equil_paths['step1_grompp_min']['input_gro_path'] = input_gro_path
         equil_paths['step1_grompp_min']['input_top_zip_path'] = input_top_path
-        equil_paths['step5_grompp_nvt']['input_top_zip_path'] = input_top_path
-        equil_paths['step8_grompp_npt']['input_top_zip_path'] = input_top_path
+        equil_paths['step7_grompp_nvt']['input_top_zip_path'] = input_top_path
+        equil_paths['step10_grompp_npt']['input_top_zip_path'] = input_top_path
     
         # STEP 1: minimization pre-processing
         global_log.info("step1_grompp_min: Preprocess energy minimization")
@@ -1785,8 +1778,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
         input_ndx_path = equil_paths["step5_make_ndx"]['output_ndx_path']
 
         # STEP 4: dump potential energy evolution
-        global_log.info("step4_energy_min: Compute potential energy during minimization")
-        gmx_energy(**equil_paths["step4_energy_min"], properties=equil_prop["step4_energy_min"])
+        global_log.info("step6_energy_min: Compute potential energy during minimization")
+        gmx_energy(**equil_paths["step6_energy_min"], properties=equil_prop["step6_energy_min"])
 
         # Prepare position restraints definition for equilibration steps
         if chains_dict:
@@ -1802,32 +1795,32 @@ def main_wf(input_pdb_path: Optional[str] = None,
         # STEP 5: NVT equilibration pre-processing
         # Add position restraints if any
         if eq_posres != " ":
-            equil_prop["step5_grompp_nvt"]["mdp"]["define"] = eq_posres
-        global_log.info("step5_grompp_nvt: Preprocess NVT equilibration")
-        grompp(**equil_paths["step5_grompp_nvt"], properties=equil_prop["step5_grompp_nvt"])
+            equil_prop["step7_grompp_nvt"]["mdp"]["define"] = eq_posres
+        global_log.info("step7_grompp_nvt: Preprocess NVT equilibration")
+        grompp(**equil_paths["step7_grompp_nvt"], properties=equil_prop["step7_grompp_nvt"])
 
         # STEP 6: NVT equilibration
-        global_log.info("step6_mdrun_nvt: Execute NVT equilibration")
-        mdrun(**equil_paths["step6_mdrun_nvt"], properties=equil_prop["step6_mdrun_nvt"])
+        global_log.info("step8_mdrun_nvt: Execute NVT equilibration")
+        mdrun(**equil_paths["step8_mdrun_nvt"], properties=equil_prop["step8_mdrun_nvt"])
 
         # STEP 7: dump temperature evolution
-        global_log.info("step7_temp_nvt: Compute temperature during NVT equilibration")
-        gmx_energy(**equil_paths["step7_temp_nvt"], properties=equil_prop["step7_temp_nvt"])
+        global_log.info("step9_temp_nvt: Compute temperature during NVT equilibration")
+        gmx_energy(**equil_paths["step9_temp_nvt"], properties=equil_prop["step9_temp_nvt"])
 
         # STEP 8: NPT equilibration pre-processing
         # Add position restraints if any
         if eq_posres != " ":
-            equil_prop["step8_grompp_npt"]["mdp"]["define"] = eq_posres
-        global_log.info("step8_grompp_npt: Preprocess NPT equilibration")
-        grompp(**equil_paths["step8_grompp_npt"], properties=equil_prop["step8_grompp_npt"])
+            equil_prop["step10_grompp_npt"]["mdp"]["define"] = eq_posres
+        global_log.info("step10_grompp_npt: Preprocess NPT equilibration")
+        grompp(**equil_paths["step10_grompp_npt"], properties=equil_prop["step10_grompp_npt"])
 
         # STEP 9: NPT equilibration
-        global_log.info("step9_mdrun_npt: Execute NPT equilibration")
-        mdrun(**equil_paths["step9_mdrun_npt"], properties=equil_prop["step9_mdrun_npt"])
+        global_log.info("step11_mdrun_npt: Execute NPT equilibration")
+        mdrun(**equil_paths["step11_mdrun_npt"], properties=equil_prop["step11_mdrun_npt"])
 
         # STEP 10: dump density and pressure evolution
-        global_log.info("step10_density_npt: Compute Density & Pressure during NPT equilibration")
-        gmx_energy(**equil_paths["step10_density_npt"], properties=equil_prop["step10_density_npt"])
+        global_log.info("step12_density_npt: Compute Density & Pressure during NPT equilibration")
+        gmx_energy(**equil_paths["step12_density_npt"], properties=equil_prop["step12_density_npt"])
         
         # NOTE: add free equilibration removing those restraints that are not needed in the production run - none by default
 
@@ -1867,7 +1860,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
     # Production simulations #
     ##########################
 
-    production_prefix = "step3_prod"
+    production_prefix = "3_prod"
     prod_prop = conf.get_prop_dic(prefix=production_prefix)
     prod_paths = conf.get_paths_dic(prefix=production_prefix)
     
@@ -1884,8 +1877,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
     else:
         
         # Connect production steps with previous ones
-        prod_paths['step1_grompp_md']['input_gro_path'] = equil_paths["step9_mdrun_npt"]['output_gro_path']
-        prod_paths['step1_grompp_md']['input_cpt_path'] = equil_paths["step9_mdrun_npt"]['output_cpt_path']
+        prod_paths['step1_grompp_md']['input_gro_path'] = equil_paths["step11_mdrun_npt"]['output_gro_path']
+        prod_paths['step1_grompp_md']['input_cpt_path'] = equil_paths["step11_mdrun_npt"]['output_cpt_path']
         prod_paths['step1_grompp_md']['input_top_zip_path'] = input_top_path
         prod_paths['step1_grompp_md']['input_ndx_path'] = input_ndx_path
         
@@ -1908,7 +1901,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
     # Post-processing analysis #
     ############################
     
-    analysis_prefix = "step4_analysis"
+    analysis_prefix = "4_analysis"
     analysis_prop = conf.get_prop_dic(prefix=analysis_prefix)
     analysis_paths = conf.get_paths_dic(prefix=analysis_prefix)
 
