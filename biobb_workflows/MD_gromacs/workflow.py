@@ -49,9 +49,10 @@ ions_library = ["K+", "CL-", "MG"]
 # All other solvent names in the input structure not recognized by GROMACS
 solvent_library = []
 
-# Names for solute and solvent groups - Tcoupling and Traj post-processing
+# Names for solute, solvent groups and output groups - for T coupling and Traj post-processing
 solvent_group = "Solvent_group"
 solute_group = "Solute_group"
+output_group = "Output_group"
 
 def check_inputs(
     input_pdb_path: Optional[str], 
@@ -699,6 +700,7 @@ def config_contents(
     solvent_group: str = 'SOL_Ion',
     solute_group: str = 'Protein',
     keep_solvent: bool = False,
+    residues_to_keep: Optional[List[int]] = None,
     debug: bool = False,
     ) -> str:
     """
@@ -750,6 +752,8 @@ def config_contents(
         GROMACS group string including all solute molecules to use in the Temperature coupling and post-processing
     keep_solvent: bool
         Keep solvent and ions in the final post-processed trajectory.
+    residues_to_keep:
+        List of specific residue indices to keep in the final post-processed trajectory besides the solute
     debug: bool
         Avoid removing temporal files for debugging purposes
 
@@ -794,15 +798,21 @@ def config_contents(
     if seed is None:
         seed = -1
         
-    # Define the output group based on the user's choice
-    output_group = "System" if keep_solvent else solute_group
+    # Define the output group selection based on the input arguments
+    if keep_solvent:
+        output_selection = f'"System"'
+    elif len(residues_to_keep) > 0:
+        residues_selection = f"ri {' '.join([str(res) for res in residues_to_keep])}"
+        output_selection = f'"{solute_group}" | {residues_selection}'
+    else:
+        output_selection = f'"{solute_group}"'
 
     return f""" 
 # Global properties (common for all steps)
-global_properties:
-  working_dir_path: output                                          # Workflow default output directory
+global_properties:                                       # Workflow default output directory
   can_write_console_log: False                                      # Verbose writing of log information
-  restart: {restart}                                                # Skip steps already performed
+  restart: {restart}              
+  working_dir_path: output                                     # Skip steps already performed
   remove_tmp: {not debug}                                           # Remove temporal files
 
 ##################################################################
@@ -1006,6 +1016,17 @@ step4_make_ndx:
   properties:
     binary_path: {gmx_bin}
     selection: '! "{solvent_group}"'
+    
+# Here we add the output group (if needed)
+step5_make_ndx:
+  tool: make_ndx 
+  paths:
+    input_structure_path: dependency/step2_mdrun_min/output_gro_path
+    input_ndx_path: dependency/step4_make_ndx/output_ndx_path
+    output_ndx_path: index.ndx
+  properties:
+    binary_path: {gmx_bin}
+    selection: '{output_selection}'
 
 step4_energy_min:
   tool: gmx_energy
@@ -1281,7 +1302,6 @@ step9_image_traj:
   properties:
     binary_path: {gmx_bin}     
     output_selection: "{output_group}"
-    center_selection: "{solute_group}"  # NOTE: is this used at all here?
     center: False
     ur: compact
     pbc: mol
@@ -1296,7 +1316,6 @@ step10_fit_traj:
   properties:
     binary_path: {gmx_bin}     
     fit_selection: "{solute_group}"
-    center_selection: "{solute_group}"
     output_selection: "{output_group}"
     center: False
     fit: rot+trans
@@ -1362,6 +1381,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
             prod_frames: Optional[int] = 2000,
             remove_raw_traj: Optional[bool] = False,
             keep_solvent: Optional[bool] = False,
+            residues_to_keep: Optional[List[int]] = None,
             debug: Optional[bool] = False,
             output_path: Optional[str] = 'output'
     ):
@@ -1431,6 +1451,8 @@ def main_wf(input_pdb_path: Optional[str] = None,
             Delete the heavy, raw production trajectories after post-processing is complete to save disk space.
         keep_solvent:
             Keep solvent and ions in the final post-processed trajectory.
+        residues_to_keep:
+            List of specific residue indices to keep in the final post-processed trajectory besides the solute
         debug:
             whether to run the workflow in debug mode (keep temporary files)
         output_path: 
@@ -1481,6 +1503,10 @@ def main_wf(input_pdb_path: Optional[str] = None,
     ion_names = get_atom_types(input_pdb_path, ions_library)
     solvent_selection = build_solvent_selection(solvent_names, ion_names)
     
+    # Validate that user-requested residues actually exist in the structure
+    if residues_to_keep:
+        check_residues_exist(input_pdb_path, residues_to_keep, global_log)
+    
     # Create and load the configuration
     config_args = {
         'gmx_bin': gmx_bin,
@@ -1503,6 +1529,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
         'solvent_group': solvent_group,
         'solute_group': solute_group,
         'keep_solvent': keep_solvent,
+        'residues_to_keep': residues_to_keep,
         'debug': debug
     }
     configuration_path = create_config_file(output_path, **config_args)
@@ -1707,15 +1734,22 @@ def main_wf(input_pdb_path: Optional[str] = None,
         mdrun(**equil_paths["step2_mdrun_min"], properties=equil_prop["step2_mdrun_min"])
 
         # STEP 3: create index file with custom solvent and ions group
-        global_log.info("step3_make_ndx: Create index file")
+        global_log.info("step3_make_ndx: Create solvent group in index file")
         make_ndx(**equil_paths["step3_make_ndx"], properties=equil_prop["step3_make_ndx"])
         rename_last_ndx_group(equil_paths["step3_make_ndx"]["output_ndx_path"], solvent_group)
 
         # STEP 4: modify index file adding solute group
-        global_log.info("step4_make_ndx: Create index file")
+        global_log.info("step4_make_ndx: Create solute group in index file")
         make_ndx(**equil_paths["step4_make_ndx"], properties=equil_prop["step4_make_ndx"])
         rename_last_ndx_group(equil_paths["step4_make_ndx"]["output_ndx_path"], solute_group)
-        input_ndx_path = equil_paths["step4_make_ndx"]['output_ndx_path']
+        
+        # STEP 5: modify index file adding output group
+        global_log.info("step5_make_ndx: Create output group in index file")
+        make_ndx(**equil_paths["step5_make_ndx"], properties=equil_prop["step5_make_ndx"])
+        rename_last_ndx_group(equil_paths["step5_make_ndx"]["output_ndx_path"], output_group)
+        
+        # Update ndx path
+        input_ndx_path = equil_paths["step5_make_ndx"]['output_ndx_path']
 
         # STEP 4: dump potential energy evolution
         global_log.info("step4_energy_min: Compute potential energy during minimization")
@@ -1779,17 +1813,22 @@ def main_wf(input_pdb_path: Optional[str] = None,
         ndx_paths['step4_make_ndx']['input_structure_path'] = input_pdb_path
 
         # STEP 3: create index file with custom solvent and ions group
-        global_log.info("step3_make_ndx: Create index file")
+        global_log.info("step3_make_ndx: Create solvent group in index file")
         make_ndx(**ndx_paths["step3_make_ndx"], properties=ndx_prop["step3_make_ndx"])
         rename_last_ndx_group(ndx_paths["step3_make_ndx"]["output_ndx_path"], solvent_group)
         
         # STEP 4: modify index file adding solute group
-        global_log.info("step4_make_ndx: Create index file")
+        global_log.info("step4_make_ndx: Create solute group in index file")
         make_ndx(**ndx_paths["step4_make_ndx"], properties=ndx_prop["step4_make_ndx"])
         rename_last_ndx_group(ndx_paths["step4_make_ndx"]["output_ndx_path"], solute_group)
         
+        # STEP 5: modify index file adding output group
+        global_log.info("step5_make_ndx: Create output group in index file")
+        make_ndx(**ndx_paths["step5_make_ndx"], properties=ndx_prop["step5_make_ndx"])
+        rename_last_ndx_group(ndx_paths["step5_make_ndx"]["output_ndx_path"], output_group)
+        
         # Update ndx path
-        input_ndx_path = ndx_paths["step4_make_ndx"]['output_ndx_path']
+        input_ndx_path = ndx_paths["step5_make_ndx"]['output_ndx_path']
 
     ##########################
     # Production simulations #
@@ -2010,9 +2049,6 @@ if __name__ == "__main__":
                         Default: None""",
                         required=False)
 
-    # NOTE: Add an option to leave waters and ions in the prepared traj and top - all
-    # NOTE: Add option to keep specific ions in final dry trajectory
-
     # NOTE: Add option for H mass repartitioning
     # NOTE: Add flag to determine what should remain restrained during the production run - currently everything is free always
     # NOTE: Add progressive release of position restraints during equilibration (additional steps if needed)
@@ -2107,6 +2143,10 @@ if __name__ == "__main__":
                         help="Keep solvent and ions in the final post-processed trajectory. Default: False",
                         required=False, default=False)
     
+    parser.add_argument('--keep_residues', dest='residues_to_keep', type=int, nargs='+',
+                        help="List of specific residue indices to keep in the final post-processed trajectory (e.g., --keep_residues 15 23 105). Default: None",
+                        required=False)
+    
     parser.add_argument('--debug', action='store_true',
                         help="Activate debug mode with more verbose logging. Default: False",
                         required=False, default=False)
@@ -2164,5 +2204,6 @@ if __name__ == "__main__":
             prod_frames=args.prod_frames,
             remove_raw_traj=args.remove_raw_traj,
             keep_solvent=args.keep_solvent,
+            residues_to_keep=args.residues_to_keep,
             debug=args.debug,
             output_path=args.output_path)
