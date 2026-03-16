@@ -582,7 +582,7 @@ def biobb_titrate(input_structure_path: str, output_structure_path: str, propert
     
     # Properties
     pH = properties.get("pH", 7.0)
-    his = properties.get("his", None)
+    manual_his = properties.get("his", None)
     pdb_format = properties.get("pdb_format", 'amber')
     pKa_data = properties.get("pKa_results", None)
     titra_resnames = titra_mapping[pdb_format]
@@ -611,9 +611,13 @@ def biobb_titrate(input_structure_path: str, output_structure_path: str, propert
                     if res_name in titra_resnames:
                         
                         if res_name == 'HIS':    
-                            if his is not None:
-                                # Manual selection 
-                                new_res_name = titra_resnames['HIS'][int(his[his_count])]
+                            if manual_his is not None:
+                                # Safely handle manual selection of protonation states for HIS
+                                if his_count < len(manual_his):
+                                    new_res_name = titra_resnames['HIS'][int(manual_his[his_count])]
+                                else:
+                                    global_log.warning(f"Not enough manual HIS states provided. Falling back to default for HIS {res_num}.")
+                                    new_res_name = titra_resnames['HIS'][1] # Fallback to epsilon
                                 his_count += 1
                             else:
                                 protonated_his_resname = titra_resnames['HIS'][2]
@@ -624,7 +628,7 @@ def biobb_titrate(input_structure_path: str, output_structure_path: str, propert
                                 if pH >= pKa:
                                     # Deprotonated
                                     reduce_resname = pKa_data[res_key].get('reduce_resname')
-                                    if (reduce_resname is not None) and (reduce_resname is not protonated_his_resname):
+                                    if (reduce_resname is not None) and (reduce_resname != protonated_his_resname):
                                         # Given by reduce: epsilon or delta
                                         new_res_name = titra_resnames['HIS'][amber_his_resnames.index(reduce_resname)]
                                     else:
@@ -653,16 +657,18 @@ def biobb_titrate(input_structure_path: str, output_structure_path: str, propert
         
     with open(output_structure_path, 'w') as f:
         for line in lines:
-            # If line contains a 4 letter resname + white space, replace it with just the resname
-            for resname in gmx_4letter_resnames:
-                wrong_resname = resname + ' '
-                if wrong_resname in line:
-                    line = line.replace(wrong_resname, resname) 
+            if line.startswith("ATOM") or line.startswith("HETATM"):
+                # Biopython expands the %3s formatter to 4 chars for 4-letter resnames, 
+                # which pushes the chain ID and everything after it 1 column to the right.
+                # Columns 18-21 (indices 17:21) contain the resname.
+                if line[17:21].strip() in gmx_4letter_resnames:
+                    # Remove the shifted space at index 21 to pull the rest of the line back into strict PDB alignment
+                    line = line[:21] + line[22:]
             f.write(line)
     
     # Remove the temporary file
     os.remove(tmp_structure_path)
-    return            
+    return
            
 # YML construction
 def config_contents() -> str:
