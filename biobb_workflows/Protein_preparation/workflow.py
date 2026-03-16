@@ -239,13 +239,8 @@ def rename_ss_bonds(pdb_file: str, format: Literal['standard', 'gromacs', 'amber
     if format not in ['standard', 'gromacs', 'amber']:
         raise ValueError("Format must be 'standard', 'gromacs' or 'amber'")
     
-    # Find parent path of the pdb file
     parent_path = Path(pdb_file).parent
-    
-    # Find the name of the pdb file
     pdb_name = Path(pdb_file).stem
-    
-    # Create a path to the new pdb file
     new_pdb_file = os.path.join(parent_path, f"{pdb_name}_CYX.pdb")
     
     # Parse the PDB manually
@@ -255,18 +250,20 @@ def rename_ss_bonds(pdb_file: str, format: Literal['standard', 'gromacs', 'amber
     # Replace all CYX residues with CYS2
     with open(new_pdb_file, 'w') as f:
         for line in lines:
-            
-            if format == 'amber':
-                if 'CYS2' in line:
-                    line = line.replace('CYS2', 'CYX ')
-            if format == 'gromacs':
-                if 'CYX' in line:
-                    line = line.replace('CYX ', 'CYS2')
-            if format == 'standard':
-                if 'CYS2' in line:
-                    line = line.replace('CYS2', 'CYS ')
-                if 'CYX' in line:
-                    line = line.replace('CYX', 'CYS')
+            # Check if line is an ATOM/HETATM record to avoid modifying HEADER/REMARK lines
+            if len(line) > 20 and (line.startswith("ATOM") or line.startswith("HETATM")):
+                # Read columns 18-21 (4 characters)
+                resname = line[17:21]
+                
+                if format == 'amber':
+                    if resname == 'CYS2':
+                        line = line[:17] + 'CYX ' + line[21:]
+                elif format == 'gromacs':
+                    if resname.strip() == 'CYX':
+                        line = line[:17] + 'CYS2' + line[21:]
+                elif format == 'standard':
+                    if resname in ['CYS2', 'CYX ']:
+                        line = line[:17] + 'CYS ' + line[21:]
                     
             f.write(line)
     
@@ -312,47 +309,42 @@ def rename_his(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -
         Path to the new PDB file with the renamed HIS residues.
     """
     
+    # Pad Amber names to 4 characters to maintain strict slicing alignment
     gmx_names   = ['HISD', 'HISE', 'HISH', 'HIS1']
     amber_names = ['HID ', 'HIE ', 'HIP ', 'HIS ']
-    non_standard_names = ['HISD', 'HISE', 'HISH', 'HIS1', 'HID', 'HIE', 'HIP']
     
-    # Check requested format
     if format not in ['standard', 'gromacs', 'amber']:
         raise ValueError("Format must be 'standard', 'gromacs' or 'amber'")
     
-    # Find parent path of the pdb file
     parent_path = Path(pdb_file).parent
-    
-    # Find the name of the pdb file
     pdb_name = Path(pdb_file).stem
-    
-    # Create a path to the new pdb file
     new_pdb_file = os.path.join(parent_path, f"{pdb_name}_HIS.pdb")
     
-    # Parse the PDB manually
     with open(pdb_file, 'r') as f:
         lines = f.readlines()
     
-    # Replace all HIS residues with the corresponding format
     with open(new_pdb_file, 'w') as f:
         for line in lines:
-            # If line contains a residue atom
-            if len(line) > 20 and line.startswith("ATOM"):
-                # Read the residue name, including 4 letter resnames
+            if len(line) > 20 and (line.startswith("ATOM") or line.startswith("HETATM")):
                 pdb_resname = line[17:21]
-                # Check if the residue is HIS
-                if pdb_resname.strip() in non_standard_names:
-                    if format == 'amber':
-                        if pdb_resname in gmx_names:
-                            line = line.replace(pdb_resname, amber_names[gmx_names.index(pdb_resname)])
-                    elif format == 'gromacs':
-                        if pdb_resname in amber_names:
-                            line = line.replace(pdb_resname, gmx_names[amber_names.index(pdb_resname)])
-                    elif format == 'standard':
-                        if (pdb_resname in gmx_names) or (pdb_resname in amber_names):
-                            line = line.replace(pdb_resname, 'HIS ')
+                stripped_resname = pdb_resname.strip()
+                
+                if format == 'amber':
+                    if pdb_resname in gmx_names:
+                        new_name = amber_names[gmx_names.index(pdb_resname)]
+                        line = line[:17] + new_name + line[21:]
+                elif format == 'gromacs':
+                    # Allow matching of both "HID " and "HID"
+                    if pdb_resname in amber_names:
+                        new_name = gmx_names[amber_names.index(pdb_resname)]
+                        line = line[:17] + new_name + line[21:]
+                    elif stripped_resname in [n.strip() for n in amber_names]:
+                        idx = [n.strip() for n in amber_names].index(stripped_resname)
+                        line = line[:17] + gmx_names[idx] + line[21:]
+                elif format == 'standard':
+                    if (pdb_resname in gmx_names) or (stripped_resname in [n.strip() for n in amber_names]):
+                        line = line[:17] + 'HIS ' + line[21:]
                         
-            # Write the modified line to the new PDB file
             f.write(line)
             
     return new_pdb_file
@@ -384,53 +376,36 @@ def rename_ter(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -
         Path to the new PDB file with the renamed terminal residues.
     """
     
-    # Check requested format
     if format not in ['standard', 'gromacs', 'amber']:
         raise ValueError("Format must be 'standard', 'gromacs' or 'amber'")
         
-    # Find parent path of the pdb file
     parent_path = Path(pdb_file).parent
-    
-    # Find the name of the pdb file
     pdb_name = Path(pdb_file).stem
-    
-    # Create a path to the new pdb file
     new_pdb_file = os.path.join(parent_path, f"{pdb_name}_{format}.pdb")
     
-    # Parse the PDB manually
     with open(pdb_file, 'r') as f:
         lines = f.readlines()
     
-    # Replace ACE and NME atom names with the corresponding format
     with open(new_pdb_file, 'w') as f:
         for line in lines:
-            # If line contains a residue atom
-            if len(line) > 20 and line.startswith("ATOM"):
-                # Read the residue name
+            if len(line) > 20 and (line.startswith("ATOM") or line.startswith("HETATM")):
+                # Residue name is strictly 3 chars for ACE/NME
                 pdb_resname = line[17:20].strip()
-                # Read the atom name
+                # Atom name sits in columns 13-16
                 pdb_atomname = line[12:16].strip()
-                # Check if the residue is ACE or NME
-                if pdb_resname == "ACE":
-                    if format == "amber" or format == "gromacs":
+                
+                if pdb_resname in ["ACE", "NME"]:
+                    if format in ["amber", "gromacs"]:
                         if pdb_atomname == "CA":
-                            line = line.replace("CA ", "CH3")
+                            # Replace strictly within indices 12:16. Pad to length 4.
+                            line = line[:12] + " CH3" + line[16:]
                     elif format == "standard":
                         if pdb_atomname == "CH3":
-                            line = line.replace("CH3", "CA ")
-                elif pdb_resname == "NME":
-                    if format == "amber" or format == "gromacs":
-                        if pdb_atomname == "CA":
-                            line = line.replace("CA ", "CH3")
-                    elif format == "standard":
-                        if pdb_atomname == "CH3":
-                            line = line.replace("CH3", "CA ")
+                            line = line[:12] + " CA " + line[16:]
                             
-            # Write the modified line to the new PDB file
             f.write(line)
     
-    return new_pdb_file
-                 
+    return new_pdb_file           
 # Propka 
 def biobb_propka(input_structure_path: str, output_summary_path: str, properties: dict, global_log) -> None:
     """ 
