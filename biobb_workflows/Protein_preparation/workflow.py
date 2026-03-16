@@ -441,7 +441,7 @@ def biobb_propka(input_structure_path: str, output_summary_path: str, properties
     # Check the file exists
     if os.path.exists(propka_summary_path):
         # Move the propka summary file to the output path
-        os.rename(propka_summary_path, output_summary_path)
+        shutil.move(propka_summary_path, output_summary_path)
     else:
         global_log.error(f"Propka summary file {propka_summary_path} not found")
         
