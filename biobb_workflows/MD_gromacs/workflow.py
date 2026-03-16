@@ -834,7 +834,7 @@ def config_contents(
     # Define the output group selection based on the input arguments
     if keep_solvent:
         output_selection = f'"System"'
-    elif len(residues_to_keep) > 0:
+    elif residues_to_keep:
         residues_selection = f"ri {' '.join([str(res) for res in residues_to_keep])}"
         output_selection = f'"{solute_group}" | {residues_selection}'
     else:
