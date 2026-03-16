@@ -164,7 +164,7 @@ def fasta_from_pdb(input_pdb_path: str, output_fasta_path: str, global_log) -> b
         parent_folder = os.path.dirname(output_fasta_path)
         
         # Create parent folder if it does not exist
-        if not os.path.exists(parent_folder):
+        if parent_folder and not os.path.exists(parent_folder):
             os.makedirs(parent_folder)
         
         # Write sequences to a FASTA file
