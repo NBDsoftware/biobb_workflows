@@ -1262,9 +1262,6 @@ if __name__ == "__main__":
                         required=False, default='output')
 
     args = parser.parse_args()
-
-    if args.ph:
-        args.ph = float(args.ph)
     
     main_wf(input_pdb_path=args.input_pdb_path, 
             configuration_path=args.config_path, 
