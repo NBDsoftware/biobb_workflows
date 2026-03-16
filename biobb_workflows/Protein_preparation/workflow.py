@@ -996,14 +996,22 @@ def main_wf(input_pdb_path: str,
         
         # Find the PDB code of the input PDB file
         file_pdb_code = get_pdb_code(global_paths["step1_extractAtoms"]["input_structure_path"])
-        if None not in [pdb_code, file_pdb_code]:
-            # Make sure the PDB code provided is the same as the one in the input PDB file
-            if pdb_code != file_pdb_code:
-                global_log.warning(f"step4_canonical_fasta: Provided PDB code ({pdb_code}) is different from the one in the input PDB file ({file_pdb_code}).")
-                global_log.warning(f"step4_canonical_fasta: Using the one in the input PDB file ({file_pdb_code}).")
-                pdb_code = file_pdb_code
-        if file_pdb_code is not None:
+        
+        # Check for conflicts but strictly enforce user precedence
+        if pdb_code is not None and file_pdb_code is not None:
+            if pdb_code.upper() != file_pdb_code.upper():
+                global_log.warning(f"step4_canonical_fasta: Provided PDB code ({pdb_code}) differs from the one in the input PDB file header ({file_pdb_code}).")
+                global_log.warning(f"step4_canonical_fasta: User-provided PDB code ({pdb_code}) will take precedence.")
+                # pdb_code remains exactly what the user provided
+                
+        # If user didn't provide one, fallback to the file's metadata
+        elif pdb_code is None and file_pdb_code is not None:
+            global_log.info(f"step4_canonical_fasta: Using PDB code ({file_pdb_code}) extracted from the input PDB file.")
             pdb_code = file_pdb_code
+            
+        # Optional: Log if the user provided one and the file had none
+        elif pdb_code is not None and file_pdb_code is None:
+            global_log.info(f"step4_canonical_fasta: Using user-provided PDB code ({pdb_code}). No PDB code found in file header.")
             
         # If we have a PDB code, get the FASTA sequence from an http request to the PDB
         if pdb_code is not None:
