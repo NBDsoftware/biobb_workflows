@@ -1,0 +1,9 @@
+name: biobb_traj_postprocess
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python==3.10.0
+  - biobb_common==5.2.0
+  # - biobb_gromacs==5.2.0      # Needs NBDSoftware version: https://github.com/NBDsoftware/biobb_gromacs
+  # - biobb_analysis==5.2.0     # Needs NBDSoftware version: https://github.com/NBDsoftware/biobb_analysis
