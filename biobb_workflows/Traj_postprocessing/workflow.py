@@ -3,6 +3,7 @@
 from typing import List, Optional
 from pathlib import Path
 import numpy as np
+
 import argparse
 import time
 import os
@@ -111,22 +112,40 @@ def add_group(atom_indices: List, group_name: str, old_ndx_path: str, new_ndx_pa
         f.write(old_content)
         f.write(group_block)
 
-
+def get_input_pdb(input_structure: str, gmx_bin: str, output_path: str, log) -> str:
+    """     
+    Extract a PDB structure from the input structure file (GRO or TPR) using editconf, and return its path.
+    """
+    
+    # Create a directory for the pre-processing step
+    step_dir = os.path.join(output_path, '0_input_pdb')
+    os.makedirs(step_dir, exist_ok=True)
+    
+    # Extract PDB from the input structure (GRO or TPR)
+    output_pdb = os.path.join(step_dir, 'input_structure.pdb')
+    editconf(
+        input_gro_path=input_structure,
+        output_gro_path=output_pdb,
+        properties={'binary_path': gmx_bin}
+    )
+    
+    return output_pdb
+    
+    
 def config_contents(
     gmx_bin: str = 'gmx',
-    restart: bool = False,
     debug: bool = False,
     solvent_selection: str = '"SOL" | "Ion"',
     output_selection: str = f'"{solute_group}"',
     structure_path: str = '',
-    input_tpr_path: str = '',
-    input_xtc_path: str = ''
+    input_topology_path: str = '',
+    input_traj_path: str = ''
 ) -> str:
     return f"""
 # Global properties (common for all steps)
 global_properties:
   can_write_console_log: False
-  restart: {restart}
+  restart: True
   working_dir_path: output
   remove_tmp: {not debug}
 
@@ -175,7 +194,7 @@ step4_dry_str:
   tool: gmx_trjconv_str
   paths:
     input_structure_path: {structure_path}
-    input_top_path: {input_tpr_path}
+    input_top_path: {input_topology_path}
     input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_str_path: dry_structure.pdb
   properties:
@@ -186,11 +205,11 @@ step4_dry_str:
     ur: compact
 
 # Extract dry (or full) trajectory
-step5_dry_traj:
+step6_dry_traj:
   tool: gmx_trjconv_trj
   paths:
-    input_traj_path: {input_xtc_path}
-    input_top_path: {input_tpr_path}
+    input_traj_path: {input_traj_path}
+    input_top_path: {input_topology_path}
     input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_traj_path: dry_traj.xtc
   properties:
@@ -198,11 +217,11 @@ step5_dry_traj:
     selection: "{output_group}"
 
 # Center the trajectory on central atom
-step6_center:
+step7_center:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/step5_dry_traj/output_traj_path
-    input_top_path: {input_tpr_path}
+    input_traj_path: dependency/step6_dry_traj/output_traj_path
+    input_top_path: {input_topology_path}
     input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_traj_path: center_traj.xtc
   properties:
@@ -214,11 +233,11 @@ step6_center:
     pbc: none
 
 # Apply periodic boundary conditions imaging
-step7_image:
+step8_image:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/step6_center/output_traj_path
-    input_top_path: {input_tpr_path}
+    input_traj_path: dependency/step7_center/output_traj_path
+    input_top_path: {input_topology_path}
     input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_traj_path: imaged_traj.xtc
   properties:
@@ -229,11 +248,11 @@ step7_image:
     pbc: mol
 
 # Fit the trajectory by rotation and translation
-step8_fit:
+step9_fit:
   tool: gmx_image
   paths:
-    input_traj_path: dependency/step7_image/output_traj_path
-    input_top_path: {input_tpr_path}
+    input_traj_path: dependency/step8_image/output_traj_path
+    input_top_path: {input_topology_path}
     input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc
   properties:
@@ -254,37 +273,37 @@ def create_config_file(output_path: str, **config_args) -> str:
 
 
 def main_wf(
-    input_xtc_path: str,
-    input_tpr_path: str,
-    input_gro_path: Optional[str] = None,
+    input_traj_path: str,
+    input_topology_path: str,
+    input_structure_path: Optional[str] = None,
     gmx_bin: str = 'gmx',
-    restart: bool = False,
     keep_solvent: bool = False,
     residues_to_keep: Optional[List[int]] = None,
     debug: bool = False,
-    output_path: str = 'output'
+    output_path: str = 'output',
+    output_traj_path='trajectory.xtc',
+    output_str_path='structure.pdb'
 ):
     '''
     Post-process a GROMACS MD trajectory: strip solvent, center, image, and fit.
 
     Inputs
     ------
-        input_xtc_path:
+        input_traj_path:
             path to the input trajectory file (.xtc). Required.
-        input_tpr_path:
+        input_topology_path:
             path to the binary run input file (.tpr). Required.
-        input_gro_path:
+        input_structure_path:
             path to an input structure file (.gro or .pdb). Optional. If not
             provided, coordinates are extracted from the TPR.
         gmx_bin:
             GROMACS binary path. Default: gmx
-        restart:
-            skip steps already completed. Default: False
         keep_solvent:
             include solvent and ions in the output structure and trajectory.
             Default: False (dry output)
         residues_to_keep:
             residue indices to retain in the output besides the solute.
+            Default: None (only solute)
         debug:
             keep intermediate files. Default: False
         output_path:
@@ -300,47 +319,31 @@ def main_wf(
 
     start_time = time.time()
 
-    os.makedirs(output_path, exist_ok=True)
+    # Determine final output path
+    output_path = fu.get_working_dir_path(output_path, restart=True)
+
+    # Initialize a global log file
     global_log, _ = fu.get_logs(path=output_path, light_format=True)
 
-    ###################################
+    ####################################
     # Resolve / extract structure file #
-    ###################################
+    ####################################
 
-    struct_dir = os.path.join(output_path, '0_structure')
-    os.makedirs(struct_dir, exist_ok=True)
-
-    if input_gro_path is None:
-        # Extract initial coordinates from the TPR
-        global_log.info("No structure file provided. Extracting coordinates from TPR...")
-        extracted_gro = os.path.join(struct_dir, 'structure.gro')
-        editconf(
-            input_gro_path=input_tpr_path,
-            output_gro_path=extracted_gro,
-            properties={'binary_path': gmx_bin}
-        )
-        structure_path = extracted_gro
+    if input_structure_path is None:
+        # NOTE: then extract PDB from TPR for solvent/ion detection and dry structure generation
+        pdb_structure_path = get_input_pdb(input_topology_path, gmx_bin, output_path, global_log)
+    elif Path(input_structure_path).suffix.lower() != '.pdb':
+        # NOTE: convert provided GRO to PDB for solvent/ion detection and dry structure generation
+        pdb_structure_path = get_input_pdb(input_structure_path, gmx_bin, output_path, global_log)
     else:
-        structure_path = input_gro_path
-
-    # Convert structure to PDB for BioPython-based solvent / ion detection
-    ext = Path(structure_path).suffix.lower()
-    if ext == '.pdb':
-        structure_pdb = structure_path
-    else:
-        structure_pdb = os.path.join(struct_dir, 'structure.pdb')
-        editconf(
-            input_gro_path=structure_path,
-            output_gro_path=structure_pdb,
-            properties={'binary_path': gmx_bin}
-        )
+        pdb_structure_path = input_structure_path
 
     ##########################################
     # Build GROMACS selection strings for ndx #
     ##########################################
 
-    solvent_names = get_residue_types(structure_pdb, solvent_library)
-    ion_names = get_atom_types(structure_pdb, ions_library)
+    solvent_names = get_residue_types(pdb_structure_path, solvent_library)
+    ion_names = get_atom_types(pdb_structure_path, ions_library)
     solvent_selection = build_solvent_selection(solvent_names, ion_names)
 
     if keep_solvent:
@@ -358,13 +361,12 @@ def main_wf(
     config_path = create_config_file(
         output_path,
         gmx_bin=gmx_bin,
-        restart=restart,
         debug=debug,
         solvent_selection=solvent_selection,
         output_selection=output_selection,
-        structure_path=structure_path,
-        input_tpr_path=input_tpr_path,
-        input_xtc_path=input_xtc_path
+        structure_path=pdb_structure_path,
+        input_topology_path=input_topology_path,
+        input_traj_path=input_traj_path
     )
     global_log.info(f"Configuration file: {config_path}")
 
@@ -407,43 +409,50 @@ def main_wf(
         dry_str_ok = False
 
     # Build Center group index for centering step
-    center_ndx_path = os.path.join(struct_dir, 'index_with_center.ndx')
     if dry_str_ok:
+        os.mkdir(os.path.join(output_path, 'step5_center_group'))
+        center_ndx_path = os.path.join(output_path, 'step5_center_group', 'center.ndx')
         central_index = get_central_atom_index(paths['step4_dry_str']['output_str_path'])
         add_group([central_index], 'Center', input_ndx_path, center_ndx_path)
-        paths['step6_center']['input_index_path'] = center_ndx_path
+        paths['step7_center']['input_index_path'] = center_ndx_path
     else:
         # Fall back to centering on the whole solute group
         global_log.warning("step4_dry_str failed: falling back to Solute_group for centering")
-        prop['step6_center']['center_selection'] = solute_group
+        prop['step7_center']['center_selection'] = solute_group
 
     ##############################
     # Steps 5-8: Trajectory work #
     ##############################
 
     try:
-        global_log.info("step5_dry_traj: Extract dry trajectory")
-        gmx_trjconv_trj(**paths['step5_dry_traj'], properties=prop['step5_dry_traj'])
+        global_log.info("step6_dry_traj: Extract dry trajectory")
+        gmx_trjconv_trj(**paths['step6_dry_traj'], properties=prop['step6_dry_traj'])
 
-        global_log.info("step6_center: Center the trajectory")
-        gmx_image(**paths['step6_center'], properties=prop['step6_center'])
+        global_log.info("step7_center: Center the trajectory")
+        gmx_image(**paths['step7_center'], properties=prop['step7_center'])
         if not debug:
-            os.remove(paths['step5_dry_traj']['output_traj_path'])
+            os.remove(paths['step6_dry_traj']['output_traj_path'])
 
-        global_log.info("step7_image: Image the trajectory")
-        gmx_image(**paths['step7_image'], properties=prop['step7_image'])
+        global_log.info("step8_image: Image the trajectory")
+        gmx_image(**paths['step8_image'], properties=prop['step8_image'])
         if not debug:
-            os.remove(paths['step6_center']['output_traj_path'])
+            os.remove(paths['step7_center']['output_traj_path'])
 
-        global_log.info("step8_fit: Fit the trajectory")
-        gmx_image(**paths['step8_fit'], properties=prop['step8_fit'])
+        global_log.info("step9_fit: Fit the trajectory")
+        gmx_image(**paths['step9_fit'], properties=prop['step9_fit'])
         if not debug:
-            os.remove(paths['step7_image']['output_traj_path'])
+            os.remove(paths['step8_image']['output_traj_path'])
 
     except SystemExit as e:
         global_log.error(f"Trajectory post-processing failed (SystemExit, code={e.code})")
     except Exception:
         global_log.exception("Trajectory post-processing failed with unexpected exception")
+        
+    # Move final outputs to user-specified paths
+    final_traj_path = paths['step9_fit']['output_traj_path']
+    final_str_path = paths['step4_dry_str']['output_str_path']
+    os.rename(final_traj_path, output_traj_path)
+    os.rename(final_str_path, output_str_path)
 
     elapsed = time.time() - start_time
     global_log.info('')
@@ -466,15 +475,15 @@ if __name__ == "__main__":
     ###############
 
     parser.add_argument(
-        '--input_xtc', dest='input_xtc_path', type=str, required=True,
+        '--input_traj', dest='input_traj_path', type=str, required=True,
         help="Input trajectory file (.xtc). Required."
     )
     parser.add_argument(
-        '--input_tpr', dest='input_tpr_path', type=str, required=True,
+        '--input_top', dest='input_topology_path', type=str, required=True,
         help="Input binary run input file (.tpr). Required."
     )
     parser.add_argument(
-        '--input_gro', dest='input_gro_path', type=str, required=False,
+        '--input_structure', dest='input_structure_path', type=str, required=False,
         help=("Input structure file (.gro or .pdb). Used to define solvent/output "
               "index groups and to generate the dry structure PDB. "
               "If not provided, coordinates are extracted from the TPR. Default: None")
@@ -487,10 +496,6 @@ if __name__ == "__main__":
     parser.add_argument(
         '--gmx_bin', type=str, required=False, default='gmx',
         help="GROMACS binary path. Default: gmx"
-    )
-    parser.add_argument(
-        '--restart', action='store_true', required=False, default=False,
-        help="Skip steps already completed. Default: False"
     )
     parser.add_argument(
         '--keep_solvent', action='store_true', required=False, default=False,
@@ -508,19 +513,28 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--output', dest='output_path', type=str, required=False, default='output',
-        help="Output directory path. Default: output"
+        help="Output directory path for the workflow where the steps will be written. Default: output"
+    )
+    parser.add_argument(
+        '--output_traj', dest='output_traj_path', type=str, required=False, default='trajectory.xtc',
+        help="Output trajectory file name (e.g. processed_traj.xtc). Default: trajectory.xtc"
+    )
+    parser.add_argument(
+        '--output_str', dest='output_str_path', type=str, required=False, default='structure.pdb',
+        help="Output structure file name (e.g. processed_structure.pdb). Default: structure.pdb"
     )
 
     args = parser.parse_args()
 
     main_wf(
-        input_xtc_path=args.input_xtc_path,
-        input_tpr_path=args.input_tpr_path,
-        input_gro_path=args.input_gro_path,
+        input_traj_path=args.input_traj_path,
+        input_topology_path=args.input_topology_path,
+        input_structure_path=args.input_structure_path,
         gmx_bin=args.gmx_bin,
-        restart=args.restart,
         keep_solvent=args.keep_solvent,
         residues_to_keep=args.residues_to_keep,
         debug=args.debug,
-        output_path=args.output_path
+        output_path=args.output_path,
+        output_traj_path=args.output_traj_path,
+        output_str_path=args.output_str_path
     )
