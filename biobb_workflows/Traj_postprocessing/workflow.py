@@ -20,15 +20,15 @@ from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 
 # Constants
 # Possible ion names not recognized by GROMACS default "Ion" group
-ions_library = ["K+", "CL-", "MG"]
+ions_library : List = ["K+", "CL-", "MG"]
 
 # All other solvent names not recognized by GROMACS default "SOL" group
-solvent_library = []
+solvent_library : List = []
 
 # Group names used for T-coupling and trajectory post-processing
-solvent_group = "Solvent_group"
-solute_group = "Solute_group"
-output_group = "Output_group"
+solvent_group : str = "Solvent_group"
+solute_group : str = "Solute_group"
+output_group : str = "Output_group"
 
 
 def get_residue_types(pdb_path: str, target_resnames: List[str]) -> List[str]:
@@ -338,10 +338,9 @@ def main_wf(
     else:
         pdb_structure_path = input_structure_path
 
-    ##########################################
-    # Build GROMACS selection strings for ndx #
-    ##########################################
-
+    # Construct solvent selection, solute selection will be the the rest of the system
+    solvent_library.extend(extra_solvents)
+    ions_library.extend(extra_ions)
     solvent_names = get_residue_types(pdb_structure_path, solvent_library)
     ion_names = get_atom_types(pdb_structure_path, ions_library)
     solvent_selection = build_solvent_selection(solvent_names, ion_names)
@@ -508,6 +507,16 @@ if __name__ == "__main__":
               "(e.g. --keep_residues 15 23 105). Default: None")
     )
     parser.add_argument(
+        '--ions', dest='extra_ions', type=str, nargs='+',
+        required=False, default=[],
+        help=("Additional ion atom names to include in the solvent group (e.g. --ions NA+ CA2+). Default: []" )
+    )
+    parser.add_argument(
+        '--solvents', dest='extra_solvents', type=str, nargs='+',
+        required=False, default=[],
+        help=("Additional solvent residue names to include in the solvent group (e.g. --solvents TIP3 TIP4). Default: []" )
+    )
+    parser.add_argument(
         '--debug', action='store_true', required=False, default=False,
         help="Keep intermediate files. Default: False"
     )
@@ -533,6 +542,8 @@ if __name__ == "__main__":
         gmx_bin=args.gmx_bin,
         keep_solvent=args.keep_solvent,
         residues_to_keep=args.residues_to_keep,
+        extra_ions=args.extra_ions,
+        extra_solvents=args.extra_solvents,
         debug=args.debug,
         output_path=args.output_path,
         output_traj_path=args.output_traj_path,
