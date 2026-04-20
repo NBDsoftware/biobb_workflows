@@ -130,9 +130,8 @@ def get_input_pdb(input_structure: str, gmx_bin: str, output_path: str, log) -> 
     )
     
     return output_pdb
-    
-    
-def config_contents(
+
+def common_config_contents(
     gmx_bin: str = 'gmx',
     debug: bool = False,
     solvent_selection: str = '"SOL" | "Ion"',
@@ -140,6 +139,7 @@ def config_contents(
     structure_path: str = '',
     input_topology_path: str = '',
     input_traj_path: str = ''
+    
 ) -> str:
     return f"""
 # Global properties (common for all steps)
@@ -189,20 +189,23 @@ step3_make_ndx:
 # Section 2: Structure and trajectory processing  #
 ###################################################
 
-# Extract dry (or full) structure as PDB
+# Center on solute  
 step4_dry_str:
   tool: gmx_trjconv_str
-  paths:
+  paths: 
     input_structure_path: {structure_path}
     input_top_path: {input_topology_path}
     input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_str_path: dry_structure.pdb
   properties:
-    binary_path: {gmx_bin}
-    selection: "{output_group}"
-    center: True
-    pbc: mol
-    ur: compact
+    binary_path: {gmx_bin}     
+    selection: "{solute_group}"
+    center: False
+    pbc: none
+    
+# Step 5 (Center group creation) is done in Python after extracting the 
+# dry structure in step 4. The Center group is needed for centering 
+# the trajectory in step 7.
 
 # Extract dry (or full) trajectory
 step6_dry_traj:
@@ -215,7 +218,121 @@ step6_dry_traj:
   properties:
     binary_path: {gmx_bin}
     selection: "{output_group}"
+""" 
 
+def complete_postprocessing(
+    gmx_bin: str = 'gmx',
+    input_topology_path: str = ''
+) -> str:
+    return f"""
+# Make the molecules whole 
+step7_whole:
+  tool: gmx_image
+  paths:
+    input_traj_path: dependency/step6_dry_traj/output_traj_path
+    input_top_path: {input_topology_path}
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
+    output_traj_path: whole_traj.xtc
+  properties:
+    binary_path: {gmx_bin}
+    output_selection: "{output_group}"
+    center: False
+    pbc: whole
+
+# Cluster the molecules
+step8_cluster:
+  tool: gmx_image
+  paths:
+    input_traj_path: dependency/step7_whole/output_traj_path
+    input_top_path: {input_topology_path}
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
+    output_traj_path: cluster_traj.xtc
+  properties:
+    binary_path: {gmx_bin}
+    output_selection: "{output_group}"
+    cluster_selection: "{solute_group}"
+    center: False
+    pbc: cluster
+
+# Extract the first frame to use as ref
+step9_extract_ref:
+  tool: gmx_trjconv_trj
+  paths:
+    input_traj_path: dependency/step8_cluster/output_traj_path
+    input_top_path: {input_topology_path}
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
+    output_traj_path: first_frame.gro
+  properties:
+    binary_path: {gmx_bin}
+    selection: "{output_group}"
+    dump: 0
+
+# Use as ref with pbc nojump 
+step10_nojump:
+  tool: gmx_image
+  paths:
+    input_traj_path: dependency/step8_cluster/output_traj_path
+    input_top_path: dependency/step9_extract_ref/output_traj_path
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
+    output_traj_path: nojump_traj.xtc
+  properties:
+    binary_path: {gmx_bin}
+    output_selection: "{output_group}"
+    center: False
+    pbc: nojump
+
+# Center the system - whole solute group / central atom
+step11_center:
+  tool: gmx_image
+  paths: 
+    input_traj_path: dependency/step10_nojump/output_traj_path
+    input_top_path: {input_topology_path}
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
+    output_traj_path: centered_traj.xtc
+  properties:
+    binary_path: {gmx_bin}
+    output_selection: "{output_group}"
+    center_selection: "Center"
+    center: True
+    ur: compact
+    pbc: none
+
+# Image the trajectory to put all molecules back in the box
+step12_image:
+  tool: gmx_image
+  paths: 
+    input_traj_path: dependency/step11_center/output_traj_path
+    input_top_path: {input_topology_path}
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
+    output_traj_path: centered_traj.xtc
+  properties:
+    binary_path: {gmx_bin}
+    output_selection: "{output_group}"
+    center: False
+    ur: compact
+    pbc: mol
+
+# Fit the trajectory by rotation and translation
+step13_fit:
+  tool: gmx_image
+  paths:
+    input_traj_path: dependency/step12_image/output_traj_path
+    input_top_path: {input_topology_path}
+    input_index_path: dependency/step3_make_ndx/output_ndx_path
+    output_traj_path: fitted_traj.xtc
+  properties:
+    binary_path: {gmx_bin}
+    fit_selection: "{solute_group}"
+    output_selection: "{output_group}"
+    center: False
+    fit: rot+trans
+"""
+
+def fast_postprocessing(
+    gmx_bin: str = 'gmx',
+    input_topology_path: str = ''
+) -> str:
+    return f"""
 # Center the trajectory on central atom
 step7_center:
   tool: gmx_image
@@ -263,6 +380,29 @@ step9_fit:
     fit: rot+trans
 """
 
+def config_contents(
+    gmx_bin: str = 'gmx',
+    debug: bool = False,
+    solvent_selection: str = '"SOL" | "Ion"',
+    output_selection: str = f'"{solute_group}"',
+    structure_path: str = '',
+    input_topology_path: str = '',
+    input_traj_path: str = '',
+    fast: bool = False
+) -> str:
+    common_contents = common_config_contents(gmx_bin, 
+                                            debug, 
+                                            solvent_selection, 
+                                            output_selection, 
+                                            structure_path, 
+                                            input_topology_path,
+                                            input_traj_path)
+    
+    if fast:
+        return common_contents + fast_postprocessing(gmx_bin, input_topology_path)
+    else:
+        return common_contents + complete_postprocessing(gmx_bin, input_topology_path)
+
 
 def create_config_file(output_path: str, **config_args) -> str:
     """Write YAML config to output_path/config.yml and return its path."""
@@ -275,10 +415,13 @@ def create_config_file(output_path: str, **config_args) -> str:
 def main_wf(
     input_traj_path: str,
     input_topology_path: str,
-    input_structure_path: Optional[str] = None,
+    input_structure_path: str,
     gmx_bin: str = 'gmx',
     keep_solvent: bool = False,
     residues_to_keep: Optional[List[int]] = None,
+    extra_ions: List[str] = [],
+    extra_solvents: List[str] = [],
+    fast: bool = False,
     debug: bool = False,
     output_path: str = 'output',
     output_traj_path='trajectory.xtc',
@@ -294,8 +437,9 @@ def main_wf(
         input_topology_path:
             path to the binary run input file (.tpr). Required.
         input_structure_path:
-            path to an input structure file (.gro or .pdb). Optional. If not
-            provided, coordinates are extracted from the TPR.
+            path to an input structure file (.gro or .pdb).
+            Used to define solvent/output index groups and to find the center group for centering.
+            Make sure the structure is not broken due to PBC.
         gmx_bin:
             GROMACS binary path. Default: gmx
         keep_solvent:
@@ -304,6 +448,10 @@ def main_wf(
         residues_to_keep:
             residue indices to retain in the output besides the solute.
             Default: None (only solute)
+        extra_ions:
+            additional ion atom names to include in the solvent group (e.g. --ions NA+ CA2+). Default: []
+        extra_solvents:
+            additional solvent residue names to include in the solvent group (e.g. --solvents TIP3 TIP4). Default: []
         debug:
             keep intermediate files. Default: False
         output_path:
@@ -325,15 +473,12 @@ def main_wf(
     # Initialize a global log file
     global_log, _ = fu.get_logs(path=output_path, light_format=True)
 
-    ####################################
-    # Resolve / extract structure file #
-    ####################################
+    ###########################################
+    # Build GROMACS selection strings for ndx #
+    ###########################################
 
-    if input_structure_path is None:
-        # NOTE: then extract PDB from TPR for solvent/ion detection and dry structure generation
-        pdb_structure_path = get_input_pdb(input_topology_path, gmx_bin, output_path, global_log)
-    elif Path(input_structure_path).suffix.lower() != '.pdb':
-        # NOTE: convert provided GRO to PDB for solvent/ion detection and dry structure generation
+    # Convert provided GRO to PDB for solvent/ion detection if needed
+    if Path(input_structure_path).suffix.lower() != '.pdb':
         pdb_structure_path = get_input_pdb(input_structure_path, gmx_bin, output_path, global_log)
     else:
         pdb_structure_path = input_structure_path
@@ -345,6 +490,7 @@ def main_wf(
     ion_names = get_atom_types(pdb_structure_path, ions_library)
     solvent_selection = build_solvent_selection(solvent_names, ion_names)
 
+    # Determine output selection based on user options
     if keep_solvent:
         output_selection = '"System"'
     elif residues_to_keep:
@@ -353,9 +499,9 @@ def main_wf(
     else:
         output_selection = f'"{solute_group}"'
 
-    ##########################
-    # Create and load config #
-    ##########################
+    #################################
+    # Create workflow configuration #
+    #################################
 
     config_path = create_config_file(
         output_path,
@@ -363,9 +509,10 @@ def main_wf(
         debug=debug,
         solvent_selection=solvent_selection,
         output_selection=output_selection,
-        structure_path=pdb_structure_path,
+        structure_path=input_structure_path,
         input_topology_path=input_topology_path,
-        input_traj_path=input_traj_path
+        input_traj_path=input_traj_path,
+        fast=fast
     )
     global_log.info(f"Configuration file: {config_path}")
 
@@ -373,9 +520,9 @@ def main_wf(
     prop = conf.get_prop_dic()
     paths = conf.get_paths_dic()
 
-    ###########################
-    # Step 1-3: NDX creation  #
-    ###########################
+    #######################
+    # Create index files  #
+    #######################
 
     global_log.info("step1_make_ndx: Create solvent group in index file")
     make_ndx(**paths['step1_make_ndx'], properties=prop['step1_make_ndx'])
@@ -391,56 +538,95 @@ def main_wf(
 
     input_ndx_path = paths['step3_make_ndx']['output_ndx_path']
 
-    ###################################
-    # Step 4: Dry structure (PDB out) #
-    ###################################
+    ########################################
+    # Extract solute and find central atom #
+    ########################################
+    
+    centering_step = 'step7_center' if fast else 'step11_center'
 
+    # Extract the solute from the input structure
     try:
-        global_log.info("step4_dry_str: Extract dry structure")
+        global_log.info("step4_dry_str: Center dry structure")
         gmx_trjconv_str(**paths['step4_dry_str'], properties=prop['step4_dry_str'])
-        global_log.info("step4_dry_str: Completed successfully")
         dry_str_ok = True
     except SystemExit as e:
-        global_log.error(f"step4_dry_str failed (SystemExit, code={e.code})")
+        global_log.error(f"Structure post-processing failed (SystemExit, code={e.code})")
         dry_str_ok = False
     except Exception:
-        global_log.exception("step4_dry_str failed with unexpected exception")
+        global_log.exception("Structure post-processing failed with unexpected exception")
         dry_str_ok = False
 
-    # Build Center group index for centering step
+    # Extract central atom index from solute to center the trajectory
     if dry_str_ok:
         os.mkdir(os.path.join(output_path, 'step5_center_group'))
         center_ndx_path = os.path.join(output_path, 'step5_center_group', 'center.ndx')
         central_index = get_central_atom_index(paths['step4_dry_str']['output_str_path'])
+        global_log.info(f"Central atom index for centering: {central_index}")
         add_group([central_index], 'Center', input_ndx_path, center_ndx_path)
-        paths['step7_center']['input_index_path'] = center_ndx_path
+        paths[centering_step]['input_index_path'] = center_ndx_path
     else:
         # Fall back to centering on the whole solute group
-        global_log.warning("step4_dry_str failed: falling back to Solute_group for centering")
-        prop['step7_center']['center_selection'] = solute_group
+        global_log.warning("Structure post-processing failed falling back to Solute_group for centering")
+        prop[centering_step]['center_selection'] = solute_group
 
-    ##############################
-    # Steps 5-8: Trajectory work #
-    ##############################
+    #########################################################################
+    # Process trajectory: strip, whole, nojump, cluster, center, image, fit #
+    #########################################################################
+        
+    final_step = 'step9_fit' if fast else 'step13_fit'
 
     try:
         global_log.info("step6_dry_traj: Extract dry trajectory")
         gmx_trjconv_trj(**paths['step6_dry_traj'], properties=prop['step6_dry_traj'])
+        
+        if fast:
+            global_log.info("Running in fast mode: skipping whole, nojump, and cluster steps")
+            
+            global_log.info("step7_center: Center the trajectory using the Center group")
+            gmx_image(**paths['step7_center'], properties=prop['step7_center'])
+            if not debug:
+                os.remove(paths['step6_dry_traj']['output_traj_path'])
+            
+            global_log.info("step8_image: Image the trajectory to put all molecules back in the box")
+            gmx_image(**paths['step8_image'], properties=prop['step8_image'])
+            if not debug:
+                os.remove(paths['step7_center']['output_traj_path'])
+                
+            global_log.info("step9_fit: Fit the trajectory by rotation and translation")
+            gmx_image(**paths['step9_fit'], properties=prop['step9_fit'])
+        else:
+            global_log.info("Running in complete mode: performing whole, nojump, and cluster steps for better results")
+            
+            global_log.info("step7_whole: Make the molecules whole in the trajectory")
+            gmx_image(**paths['step7_whole'], properties=prop['step7_whole'])
+            if not debug:
+                os.remove(paths['step6_dry_traj']['output_traj_path'])
 
-        global_log.info("step7_center: Center the trajectory")
-        gmx_image(**paths['step7_center'], properties=prop['step7_center'])
-        if not debug:
-            os.remove(paths['step6_dry_traj']['output_traj_path'])
+            global_log.info("step8_cluster: Cluster the molecules in the trajectory")
+            gmx_image(**paths['step8_cluster'], properties=prop['step8_cluster'])
+            if not debug:
+                os.remove(paths['step7_whole']['output_traj_path'])
 
-        global_log.info("step8_image: Image the trajectory")
-        gmx_image(**paths['step8_image'], properties=prop['step8_image'])
-        if not debug:
-            os.remove(paths['step7_center']['output_traj_path'])
+            global_log.info("step9_extract_ref: Extract the first frame to use as reference")
+            gmx_trjconv_trj(**paths['step9_extract_ref'], properties=prop['step9_extract_ref'])
 
-        global_log.info("step9_fit: Fit the trajectory")
-        gmx_image(**paths['step9_fit'], properties=prop['step9_fit'])
-        if not debug:
-            os.remove(paths['step8_image']['output_traj_path'])
+            global_log.info("step10_nojump: Make the trajectory whole with nojump PBC")
+            gmx_image(**paths['step10_nojump'], properties=prop['step10_nojump'])
+            if not debug:
+                os.remove(paths['step8_cluster']['output_traj_path'])
+
+            global_log.info("step11_center: Center the trajectory using the Center group")
+            gmx_image(**paths['step11_center'], properties=prop['step11_center'])
+            if not debug: 
+                os.remove(paths['step10_nojump']['output_traj_path'])
+            
+            global_log.info("step12_image: Image the trajectory to put all molecules back in the box")
+            gmx_image(**paths['step12_image'], properties=prop['step12_image'])
+            if not debug:
+                os.remove(paths['step11_center']['output_traj_path'])
+            
+            global_log.info("step13_fit: Fit the trajectory by rotation and translation")
+            gmx_image(**paths['step13_fit'], properties=prop['step13_fit'])
 
     except SystemExit as e:
         global_log.error(f"Trajectory post-processing failed (SystemExit, code={e.code})")
@@ -448,7 +634,7 @@ def main_wf(
         global_log.exception("Trajectory post-processing failed with unexpected exception")
         
     # Move final outputs to user-specified paths
-    final_traj_path = paths['step9_fit']['output_traj_path']
+    final_traj_path = paths[final_step]['output_traj_path']
     final_str_path = paths['step4_dry_str']['output_str_path']
     os.rename(final_traj_path, output_traj_path)
     os.rename(final_str_path, output_str_path)
@@ -482,10 +668,10 @@ if __name__ == "__main__":
         help="Input binary run input file (.tpr). Required."
     )
     parser.add_argument(
-        '--input_structure', dest='input_structure_path', type=str, required=False,
+        '--input_structure', dest='input_structure_path', type=str, required=True,
         help=("Input structure file (.gro or .pdb). Used to define solvent/output "
-              "index groups and to generate the dry structure PDB. "
-              "If not provided, coordinates are extracted from the TPR. Default: None")
+              "index groups and to find the center group for centering. "
+              "Make sure the structure is not broken due to PBC.")
     )
 
     #########################
@@ -517,6 +703,10 @@ if __name__ == "__main__":
         help=("Additional solvent residue names to include in the solvent group (e.g. --solvents TIP3 TIP4). Default: []" )
     )
     parser.add_argument(
+        '--fast', action='store_true', required=False, default=False,
+        help="Skip making solute whole, removing jumps and clustering. Default: False"
+    )
+    parser.add_argument(
         '--debug', action='store_true', required=False, default=False,
         help="Keep intermediate files. Default: False"
     )
@@ -544,6 +734,7 @@ if __name__ == "__main__":
         residues_to_keep=args.residues_to_keep,
         extra_ions=args.extra_ions,
         extra_solvents=args.extra_solvents,
+        fast = args.fast,
         debug=args.debug,
         output_path=args.output_path,
         output_traj_path=args.output_traj_path,
