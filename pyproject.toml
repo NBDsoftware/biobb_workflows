@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Required for MD_gromacs, Traj_postprocessing, Cavity_analysis workflows.
+# Required for md_gromacs, traj_postprocessing, cavity_analysis workflows.
 # Install with: pip install biobb_workflows[gromacs]
 gromacs = [
     "biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs",
@@ -29,12 +29,12 @@ gromacs = [
 ]
 
 [project.scripts]
-biobb_md   = "biobb_workflows.MD_gromacs.workflow:main"
-biobb_lp   = "biobb_workflows.Ligand_parameterization.workflow:main"
-biobb_pp   = "biobb_workflows.Protein_preparation.workflow:main"
-biobb_traj = "biobb_workflows.Traj_postprocessing.workflow:main"
-biobb_ca   = "biobb_workflows.Cavity_analysis.workflow:main"
-biobb_vs   = "biobb_workflows.VS_autodock.workflow:main"
+biobb_md   = "biobb_workflows.md_gromacs.workflow:main"
+biobb_lp   = "biobb_workflows.ligand_parameterization.workflow:main"
+biobb_pp   = "biobb_workflows.protein_preparation.workflow:main"
+biobb_traj = "biobb_workflows.traj_postprocessing.workflow:main"
+biobb_ca   = "biobb_workflows.cavity_analysis.workflow:main"
+biobb_vs   = "biobb_workflows.vs_autodock.workflow:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
