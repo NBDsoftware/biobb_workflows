@@ -649,7 +649,7 @@ def main_wf(
     return paths, prop
 
 
-if __name__ == "__main__":
+def main():
 
     parser = argparse.ArgumentParser(
         description="Post-process a GROMACS MD trajectory: strip solvent, center, image, fit."
@@ -740,3 +740,7 @@ if __name__ == "__main__":
         output_traj_path=args.output_traj_path,
         output_str_path=args.output_str_path
     )
+
+
+if __name__ == '__main__':
+    main()

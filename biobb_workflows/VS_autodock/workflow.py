@@ -831,7 +831,7 @@ def main_wf(configuration_path: str,
 
     return global_paths, global_prop
 
-if __name__ == '__main__':
+def main():
     
     parser = argparse.ArgumentParser(description="Simple High-throughput virtual screening (HTVS) pipeline using BioExcel Building Blocks")
     
@@ -897,3 +897,7 @@ if __name__ == '__main__':
             cpus = args.cpus,
             exhaustiveness = args.exhaustiveness,
             debug = args.debug)
+
+
+if __name__ == '__main__':
+    main()

@@ -557,6 +557,7 @@ def add_group(atom_indices: List, group_name: str, old_ndx_path: str, new_ndx_pa
         f.write(old_content)
         f.write(group_block)
 
+
 # Process topology - temporal solution 
 def process_ligand_top(input_path: str, output_path: str) -> None:
     """
@@ -2027,7 +2028,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
     return global_paths, global_prop
 
 
-if __name__ == "__main__":
+def main():
 
     parser = argparse.ArgumentParser("MD Simulation with GROMACS")
 
@@ -2233,3 +2234,7 @@ if __name__ == "__main__":
             residues_to_keep=args.residues_to_keep,
             debug=args.debug,
             output_path=args.output_path)
+
+
+if __name__ == '__main__':
+    main()

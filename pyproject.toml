@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "biobb_workflows"
+version = "1.0.0"
+requires-python = ">=3.10"
+dependencies = [
+    "biobb_common>=5.2.2",
+    "biobb_structure_utils>=5.2.1",
+    "biobb_model>=5.2.1",
+    "biobb_amber>=5.2.1",
+    "biobb_chemistry>=5.2.1",
+    "biobb_io>=5.2.3",
+    "biobb_pdb_tools>=5.2.1",
+    "biobb_vs>=5.0.0",
+    "propka>=3.5.1",
+    "mdanalysis",
+    "biopython<=1.81",
+]
+
+[project.optional-dependencies]
+# Required for MD_gromacs, Traj_postprocessing, Cavity_analysis workflows.
+# Install with: pip install biobb_workflows[gromacs]
+gromacs = [
+    "biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs",
+    "biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis",
+]
+
+[project.scripts]
+biobb_md   = "biobb_workflows.MD_gromacs.workflow:main"
+biobb_lp   = "biobb_workflows.Ligand_parameterization.workflow:main"
+biobb_pp   = "biobb_workflows.Protein_preparation.workflow:main"
+biobb_traj = "biobb_workflows.Traj_postprocessing.workflow:main"
+biobb_ca   = "biobb_workflows.Cavity_analysis.workflow:main"
+biobb_vs   = "biobb_workflows.VS_autodock.workflow:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["biobb_workflows*"]

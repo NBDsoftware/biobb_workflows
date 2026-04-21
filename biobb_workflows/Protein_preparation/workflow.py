@@ -1177,7 +1177,7 @@ def main_wf(input_pdb_path: str,
     return global_paths, global_prop
 
 
-if __name__ == "__main__":
+def main():
 
     parser = argparse.ArgumentParser("MD Simulation with GROMACS")
 
@@ -1279,3 +1279,7 @@ if __name__ == "__main__":
             keep_hs=args.keep_hs, 
             output_format=args.output_format,
             output_path=args.output_path)
+
+
+if __name__ == '__main__':
+    main()

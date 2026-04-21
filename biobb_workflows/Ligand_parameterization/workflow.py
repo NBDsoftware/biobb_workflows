@@ -613,7 +613,7 @@ def main_wf(configuration_path: str,
     
     return global_paths, global_prop
 
-if __name__ == '__main__':
+def main():
     
     parser = argparse.ArgumentParser(description="Ligand parameterization for AMBER or GROMACS")
     
@@ -685,3 +685,7 @@ if __name__ == '__main__':
         output_top_path = args.output_top_path, 
         output_path=args.output_path
     )
+
+
+if __name__ == '__main__':
+    main()

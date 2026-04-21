@@ -988,7 +988,7 @@ def main_wf(configuration_path: str,
 
     return global_paths, global_prop
 
-if __name__ == '__main__':
+def main():
 
     parser = argparse.ArgumentParser(description="Simple clustering, cavity analysis and docking pipeline using BioExcel Building Blocks")
     
@@ -1034,3 +1034,7 @@ if __name__ == '__main__':
             filtering_selection = args.filtering_selection,
             distance_threshold = args.distance_threshold,
             output_path = args.output_path)
+
+
+if __name__ == '__main__':
+    main()
