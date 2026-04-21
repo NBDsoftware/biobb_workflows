@@ -1,15 +1,13 @@
-name: biobb_workflows
+name: biobb_workflows_vina
 channels:
   - conda-forge
   - bioconda
   - salilab
 dependencies:
-  - python==3.10
+  - python==3.11
   - biobb_common>=5.2.2
   - biobb_structure_utils>=5.2.1
   - biobb_model>=5.2.1
-  - biobb_amber>=5.2.1
-  - biobb_chemistry>=5.2.1
   - biobb_io>=5.2.3
   - biobb_pdb_tools>=5.2.1
   - biobb_vs>=5.0.0

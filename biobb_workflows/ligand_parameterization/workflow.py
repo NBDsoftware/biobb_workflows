@@ -10,14 +10,20 @@ from typing import List, Union, Dict, Literal
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 
-from biobb_amber.leap.leap_gen_top import leap_gen_top
-from biobb_chemistry.babelm.babel_minimize import babel_minimize
-from biobb_chemistry.acpype.acpype_params_ac import acpype_params_ac
-from biobb_chemistry.acpype.acpype_params_gmx import acpype_params_gmx
-from biobb_chemistry.babelm.babel_add_hydrogens import babel_add_hydrogens
-from biobb_chemistry.ambertools.reduce_add_hydrogens import reduce_add_hydrogens
 from biobb_structure_utils.utils.extract_heteroatoms import extract_heteroatoms
-from biobb_chemistry.acpype.acpype_convert_amber_to_gmx import acpype_convert_amber_to_gmx
+try:
+    from biobb_amber.leap.leap_gen_top import leap_gen_top
+    from biobb_chemistry.babelm.babel_minimize import babel_minimize
+    from biobb_chemistry.acpype.acpype_params_ac import acpype_params_ac
+    from biobb_chemistry.acpype.acpype_params_gmx import acpype_params_gmx
+    from biobb_chemistry.babelm.babel_add_hydrogens import babel_add_hydrogens
+    from biobb_chemistry.ambertools.reduce_add_hydrogens import reduce_add_hydrogens
+    from biobb_chemistry.acpype.acpype_convert_amber_to_gmx import acpype_convert_amber_to_gmx
+except ImportError as e:
+    raise ImportError(
+        f"{e}\nThis workflow requires the biobb_workflow ambertools environment.\n"
+        "Install with: pip install -e .[gromacs,ambertools]"
+    ) from e
 
 def get_selected_ligands(pdb_path: str, selected_ligand_names:  Union[List[str], None], selected_chains: List[str], selected_model: int, global_log) -> List[Dict[str, str]]:
     """

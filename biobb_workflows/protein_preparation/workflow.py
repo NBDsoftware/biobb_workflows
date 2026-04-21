@@ -23,11 +23,17 @@ from biobb_model.model.fix_altlocs import fix_altlocs
 from biobb_model.model.fix_amides import fix_amides
 from biobb_model.model.fix_chirality import fix_chirality
 from biobb_model.model.mutate import mutate
-from biobb_amber.pdb4amber.pdb4amber_run import pdb4amber_run
 from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 from biobb_pdb_tools.pdb_tools.biobb_pdb_tofasta import biobb_pdb_tofasta
-from biobb_chemistry.ambertools.reduce_remove_hydrogens import reduce_remove_hydrogens
+try:
+    from biobb_amber.pdb4amber.pdb4amber_run import pdb4amber_run
+    from biobb_chemistry.ambertools.reduce_remove_hydrogens import reduce_remove_hydrogens
+except ImportError as e:
+    raise ImportError(
+        f"{e}\nThis workflow requires the biobb_workflow ambertools environment.\n"
+        "Install with: pip install -e .[gromacs,ambertools]"
+    ) from e
 
 
 # Constants

@@ -10,22 +10,31 @@ dependencies = [
     "biobb_common>=5.2.2",
     "biobb_structure_utils>=5.2.1",
     "biobb_model>=5.2.1",
-    "biobb_amber>=5.2.1",
-    "biobb_chemistry>=5.2.1",
     "biobb_io>=5.2.3",
     "biobb_pdb_tools>=5.2.1",
-    "biobb_vs>=5.0.0",
     "propka>=3.5.1",
     "mdanalysis",
     "biopython<=1.81",
 ]
 
 [project.optional-dependencies]
-# Required for md_gromacs, traj_postprocessing, cavity_analysis workflows.
-# Install with: pip install biobb_workflows[gromacs]
+# NBDSoftware forks — required by md_gromacs, traj_postprocessing, cavity_analysis.
 gromacs = [
     "biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs",
     "biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis",
+]
+# Required by md_gromacs, ligand_parameterization, protein_preparation.
+# Conflicts with [vina] — install one or the other.
+# pip install -e .[gromacs,ambertools]
+ambertools = [
+    "biobb_amber>=5.2.1",
+    "biobb_chemistry>=5.2.1",
+]
+# Required by vs_autodock (and partially cavity_analysis).
+# Conflicts with [ambertools] — install one or the other.
+# pip install -e .[gromacs,vina]
+vina = [
+    "biobb_vs>=5.0.0",
 ]
 
 [project.scripts]

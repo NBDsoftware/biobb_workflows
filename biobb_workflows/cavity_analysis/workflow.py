@@ -27,8 +27,14 @@ from biobb_analysis.ambertools.cpptraj_convert import cpptraj_convert
 from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 from biobb_analysis.gromacs.gmx_trjconv_trj import gmx_trjconv_trj
 from biobb_structure_utils.utils.extract_model import extract_model
-from biobb_vs.fpocket.fpocket_run import fpocket_run
-from biobb_vs.fpocket.fpocket_filter import fpocket_filter
+try:
+    from biobb_vs.fpocket.fpocket_run import fpocket_run
+    from biobb_vs.fpocket.fpocket_filter import fpocket_filter
+except ImportError as e:
+    raise ImportError(
+        f"{e}\nThis workflow requires the biobb_workflow vina environment.\n"
+        "Install with: pip install -e .[gromacs,vina]"
+    ) from e
 
 def is_gromacs_format(traj_path: str) -> bool:
     """

@@ -1,6 +1,6 @@
 # BioBB Workflows
 
-BioBB workflows are ready-to-use pipelines built using BioExcel Building Blocks (BioBB) to perform common tasks in biomolecular simulations and modeling. Each workflow is contained in its own folder with all the necessary files to run it (input files, configuration files, execution scripts, environment definition, etc).
+BioBB workflows are ready-to-use pipelines built using BioExcel Building Blocks (BioBB) to perform common tasks in biomolecular simulations and modeling. Each workflow is a CLI entrypoint of the `biobb_workflows` package.
 
 Different workflows can be combined to create more complex pipelines.
 
@@ -12,50 +12,70 @@ Different workflows can be combined to create more complex pipelines.
 
 ![alt text](../img/protein_protein_scheme.png?raw=true)
 
-## Description
+## Workflows
 
-Each workflow is defined on a separate folder:
+**protein_preparation**: prepares a protein structure from a PDB file for further simulations or modeling. Includes adding missing residues/atoms and selecting the protonation state of residues at a given pH.
 
-**Protein_preparation**: prepares a protein structure from a PDB file for further simulations or modeling. It includes tasks such as adding missing residues/atoms and selecting the protonation state of residues at a given pH.
+**ligand_parameterization**: parameterizes a small molecule using Antechamber and the GAFF force field. Outputs GROMACS or AMBER topology files.
 
-**Ligand_parameterization**: parameterizes a small molecule starting from its SMILES representation using Antechamber and GAFF force field. See corresponding folder for more details.
+**md_gromacs**: prepares and launches a GROMACS MD simulation starting from a prepared PDB structure file.
 
-**MD_gromacs**: prepares and launches a GROMACS MD simulation starting from a prepared PDB structure file. See corresponding folder for more details.
+**traj_postprocessing**: post-processes a GROMACS MD trajectory: strips solvent, centers, images and fits.
 
-**Cavity_analysis**: clustering of MD trajectory and extraction of most representative structures. Followed by a cavity analysis using Fpocket on those structures. See corresponding folder for more details.
+**cavity_analysis**: clusters an MD trajectory and runs a cavity analysis using Fpocket on the representative structures.
 
-**VS_autodock**: high-throughput virtual screening of selected pocket using library of ligands (SMILES) and AutoDock Vina. See corresponding folder for more details.
+**vs_autodock**: high-throughput virtual screening of a selected pocket using a ligand library (SMILES/SDF) and AutoDock Vina.
 
-**PP_docking**: First uses pyDock to sample and score protein-protein poses starting from 2 pdb structures. Then performs a clustering based on the RMSD between poses and gives back the best ranking pose from each cluster (to obtain a set of good distinct poses). See corresponding folder for more details.
+**pp_docking**: samples and scores protein-protein poses with pyDock, then clusters by RMSD and returns the best pose per cluster.
 
-**Pose_refinement**: Takes in a zip file with docking poses and minimizes the energy of each of them using GROMACS. See corresponding folder for more details.
+**pose_refinement**: takes a zip of protein-protein docking poses and minimizes the energy of each with GROMACS.
 
-## How to install
+## Installation
 
-Requirements: git, conda
-
-Clone or download this repository:
+Requirements: `git`, `conda`
 
 ```bash
 git clone https://github.com/NBDsoftware/biobb_workflows.git
+cd biobb_workflows
 ```
 
-Go to the workflow folder you want to install and use conda to create the corresponding environment:
+> To use MODELLER in `protein_preparation`, export your key before creating the environment:
+> ```bash
+> export KEY_MODELLER="YOUR_MODELLER_KEY"
+> ```
+
+### ambertools environment
+Covers: `protein_preparation`, `ligand_parameterization`, `md_gromacs`, `traj_postprocessing`
 
 ```bash
-conda env create -f environment.yml
+conda env create -f environment_ambertools.yml
+conda activate biobb_workflows_ambertools
+pip install -e .[gromacs,ambertools]
 ```
 
-If you want to use MODELLER, for the Protein preparation workflow export the KEY_MODELLER variable before creating the environment (no commercial license, avoid for production!):
+### vina environment
+Covers: `vs_autodock`, `cavity_analysis`
 
 ```bash
-export KEY_MODELLER="HERE YOUR MODELLER KEY" 
+conda env create -f environment_vina.yml
+conda activate biobb_workflows_vina
+pip install -e .[gromacs,vina]
 ```
 
-To run the workflows from the **BioBB Workflows Plugin for Horus**, copy the 'workflow.py' script to the /bin/ folder of your conda environment with the 'biobb_workflow' name:
+## Usage
+
+Once installed, each workflow is available as a CLI command:
+
+| Command | Workflow |
+|---------|----------|
+| `biobb_md` | md_gromacs |
+| `biobb_lp` | ligand_parameterization |
+| `biobb_pp` | protein_preparation |
+| `biobb_traj` | traj_postprocessing |
+| `biobb_ca` | cavity_analysis |
+| `biobb_vs` | vs_autodock |
 
 ```bash
-cp workflow.py $CONDA_PREFIX/bin/biobb_workflow
-chmod +755 $CONDA_PREFIX/bin/biobb_workflow
+biobb_md --help
+biobb_pp --input_pdb protein.pdb --output output/
 ```
-

@@ -8,3 +8,4 @@ tmp/
 *.out
 .vscode/
 traj_comp.xtc
+__pycache__/
