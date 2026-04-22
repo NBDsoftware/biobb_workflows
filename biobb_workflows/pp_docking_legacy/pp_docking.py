@@ -1293,7 +1293,7 @@ def create_config_file(config_path: str) -> None:
 # Main #
 ########
 
-def main_wf(configuration_path: str, 
+def pp_docking(configuration_path: str, 
             receptor_pdb_path: str, 
             ligand_pdb_path: str, 
             previous_output_path: str, 
@@ -1490,7 +1490,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    main_wf(configuration_path=args.config_path,
+    pp_docking(configuration_path=args.config_path,
             receptor_pdb_path=args.receptor_pdb_path,
             ligand_pdb_path=args.ligand_pdb_path,
             previous_output_path=args.previous_output_path,

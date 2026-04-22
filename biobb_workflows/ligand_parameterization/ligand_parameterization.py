@@ -10,14 +10,15 @@ from typing import List, Union, Dict, Literal
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 
+from biobb_structure_utils.utils.extract_heteroatoms import extract_heteroatoms
 from biobb_amber.leap.leap_gen_top import leap_gen_top
 from biobb_chemistry.babelm.babel_minimize import babel_minimize
 from biobb_chemistry.acpype.acpype_params_ac import acpype_params_ac
 from biobb_chemistry.acpype.acpype_params_gmx import acpype_params_gmx
 from biobb_chemistry.babelm.babel_add_hydrogens import babel_add_hydrogens
 from biobb_chemistry.ambertools.reduce_add_hydrogens import reduce_add_hydrogens
-from biobb_structure_utils.utils.extract_heteroatoms import extract_heteroatoms
 from biobb_chemistry.acpype.acpype_convert_amber_to_gmx import acpype_convert_amber_to_gmx
+
 
 def get_selected_ligands(pdb_path: str, selected_ligand_names:  Union[List[str], None], selected_chains: List[str], selected_model: int, global_log) -> List[Dict[str, str]]:
     """
@@ -363,7 +364,7 @@ def create_config_file(config_path: str) -> None:
         f.write(config_contents())
 
 # Main workflow
-def main_wf(configuration_path: str, 
+def ligand_parameterization(configuration_path: str, 
             input_pdb: str, 
             forcefields: List[str] = ['protein.ff14SB', 'DNA.bsc1', 'gaff'], 
             ligand_names: Union[List[str], None] = None, 
@@ -613,7 +614,7 @@ def main_wf(configuration_path: str,
     
     return global_paths, global_prop
 
-if __name__ == '__main__':
+def main():
     
     parser = argparse.ArgumentParser(description="Ligand parameterization for AMBER or GROMACS")
     
@@ -670,7 +671,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     
-    main_wf(
+    ligand_parameterization(
         configuration_path = args.config_path, 
         input_pdb = args.input_pdb, 
         forcefields=args.forcefields, 
@@ -685,3 +686,7 @@ if __name__ == '__main__':
         output_top_path = args.output_top_path, 
         output_path=args.output_path
     )
+
+
+if __name__ == '__main__':
+    main()

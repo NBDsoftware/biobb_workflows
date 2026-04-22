@@ -20,6 +20,7 @@ from biobb_gromacs.gromacs.grompp import grompp
 from biobb_gromacs.gromacs.convert_tpr import convert_tpr
 from biobb_gromacs.gromacs.genion import genion
 from biobb_gromacs.gromacs.mdrun import mdrun
+from biobb_gromacs.gromacs.mdrun_plumed import mdrun_plumed
 from biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_gromacs.gromacs.genrestr import genrestr
 from biobb_gromacs.gromacs_extra.append_ligand import append_ligand
@@ -55,6 +56,7 @@ solute_group = "Solute_group"
 output_group = "Output_group"
 
 def check_inputs(
+    global_log: logging.Logger,
     input_pdb_path: Optional[str], 
     input_gro_path: Optional[str], 
     input_top_path: Optional[str], 
@@ -64,8 +66,7 @@ def check_inputs(
     input_plumed_path: Optional[str],
     input_plumed_folder: Optional[str],
     setup_only: Optional[bool],
-    equil_only: Optional[bool],
-    global_log: Optional[logging.Logger]
+    equil_only: Optional[bool]
 ) -> Literal['input_pdb', 'prepared_system', 'restart_simulation']:
     """
     Check the inputs for the workflow. 
@@ -556,6 +557,7 @@ def add_group(atom_indices: List, group_name: str, old_ndx_path: str, new_ndx_pa
     with open(new_ndx_path, 'w') as f:
         f.write(old_content)
         f.write(group_block)
+
 
 # Process topology - temporal solution 
 def process_ligand_top(input_path: str, output_path: str) -> None:
@@ -1380,7 +1382,7 @@ def create_config_file(output_path: str, **config_args) -> str:
     
   
 # Main workflow
-def main_wf(input_pdb_path: Optional[str] = None, 
+def md_gromacs(input_pdb_path: Optional[str] = None, 
             ligands_top_folder: Optional[str] = None, 
             input_gro_path: Optional[str] = None, 
             input_top_path: Optional[str] = None, 
@@ -1507,7 +1509,9 @@ def main_wf(input_pdb_path: Optional[str] = None,
     global_log, _ = fu.get_logs(path=output_path, light_format=True)
     
     # Check input files
-    input_mode = check_inputs(input_pdb_path, 
+    input_mode = check_inputs(
+                 global_log,
+                 input_pdb_path, 
                  input_gro_path, 
                  input_top_path, 
                  ligands_top_folder, 
@@ -1516,8 +1520,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
                  input_plumed_path,
                  input_plumed_folder,
                  setup_only,
-                 equil_only,
-                 global_log)
+                 equil_only)
     
     # Find PDB coordinates file - used to define groups in configuration
     input_pdb_path = get_input_pdb(input_pdb_path, 
@@ -1895,7 +1898,11 @@ def main_wf(input_pdb_path: Optional[str] = None,
     prod_paths['step2_mdrun_prod']['input_plumed_folder'] = input_plumed_folder
     prod_paths['step2_mdrun_prod']['output_plumed_folder'] = os.path.join(prod_prop['step2_mdrun_prod']['path'], 'plumed_outputs')
     global_log.info("step2_mdrun_prod: Execute production simulation")
-    mdrun(**prod_paths['step2_mdrun_prod'], properties=prod_prop['step2_mdrun_prod'])
+    if input_plumed_path:
+        global_log.info("PLUMED will be used during the production simulation")
+        mdrun_plumed(**prod_paths['step2_mdrun_prod'], properties=prod_prop['step2_mdrun_prod'])
+    else:
+        mdrun(**prod_paths['step2_mdrun_prod'], properties=prod_prop['step2_mdrun_prod'])
     
     ############################
     # Post-processing analysis #
@@ -2027,7 +2034,7 @@ def main_wf(input_pdb_path: Optional[str] = None,
     return global_paths, global_prop
 
 
-if __name__ == "__main__":
+def main():
 
     parser = argparse.ArgumentParser("MD Simulation with GROMACS")
 
@@ -2078,6 +2085,7 @@ if __name__ == "__main__":
     # NOTE: Add option for H mass repartitioning
     # NOTE: Add flag to determine what should remain restrained during the production run - currently everything is free always
     # NOTE: Add progressive release of position restraints during equilibration (additional steps if needed)
+    # NOTE: Are restraints general enough for any system?
 
     #########################
     # Configuration options #
@@ -2202,7 +2210,7 @@ if __name__ == "__main__":
         args.random_seed = int(args.random_seed)
         
     # Run the main workflow
-    main_wf(input_pdb_path=args.input_pdb_path, 
+    md_gromacs(input_pdb_path=args.input_pdb_path, 
             ligands_top_folder=args.ligands_top_folder, 
             input_gro_path=args.input_gro_path, 
             input_top_path=args.input_top_path,
@@ -2233,3 +2241,7 @@ if __name__ == "__main__":
             residues_to_keep=args.residues_to_keep,
             debug=args.debug,
             output_path=args.output_path)
+
+
+if __name__ == '__main__':
+    main()

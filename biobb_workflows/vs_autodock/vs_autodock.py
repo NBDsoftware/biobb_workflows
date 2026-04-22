@@ -7,7 +7,6 @@ import sys
 import time
 import shutil
 import argparse
-from openbabel import pybel
 from typing import Dict, List, Pattern, Tuple, Union, Optional
 
 # Load pdb parser from biopython
@@ -15,13 +14,14 @@ from Bio.PDB import PDBParser
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
-
+from biobb_structure_utils.utils.str_check_add_hydrogens import str_check_add_hydrogens
+from biobb_structure_utils.utils.extract_residues import extract_residues
+from openbabel import pybel
 from biobb_vs.utils.box import box
 from biobb_vs.fpocket.fpocket_select import fpocket_select
 from biobb_vs.vina.autodock_vina_run import autodock_vina_run
 from biobb_chemistry.babelm.babel_convert import babel_convert
-from biobb_structure_utils.utils.str_check_add_hydrogens import str_check_add_hydrogens
-from biobb_structure_utils.utils.extract_residues import extract_residues
+
 
 def find_matching_str(pattern: Union[str, Pattern[str]], filepath: str) -> Optional[str]:
     '''
@@ -831,7 +831,7 @@ def main_wf(configuration_path: str,
 
     return global_paths, global_prop
 
-if __name__ == '__main__':
+def main():
     
     parser = argparse.ArgumentParser(description="Simple High-throughput virtual screening (HTVS) pipeline using BioExcel Building Blocks")
     
@@ -897,3 +897,7 @@ if __name__ == '__main__':
             cpus = args.cpus,
             exhaustiveness = args.exhaustiveness,
             debug = args.debug)
+
+
+if __name__ == '__main__':
+    main()

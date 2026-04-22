@@ -23,10 +23,10 @@ from biobb_model.model.fix_altlocs import fix_altlocs
 from biobb_model.model.fix_amides import fix_amides
 from biobb_model.model.fix_chirality import fix_chirality
 from biobb_model.model.mutate import mutate
-from biobb_amber.pdb4amber.pdb4amber_run import pdb4amber_run
 from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 from biobb_pdb_tools.pdb_tools.biobb_pdb_tofasta import biobb_pdb_tofasta
+from biobb_amber.pdb4amber.pdb4amber_run import pdb4amber_run
 from biobb_chemistry.ambertools.reduce_remove_hydrogens import reduce_remove_hydrogens
 
 
@@ -849,7 +849,7 @@ def create_config_file(config_path: str) -> None:
         f.write(config_contents())
     
 # Main workflow
-def main_wf(input_pdb_path: str,
+def protein_preparation(input_pdb_path: str,
             configuration_path: Optional[str] = None,  
             pdb_code: Optional[str] = None, 
             pdb_chains: Optional[List] = None, 
@@ -1177,7 +1177,7 @@ def main_wf(input_pdb_path: str,
     return global_paths, global_prop
 
 
-if __name__ == "__main__":
+def main():
 
     parser = argparse.ArgumentParser("MD Simulation with GROMACS")
 
@@ -1263,7 +1263,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     
-    main_wf(input_pdb_path=args.input_pdb_path, 
+    protein_preparation(input_pdb_path=args.input_pdb_path, 
             configuration_path=args.config_path, 
             pdb_code=args.pdb_code, 
             pdb_chains=args.pdb_chains, 
@@ -1279,3 +1279,7 @@ if __name__ == "__main__":
             keep_hs=args.keep_hs, 
             output_format=args.output_format,
             output_path=args.output_path)
+
+
+if __name__ == '__main__':
+    main()

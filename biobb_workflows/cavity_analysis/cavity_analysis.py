@@ -726,7 +726,7 @@ def create_config_file(config_path: str) -> None:
         f.write(config_contents())
         
 # Main workflow   
-def main_wf(configuration_path: str,  
+def cavity_analysis(configuration_path: str,  
             traj_path: str, 
             top_path: str, 
             clustering_path: str, 
@@ -988,7 +988,7 @@ def main_wf(configuration_path: str,
 
     return global_paths, global_prop
 
-if __name__ == '__main__':
+def main():
 
     parser = argparse.ArgumentParser(description="Simple clustering, cavity analysis and docking pipeline using BioExcel Building Blocks")
     
@@ -1026,7 +1026,7 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-    main_wf(configuration_path = args.config_path, 
+    cavity_analysis(configuration_path = args.config_path, 
             traj_path = args.traj_path,
             top_path = args.top_path,
             clustering_path = args.clustering_path,
@@ -1034,3 +1034,7 @@ if __name__ == '__main__':
             filtering_selection = args.filtering_selection,
             distance_threshold = args.distance_threshold,
             output_path = args.output_path)
+
+
+if __name__ == '__main__':
+    main()
