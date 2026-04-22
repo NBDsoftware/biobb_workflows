@@ -1,4 +1,4 @@
-name: biobb_workflows_vina
+name: biobb_md
 channels:
   - conda-forge
   - bioconda
@@ -8,9 +8,10 @@ dependencies:
   - biobb_common>=5.2.2
   - biobb_structure_utils>=5.2.1
   - biobb_model>=5.2.1
+  - biobb_amber>=5.2.1
+  - biobb_chemistry>=5.2.1
   - biobb_io>=5.2.3
   - biobb_pdb_tools>=5.2.1
-  - biobb_vs>=5.0.0
   - propka==3.5.1
   - modeller                        # Activate for loop modeling in Protein_preparation
   - mdanalysis

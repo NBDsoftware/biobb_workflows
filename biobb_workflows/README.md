@@ -44,21 +44,21 @@ cd biobb_workflows
 > export KEY_MODELLER="YOUR_MODELLER_KEY"
 > ```
 
-### ambertools environment
+### MD environment
 Covers: `protein_preparation`, `ligand_parameterization`, `md_gromacs`, `traj_postprocessing`
 
 ```bash
-conda env create -f environment_ambertools.yml
-conda activate biobb_workflows_ambertools
+conda env create -f environment_md.yml
+conda activate biobb_md
 pip install -e .[gromacs,ambertools]
 ```
 
-### vina environment
+### VS environment
 Covers: `vs_autodock`, `cavity_analysis`
 
 ```bash
-conda env create -f environment_vina.yml
-conda activate biobb_workflows_vina
+conda env create -f environment_vs.yml
+conda activate biobb_vs
 pip install -e .[gromacs,vina]
 ```
 
