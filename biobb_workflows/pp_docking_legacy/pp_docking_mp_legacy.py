@@ -812,7 +812,7 @@ def compute_pir_cop(interface_residues: list, oda_threshold: float):
 # Main #
 ########
 
-def main_wf(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_output_path, skip_until, output_path):
+def pp_docking(configuration_path, receptor_pdb_path, ligand_pdb_path, previous_output_path, skip_until, output_path):
     '''
     Main protein-protein docking workflow. Can be used to sample protein-protein docking poses,
     rank them according to pyDock score and cluster them based on RMSD. The best scoring pose from each cluster 
@@ -990,7 +990,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    main_wf(configuration_path=args.config_path,
+    pp_docking(configuration_path=args.config_path,
             receptor_pdb_path=args.receptor_pdb_path,
             ligand_pdb_path=args.ligand_pdb_path,
             previous_output_path=args.previous_output_path,

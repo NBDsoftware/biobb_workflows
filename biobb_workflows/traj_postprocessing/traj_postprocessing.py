@@ -412,7 +412,7 @@ def create_config_file(output_path: str, **config_args) -> str:
     return config_path
 
 
-def main_wf(
+def traj_postprocessing(
     input_traj_path: str,
     input_topology_path: str,
     input_structure_path: str,
@@ -725,7 +725,7 @@ def main():
 
     args = parser.parse_args()
 
-    main_wf(
+    traj_postprocessing(
         input_traj_path=args.input_traj_path,
         input_topology_path=args.input_topology_path,
         input_structure_path=args.input_structure_path,

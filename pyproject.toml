@@ -38,12 +38,12 @@ vina = [
 ]
 
 [project.scripts]
-biobb_md   = "biobb_workflows.md_gromacs.workflow:main"
-biobb_lp   = "biobb_workflows.ligand_parameterization.workflow:main"
-biobb_pp   = "biobb_workflows.protein_preparation.workflow:main"
-biobb_traj = "biobb_workflows.traj_postprocessing.workflow:main"
-biobb_ca   = "biobb_workflows.cavity_analysis.workflow:main"
-biobb_vs   = "biobb_workflows.vs_autodock.workflow:main"
+biobb_md   = "biobb_workflows.md_gromacs.md_gromacs:main"
+biobb_lp   = "biobb_workflows.ligand_parameterization.ligand_parameterization:main"
+biobb_pp   = "biobb_workflows.protein_preparation.protein_preparation:main"
+biobb_traj = "biobb_workflows.traj_postprocessing.traj_postprocessing:main"
+biobb_ca   = "biobb_workflows.cavity_analysis.cavity_analysis:main"
+biobb_vs   = "biobb_workflows.vs_autodock.vs_autodock:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

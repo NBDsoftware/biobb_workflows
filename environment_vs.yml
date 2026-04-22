@@ -11,9 +11,8 @@ dependencies:
   - biobb_pdb_tools>=5.2.1
   - biobb_vs>=5.0.0
   - propka==3.5.1
-  - modeller                        # Activate for loop modeling in Protein_preparation
   - mdanalysis
   - biopython<=1.81
-  - pip:
-    - biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis
-    - -e .                          # install biobb_workflows itself
+  # - pip:
+    # - biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis
+    #- -e .                          # install biobb_workflows itself

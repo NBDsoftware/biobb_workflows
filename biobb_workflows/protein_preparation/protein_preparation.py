@@ -849,7 +849,7 @@ def create_config_file(config_path: str) -> None:
         f.write(config_contents())
     
 # Main workflow
-def main_wf(input_pdb_path: str,
+def protein_preparation(input_pdb_path: str,
             configuration_path: Optional[str] = None,  
             pdb_code: Optional[str] = None, 
             pdb_chains: Optional[List] = None, 
@@ -1263,7 +1263,7 @@ def main():
 
     args = parser.parse_args()
     
-    main_wf(input_pdb_path=args.input_pdb_path, 
+    protein_preparation(input_pdb_path=args.input_pdb_path, 
             configuration_path=args.config_path, 
             pdb_code=args.pdb_code, 
             pdb_chains=args.pdb_chains, 

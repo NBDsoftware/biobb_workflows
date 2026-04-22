@@ -364,7 +364,7 @@ def create_config_file(config_path: str) -> None:
         f.write(config_contents())
 
 # Main workflow
-def main_wf(configuration_path: str, 
+def ligand_parameterization(configuration_path: str, 
             input_pdb: str, 
             forcefields: List[str] = ['protein.ff14SB', 'DNA.bsc1', 'gaff'], 
             ligand_names: Union[List[str], None] = None, 
@@ -671,7 +671,7 @@ def main():
 
     args = parser.parse_args()
     
-    main_wf(
+    ligand_parameterization(
         configuration_path = args.config_path, 
         input_pdb = args.input_pdb, 
         forcefields=args.forcefields, 

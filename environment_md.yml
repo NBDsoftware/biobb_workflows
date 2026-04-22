@@ -17,7 +17,6 @@ dependencies:
   - mdanalysis
   - biopython<=1.81
   - pip:
-    # NBDSoftware forks required for MD_gromacs, Traj_postprocessing, Cavity_analysis:
     - biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs
     - biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis
     - -e .                          # install biobb_workflows itself

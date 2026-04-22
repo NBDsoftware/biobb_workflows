@@ -1381,7 +1381,7 @@ def create_config_file(output_path: str, **config_args) -> str:
     
   
 # Main workflow
-def main_wf(input_pdb_path: Optional[str] = None, 
+def md_gromacs(input_pdb_path: Optional[str] = None, 
             ligands_top_folder: Optional[str] = None, 
             input_gro_path: Optional[str] = None, 
             input_top_path: Optional[str] = None, 
@@ -2203,7 +2203,7 @@ def main():
         args.random_seed = int(args.random_seed)
         
     # Run the main workflow
-    main_wf(input_pdb_path=args.input_pdb_path, 
+    md_gromacs(input_pdb_path=args.input_pdb_path, 
             ligands_top_folder=args.ligands_top_folder, 
             input_gro_path=args.input_gro_path, 
             input_top_path=args.input_top_path,
