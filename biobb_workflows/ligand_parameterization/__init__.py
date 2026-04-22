@@ -1,1 +1,1 @@
-from ligand_parameterization.ligand_parameterization import ligand_parameterization
+from .ligand_parameterization import ligand_parameterization

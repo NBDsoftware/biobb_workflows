@@ -1,1 +1,1 @@
-from protein_preparation.protein_preparation import protein_preparation
+from .protein_preparation import protein_preparation

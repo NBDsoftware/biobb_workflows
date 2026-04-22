@@ -1,1 +1,1 @@
-from cavity_analysis.cavity_analysis import cavity_analysis
+from .cavity_analysis import cavity_analysis

@@ -1,1 +1,1 @@
-from traj_postprocessing.traj_postprocessing import traj_postprocessing
+from .traj_postprocessing import traj_postprocessing

@@ -1,1 +1,1 @@
-from md_gromacs.md_gromacs import md_gromacs
+from .md_gromacs import md_gromacs

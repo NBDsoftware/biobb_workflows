@@ -1,1 +1,1 @@
-from vs_autodock.vs_autodock import vs_autodock
+from .vs_autodock import vs_autodock

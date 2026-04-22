@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.backends.legacy:build"
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "biobb_workflows"
@@ -38,12 +38,12 @@ vina = [
 ]
 
 [project.scripts]
-biobb_md   = "biobb_workflows.md_gromacs.md_gromacs:main"
-biobb_lp   = "biobb_workflows.ligand_parameterization.ligand_parameterization:main"
-biobb_pp   = "biobb_workflows.protein_preparation.protein_preparation:main"
-biobb_traj = "biobb_workflows.traj_postprocessing.traj_postprocessing:main"
-biobb_ca   = "biobb_workflows.cavity_analysis.cavity_analysis:main"
-biobb_vs   = "biobb_workflows.vs_autodock.vs_autodock:main"
+md_gromacs                = "biobb_workflows.md_gromacs.md_gromacs:main"
+ligand_parameterization   = "biobb_workflows.ligand_parameterization.ligand_parameterization:main"
+protein_preparation       = "biobb_workflows.protein_preparation.protein_preparation:main"
+traj_postprocessing       = "biobb_workflows.traj_postprocessing.traj_postprocessing:main"
+cavity_analysis           = "biobb_workflows.cavity_analysis.cavity_analysis:main"
+vs_autodock               = "biobb_workflows.vs_autodock.vs_autodock:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
