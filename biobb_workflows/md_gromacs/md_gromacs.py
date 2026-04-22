@@ -258,56 +258,73 @@ def get_ligands(ligands_top_folder: Union[str, None], global_log) -> List[Dict[s
     return ligands
     
 def get_chains_dict(pdb_file: str) -> Dict[str, Dict[str, List[int]]]:
-    """ 
+    """
     Get a dictionary with the chain IDs as keys and a dictionary with the residue intervals as values.
-    
-    HETEROATOM residues are not considered. 
-    
+
+    HETEROATOM residues are not considered.
+
     Parameters
     ----------
     pdb_file : str
         Path to the PDB file.
-    
+
     Returns
     -------
     Dict:
-        A dictionary with the chain IDs as keys and a list with the start and end residue numbers.
-        
+        A dictionary with the chain IDs as keys and a list with the start and end residue numbers
+        and the restraint atoms (CA for protein, P for nucleic acids, both if mixed).
+
         Example:
         {
-            'A': {'residues': [1, 100]},
-            'B': {'residues': [1, 200]}
+            'A': {'residues': [1, 100], 'restraint_atoms': ['CA']},
+            'B': {'residues': [1, 200], 'restraint_atoms': ['P']},
+            'C': {'residues': [1, 150], 'restraint_atoms': ['CA', 'P']}
         }
     """
-    
-    # NOTE: What happens with nucleotides
+
     # NOTE: what happens if there are no chains
-    
+
     # Initialize the PDB parser
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure('protein_structure', pdb_file)
-    
+
     chains_dict = {}
-    
+
     # Iterate over all models and chains in the structure
     for model in structure:
         for chain in model:
             # List to store residue numbers for standard amino acids/nucleotides
             standard_residues = []
-            
+            has_ca = False
+            has_p = False
+
             for residue in chain:
                 # The residue ID: (hetfield, sequence_identifier, insertion_code)
                 # For standard residues, hetfield is a blank space ' '
                 if residue.get_id()[0] == ' ':
                     standard_residues.append(residue.get_id()[1])
-            
+                    atom_names = {atom.get_name().strip() for atom in residue.get_atoms()}
+                    if 'CA' in atom_names:
+                        has_ca = True
+                    if 'P' in atom_names:
+                        has_p = True
+
             # Only add the chain to the dictionary if it contains standard residues
             if standard_residues:
                 chain_id = chain.get_id()
+                # Build restraint atoms list: CA for protein, P for nucleic acids, both if mixed
+                restraint_atoms = []
+                if has_ca:
+                    restraint_atoms.append('CA')
+                if has_p:
+                    restraint_atoms.append('P')
+                if not restraint_atoms:
+                    restraint_atoms = ['CA']  # fallback
                 chains_dict[chain_id] = {
-                    'residues': [min(standard_residues), max(standard_residues)]
+                    'residues': [min(standard_residues), max(standard_residues)],
+                    'restraint_atoms': restraint_atoms
                 }
-                
+
     return chains_dict
    
 def read_protonation_states(pdb_file: str, resname: str, global_log) -> List[str]:
@@ -887,7 +904,7 @@ step3_make_rest_group:
     output_ndx_path: calpha.ndx
   properties:
     binary_path: {gmx_bin}   
-    selection: "a CA"            # Will be set by the workflow
+    selection: "a CA"            # Will be set by the workflow (CA for protein, P for nucleic acids)
 
 # Append position restraints to the topology file using the reference and restrained groups of the index file
 step4_append_posres:
@@ -1621,14 +1638,16 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
             chain_prop["step2_make_ref_group"]["selection"] = f"ri {chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
             make_ndx(**chain_paths["step2_make_ref_group"], properties=chain_prop["step2_make_ref_group"])
             
-            global_log.info(f"{chain_id} > Create index group for the chain's C-alpha atoms")
+            restraint_atoms = chains_dict[chain_id]['restraint_atoms']
+            start, end = chains_dict[chain_id]['residues']
+            global_log.info(f"{chain_id} > Create index group for the chain's {'/'.join(restraint_atoms)} atoms")
             chain_paths["step3_make_rest_group"]["input_structure_path"] = structure_path
-            chain_prop["step3_make_rest_group"]["selection"] = f"a CA & ri {chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
-            make_ndx(**chain_paths["step3_make_rest_group"], properties=chain_prop["step3_make_rest_group"])  
-            
+            chain_prop["step3_make_rest_group"]["selection"] = " | ".join([f"a {atom} & ri {start}-{end}" for atom in restraint_atoms])
+            make_ndx(**chain_paths["step3_make_rest_group"], properties=chain_prop["step3_make_rest_group"])
+
             # Save group names for each chain
-            chains_dict[chain_id]["reference_group"] = f"r_{chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
-            chains_dict[chain_id]["restrain_group"] = f"CA_&_r_{chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
+            chains_dict[chain_id]["reference_group"] = f"r_{start}-{end}"
+            chains_dict[chain_id]["restrain_group"] = "_|_".join([f"{atom}_&_r_{start}-{end}" for atom in restraint_atoms]) # NOTE: check this works by changing CA -> another atom temporarily
             
             # Save POSRES names for each chain
             chains_dict[chain_id]["posres_name"] = f"CHAIN_{chain_id}_POSRES"
@@ -2085,7 +2104,8 @@ def main():
     # NOTE: Add option for H mass repartitioning
     # NOTE: Add flag to determine what should remain restrained during the production run - currently everything is free always
     # NOTE: Add progressive release of position restraints during equilibration (additional steps if needed)
-    # NOTE: Are restraints general enough for any system?
+    # NOTE: Call traj postprocessing function from the package instead of re-writing it here
+    # NOTE: Add type of water model as an option 
 
     #########################
     # Configuration options #
