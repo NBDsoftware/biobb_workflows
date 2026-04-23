@@ -104,11 +104,11 @@ To make sure the system has been correctly prepared before minimizing or running
 
 4. **Minimize and equilibrate the initial configuration**
 
-    A-D. **Energy minimization** (including position restraints on the protein heavy atoms)
+    A-D. **Energy minimization** (including position restraints on protein/DNA heavy atoms)
 
-    E-G. **NVT equilibration** (including position restraints on the protein heavy atoms)
+    E-G. **NVT equilibration** (including position restraints on protein/DNA heavy atoms)
 
-    H-J. **NPT equilibration** (including position restraints on the protein heavy atoms)
+    H-J. **NPT equilibration** (including position restraints on protein/DNA heavy atoms)
 
 5. **Production run**
 

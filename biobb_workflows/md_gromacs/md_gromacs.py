@@ -8,6 +8,7 @@ import logging
 import argparse
 import time
 import os
+import zipfile
 
 from Bio.PDB import PDBParser
 
@@ -67,7 +68,7 @@ def check_inputs(
     input_plumed_folder: Optional[str],
     setup_only: Optional[bool],
     equil_only: Optional[bool]
-) -> Literal['input_pdb', 'prepared_system', 'restart_simulation']:
+) -> Literal['input_pdb', 'input_gro_top', 'restart_simulation']:
     """
     Check the inputs for the workflow. 
     
@@ -99,9 +100,9 @@ def check_inputs(
             'compulsory' : [input_pdb_path],
             'optional' : [ligands_top_folder, input_plumed_path, input_plumed_folder]
         },
-        'prepared_system': {
+        'input_gro_top': {
             'compulsory' : [input_gro_path, input_top_path],
-            'optional' : [input_plumed_path, input_plumed_folder]
+            'optional' : [ligands_top_folder, input_plumed_path, input_plumed_folder]
         },
         'restart_simulation': {
             'compulsory' : [input_tpr_path, input_cpt_path],
@@ -119,7 +120,7 @@ def check_inputs(
     if len(used_modes) == 0:
         global_log.error("No valid inputs found. Provide either:\n"
                          "1) An input PDB file (input_pdb_path) to prepare the system from scratch.\n"
-                         "2) An input GRO file (input_gro_path) and a topology file (input_top_path) to run MD on a prepared system.\n"
+                         "2) An input GRO file (input_gro_path) and a topology file (input_top_path) to prepare and optionally solvate the system.\n"
                          "3) An input TPR file (input_tpr_path) and a checkpoint file (input_cpt_path) to restart a simulation.")
         raise FileNotFoundError("No valid inputs found.")
 
@@ -145,12 +146,12 @@ def check_inputs(
                 global_log.error(f"Folder {file} is empty.")
                 raise FileNotFoundError(f"Folder {file} is empty.")
 
-    # Set up only option requires input pdb mode
+    # Set up only option requires input pdb or input_gro_top mode
     if setup_only:
-        if not used_modes[0] == 'input_pdb':
-            global_log.error("The option setup_only = True requires a PDB file as input.")
+        if used_modes[0] not in ('input_pdb', 'input_gro_top'):
+            global_log.error("The option setup_only = True requires a PDB file or .gro and .top files as input.")
     
-    # Equil only option requires input_pdb or prepared_system
+    # Equil only option requires input_pdb or input_gro_top
     if equil_only:
         if used_modes[0] == 'restart_simulation':
              global_log.error("The option equil_only = True requires a PDB file or .gro and .top files as input.")
@@ -160,8 +161,8 @@ def check_inputs(
         global_log.info("Using PDB as input:")
         global_log.info(f"Input PDB file: {input_pdb_path}")
         
-    elif used_modes[0] == 'prepared_system':
-        global_log.info("Using prepared system as input:")
+    elif used_modes[0] == 'input_gro_top':
+        global_log.info("Using GRO + topology as input:")
         global_log.info(f"Input GRO file: {input_gro_path}")
         global_log.info(f"Input TOP file: {input_top_path}")
         
@@ -258,58 +259,124 @@ def get_ligands(ligands_top_folder: Union[str, None], global_log) -> List[Dict[s
     return ligands
     
 def get_chains_dict(pdb_file: str) -> Dict[str, Dict[str, List[int]]]:
-    """ 
+    """
     Get a dictionary with the chain IDs as keys and a dictionary with the residue intervals as values.
-    
-    HETEROATOM residues are not considered. 
-    
+
+    HETEROATOM residues are not considered.
+
     Parameters
     ----------
     pdb_file : str
         Path to the PDB file.
-    
+
     Returns
     -------
     Dict:
-        A dictionary with the chain IDs as keys and a list with the start and end residue numbers.
-        
+        A dictionary with the chain IDs as keys and a list with the start and end residue numbers
+        and the restraint atoms (CA for protein, P for nucleic acids, both if mixed).
+
         Example:
         {
-            'A': {'residues': [1, 100]},
-            'B': {'residues': [1, 200]}
+            'A': {'residues': [1, 100], 'restraint_atoms': ['CA']},
+            'B': {'residues': [1, 200], 'restraint_atoms': ['P']},
+            'C': {'residues': [1, 150], 'restraint_atoms': ['CA', 'P']}
         }
     """
-    
-    # NOTE: What happens with nucleotides
-    # NOTE: what happens if there are no chains
-    
+
     # Initialize the PDB parser
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure('protein_structure', pdb_file)
-    
+
     chains_dict = {}
     
+    chain_list = []
+
     # Iterate over all models and chains in the structure
     for model in structure:
         for chain in model:
             # List to store residue numbers for standard amino acids/nucleotides
             standard_residues = []
-            
+            has_ca = False
+            has_p = False
+
             for residue in chain:
                 # The residue ID: (hetfield, sequence_identifier, insertion_code)
                 # For standard residues, hetfield is a blank space ' '
                 if residue.get_id()[0] == ' ':
                     standard_residues.append(residue.get_id()[1])
-            
+                    atom_names = {atom.get_name().strip() for atom in residue.get_atoms()}
+                    if 'CA' in atom_names:
+                        has_ca = True
+                    if 'P' in atom_names:
+                        has_p = True
+
             # Only add the chain to the dictionary if it contains standard residues
             if standard_residues:
                 chain_id = chain.get_id()
-                chains_dict[chain_id] = {
-                    'residues': [min(standard_residues), max(standard_residues)]
-                }
+                chain_list.append(chain_id)
                 
+                # Default value for chain_id if it's blank
+                if not chain_id.strip():
+                    chain_id = 'X'
+
+                # Build restraint atoms list: CA for protein, P for nucleic acids, both if mixed
+                restraint_atoms = []
+                if has_ca:
+                    restraint_atoms.append('CA')
+                if has_p:
+                    restraint_atoms.append('P')
+                if not restraint_atoms:
+                    restraint_atoms = ['CA']  # fallback
+                chains_dict[chain_id] = {
+                    'residues': [min(standard_residues), max(standard_residues)],
+                    'restraint_atoms': restraint_atoms
+                }
+        
+    # Check chains with standard residues have unique IDs
+    if len(chain_list) != len(set(chain_list)):
+        raise ValueError("""
+            Non-unique chain IDs found in the PDB file. Please ensure all chains have unique IDs. """)
+
     return chains_dict
-   
+
+def get_molecule_names_from_top(top_zip_path: str) -> List[str]:
+    """
+    Parse the [ molecules ] section of the first .top file inside a zip archive.
+    Returns unique molecule type names in order, excluding common solvent/ion names.
+    """
+    SOLVENT_ION_NAMES = {
+        'SOL', 'HOH', 'WAT', 'TIP3P', 'TIP4P',       # water models
+        'NA', 'NA+', 'SOD',                            # sodium
+        'CL', 'CL-', 'CLA',                            # chloride
+        'K', 'K+', 'POT',                              # potassium
+        'MG', 'MG2+', 'CA', 'CA2+', 'ZN', 'ZN2+',    # divalent ions
+    }
+
+    with zipfile.ZipFile(top_zip_path, 'r') as zf:
+        top_names = [f for f in zf.namelist() if f.endswith('.top')]
+        if not top_names:
+            raise ValueError(f"No .top file found in {top_zip_path}")
+        content = zf.read(top_names[0]).decode('utf-8')
+
+    in_molecules = False
+    seen: set = set()
+    mol_names: List[str] = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith('[') and 'molecules' in stripped:
+            in_molecules = True
+            continue
+        if in_molecules:
+            if stripped.startswith('['):
+                break
+            if stripped and not stripped.startswith(';'):
+                mol_name = stripped.split()[0]
+                if mol_name not in SOLVENT_ION_NAMES and mol_name not in seen:
+                    mol_names.append(mol_name)
+                    seen.add(mol_name)
+    return mol_names
+
+
 def read_protonation_states(pdb_file: str, resname: str, global_log) -> List[str]:
     """ 
     Read a PDB file and return the protonation states per chain of the specified residue 
@@ -730,6 +797,8 @@ def config_contents(
     equil_frames: Optional[int] = 500,
     prod_time: Optional[float] = 100.0,
     prod_frames: Optional[int] = 2000,
+    input_gro_path: Optional[str] = None,
+    input_top_path: Optional[str] = None,
     seed: Optional[int] = -1,
     solvent_selection: str = '"SOL" | "Ion"', 
     solvent_group: str = 'SOL_Ion',
@@ -817,7 +886,7 @@ def config_contents(
 
     equil_traj_freq_steps = max(nsteps_equil // equil_frames, 1)  # equil_frames frames during equilibration
 
-    prod_traj_freq_steps = max(nsteps_prod // prod_frames, 1)      # prod_frames frames during production
+    prod_traj_freq_steps = max(nsteps_prod // prod_frames, 1)     # prod_frames frames during production
     
     if mpi_bin is None:
         mpi_bin = 'null'
@@ -841,6 +910,17 @@ def config_contents(
         output_selection = f'"{solute_group}" | {residues_selection}'
     else:
         output_selection = f'"{solute_group}"'
+    
+    # Set default paths for input gro and top files if not provided. 
+    # Otherwise convert to absolute paths to avoid changes by the config reader
+    if input_gro_path:
+        input_gro_path = os.path.abspath(input_gro_path)
+    else:
+        input_gro_path = "dependency/step1_pdb2gmx/output_gro_path"
+    if input_top_path:
+        input_top_path = os.path.abspath(input_top_path)
+    else:
+        input_top_path = "dependency/step1_pdb2gmx/output_top_zip_path"
 
     return f""" 
 # Global properties (common for all steps)
@@ -872,7 +952,7 @@ step1_pdb2gmx:
 step2_make_ref_group:
   tool: make_ndx
   paths:
-    input_structure_path: dependency/step1_pdb2gmx/output_gro_path
+    input_structure_path: {input_gro_path}
     output_ndx_path: chain.ndx
   properties:
     binary_path: {gmx_bin}   
@@ -882,19 +962,19 @@ step2_make_ref_group:
 step3_make_rest_group:
   tool: make_ndx
   paths:
-    input_structure_path: dependency/step1_pdb2gmx/output_gro_path
+    input_structure_path: {input_gro_path}
     input_ndx_path: dependency/step2_make_ref_group/output_ndx_path
     output_ndx_path: calpha.ndx
   properties:
     binary_path: {gmx_bin}   
-    selection: "a CA"            # Will be set by the workflow
+    selection: "a CA"            # Will be set by the workflow (CA for protein, P for nucleic acids)
 
 # Append position restraints to the topology file using the reference and restrained groups of the index file
 step4_append_posres:
   tool: ndx2resttop
   paths:
     input_ndx_path: dependency/step3_make_rest_group/output_ndx_path
-    input_top_zip_path: dependency/step1_pdb2gmx/output_top_zip_path
+    input_top_zip_path: {input_top_path}
     output_top_zip_path: structure_top.zip
   properties:
     force_constants: "500 500 500"
@@ -902,8 +982,8 @@ step4_append_posres:
 step5_structure_pdb:
   tool: gmx_trjconv_str
   paths: 
-    input_top_path: dependency/step1_pdb2gmx/output_gro_path
-    input_structure_path: dependency/step1_pdb2gmx/output_gro_path
+    input_top_path: {input_gro_path}
+    input_structure_path: {input_gro_path}
     output_str_path: structure.pdb
   properties:
     binary_path: {gmx_bin}   
@@ -955,7 +1035,7 @@ step5_append_ligand_topology:
 step6_editconf:
   tool: editconf
   paths:
-    input_gro_path: dependency/step1_pdb2gmx/output_gro_path
+    input_gro_path: {input_gro_path}
     output_gro_path: editconf.gro
   properties:
     binary_path: {gmx_bin}   
@@ -1401,7 +1481,9 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
             ions_concentration:  Optional[float] = 0.15,
             temperature:  Optional[float] = 300.0,
             random_seed: Optional[int] = None,
-            setup_only: Optional[bool] = False, 
+            setup_only: Optional[bool] = False,
+            skip_restraints: Optional[bool] = False,
+            skip_solvation: Optional[bool] = False,
             dt: Optional[float] = 2.0,
             equil_time: Optional[float] = 1,
             equil_frames: Optional[int] = 500,
@@ -1462,8 +1544,13 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
             temperature to be used in the simulation.
         random_seed:
             random seed to be used to generate velocities and control the temperature.
-        setup_only: 
+        setup_only:
             whether to only setup the system or also run the simulations
+        skip_restraints:
+            skip adding chain backbone position restraints to the topology. Only used for input_pdb and input_gro_top modes.
+            Ligand position restraints are always added if a ligands folder is provided.
+        skip_solvation:
+            skip adding simulation box, solvent and ions (editconf, solvate, grompp, genion). Only used for input_pdb and input_gro_top modes.
         dt:
             time step to be used in the simulation.
         equil_time:
@@ -1555,6 +1642,8 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
         'equil_frames': equil_frames,
         'prod_time': prod_time,
         'prod_frames': prod_frames,
+        'input_gro_path': input_gro_path,
+        'input_top_path': input_top_path,
         'solvent_selection': solvent_selection, 
         'solvent_group': solvent_group,
         'solute_group': solute_group,
@@ -1575,129 +1664,152 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
     ligands_dict = get_ligands(ligands_top_folder, global_log)
     chains_dict = {}
 
-    # If prepared structure is not provided
-    setup_needed = input_mode == 'input_pdb'
+    # Setup is needed for PDB input or GRO+topology input (pdb2gmx is skipped for the latter)
+    setup_needed = input_mode in ('input_pdb', 'input_gro_top')
     if setup_needed:
-        
+
         ###########################################
         # Prepare topology and coordinates for MD #
         ###########################################
-        
+
         setup_prefix = "1_setup"
         setup_prop = conf.get_prop_dic(prefix=setup_prefix)
         setup_paths = conf.get_paths_dic(prefix=setup_prefix)
 
-        setup_paths["step1_pdb2gmx"]["input_pdb_path"] = input_pdb_path
-        setup_prop["step1_pdb2gmx"]["force_field"]=forcefield
-        global_log.info(f"step1_pdb2gmx: Reading protonation states for titratable residues (0: deprotonated, 1: protonated)")
-        for residue in gmx_titra_resnames.keys():
-            # Determine protonation state of titratable residues from resname in the input PDB file
-            setup_prop["step1_pdb2gmx"][residue.lower()] = read_protonation_states(input_pdb_path, residue, global_log)
-            global_log.info(f"step1_pdb2gmx: {residue} protonation state: {setup_prop['step1_pdb2gmx'][residue.lower()]}")
-        
-        # STEP 1: add H atoms, generate coordinate (.gro) and topology (.top) file for the PDB structure
-        global_log.info("step1_pdb2gmx: Generate the topology")
-        pdb2gmx(**setup_paths["step1_pdb2gmx"], properties=setup_prop["step1_pdb2gmx"])
-        
-        master_index_file = ""
-        chains_dict = get_chains_dict(input_pdb_path) 
+        if input_mode == 'input_pdb':
+            setup_paths["step1_pdb2gmx"]["input_pdb_path"] = input_pdb_path
+            setup_prop["step1_pdb2gmx"]["force_field"] = forcefield
+            global_log.info(f"step1_pdb2gmx: Reading protonation states for titratable residues (0: deprotonated, 1: protonated)")
+            for residue in gmx_titra_resnames.keys():
+                # Determine protonation state of titratable residues from resname in the input PDB file
+                setup_prop["step1_pdb2gmx"][residue.lower()] = read_protonation_states(input_pdb_path, residue, global_log)
+                global_log.info(f"step1_pdb2gmx: {residue} protonation state: {setup_prop['step1_pdb2gmx'][residue.lower()]}")
 
-        # STEP 2 & 3: Add chain groups to a master index file to be used for position restraints
-        for chain_id in chains_dict:
+            # STEP 1: add H atoms, generate coordinate (.gro) and topology (.top) file for the PDB structure
+            global_log.info("step1_pdb2gmx: Generate the topology")
+            pdb2gmx(**setup_paths["step1_pdb2gmx"], properties=setup_prop["step1_pdb2gmx"])
 
-            prefix = f"{setup_prefix}/step2_adding_chain_{chain_id}_group"
-            chain_prop = conf.get_prop_dic(prefix=prefix)
-            chain_paths = conf.get_paths_dic(prefix=prefix)
-            
             structure_path = setup_paths["step1_pdb2gmx"]["output_gro_path"]
-            
-            # If not the first chain, we need to append the group to the master index file
-            if master_index_file:
-                chain_paths["step2_make_ref_group"]["input_ndx_path"] = master_index_file
+            current_topology_path = setup_paths["step1_pdb2gmx"]["output_top_zip_path"]
 
-            # Create index file for chain
-            global_log.info(f"{chain_id} > Create index group for the chain")
-            chain_paths["step2_make_ref_group"]["input_structure_path"] = structure_path
-            chain_prop["step2_make_ref_group"]["selection"] = f"ri {chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
-            make_ndx(**chain_paths["step2_make_ref_group"], properties=chain_prop["step2_make_ref_group"])
-            
-            global_log.info(f"{chain_id} > Create index group for the chain's C-alpha atoms")
-            chain_paths["step3_make_rest_group"]["input_structure_path"] = structure_path
-            chain_prop["step3_make_rest_group"]["selection"] = f"a CA & ri {chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
-            make_ndx(**chain_paths["step3_make_rest_group"], properties=chain_prop["step3_make_rest_group"])  
-            
-            # Save group names for each chain
-            chains_dict[chain_id]["reference_group"] = f"r_{chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
-            chains_dict[chain_id]["restrain_group"] = f"CA_&_r_{chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
-            
-            # Save POSRES names for each chain
-            chains_dict[chain_id]["posres_name"] = f"CHAIN_{chain_id}_POSRES"
-            
-            # Update master index file
-            master_index_file = chain_paths["step3_make_rest_group"]["output_ndx_path"]
+        else:  # input_gro_top: skip pdb2gmx, use provided GRO and topology directly
+            structure_path = input_gro_path
+            current_topology_path = input_top_path
 
-        # Reference, restraint and chain triplet list to add restraints to the topology with ndx2resttop
-        ref_rest_chain_triplet_list = ", ".join([f"({chains_dict[chain]['reference_group']}, {chains_dict[chain]['restrain_group']}, {chain})" for chain in chains_dict])
-        
-        # POSRES names for each chain
-        posres_names = " ".join([chains_dict[chain]["posres_name"] for chain in chains_dict])
-        
-        # STEP 4: Append position restraints to the topology file
-        global_log.info(f"step4_append_posres: Append restraints to the topology")
-        setup_prop["step4_append_posres"]["ref_rest_chain_triplet_list"] = ref_rest_chain_triplet_list
-        setup_prop["step4_append_posres"]["posres_names"] = posres_names
-        setup_paths["step4_append_posres"]["input_ndx_path"] = master_index_file
-        ndx2resttop(**setup_paths["step4_append_posres"], properties=setup_prop["step4_append_posres"])
-        
+        if not skip_restraints:
+
+            master_index_file = ""
+            chains_dict = get_chains_dict(input_pdb_path)
+
+            # STEP 2 & 3: Add chain groups to a master index file to be used for position restraints
+            for chain_id in chains_dict:
+
+                prefix = f"{setup_prefix}/step2_adding_chain_{chain_id}_group"
+                chain_prop = conf.get_prop_dic(prefix=prefix)
+                chain_paths = conf.get_paths_dic(prefix=prefix)
+
+                # If not the first chain, we need to append the group to the master index file
+                if master_index_file:
+                    chain_paths["step2_make_ref_group"]["input_ndx_path"] = master_index_file
+
+                # Create index file for chain
+                global_log.info(f"{chain_id} > Create index group for the chain")
+                chain_paths["step2_make_ref_group"]["input_structure_path"] = structure_path
+                chain_prop["step2_make_ref_group"]["selection"] = f"ri {chains_dict[chain_id]['residues'][0]}-{chains_dict[chain_id]['residues'][1]}"
+                make_ndx(**chain_paths["step2_make_ref_group"], properties=chain_prop["step2_make_ref_group"])
+
+                restraint_atoms = chains_dict[chain_id]['restraint_atoms']
+                start, end = chains_dict[chain_id]['residues']
+                global_log.info(f"{chain_id} > Create index group for the chain's {'/'.join(restraint_atoms)} atoms")
+                chain_paths["step3_make_rest_group"]["input_structure_path"] = structure_path
+                chain_prop["step3_make_rest_group"]["selection"] = " | ".join([f"a {atom} & ri {start}-{end}" for atom in restraint_atoms])
+                make_ndx(**chain_paths["step3_make_rest_group"], properties=chain_prop["step3_make_rest_group"])
+
+                # Save group names for each chain
+                chains_dict[chain_id]["reference_group"] = f"r_{start}-{end}"
+                chains_dict[chain_id]["restrain_group"] = "_|_".join([f"{atom}_&_r_{start}-{end}" for atom in restraint_atoms]) # NOTE: check this works by changing CA -> another atom temporarily
+                
+                # Save POSRES names for each chain
+                chains_dict[chain_id]["posres_name"] = f"CHAIN_{chain_id}_POSRES"
+
+                # Update master index file
+                master_index_file = chain_paths["step3_make_rest_group"]["output_ndx_path"]
+
+            # Map chain IDs to molecule type names in the topology
+            # Read actual names from the topology (works for Protein, DNA, RNA, mixed)
+            mol_names = get_molecule_names_from_top(current_topology_path)
+            chain_ids = list(chains_dict.keys())
+            mol_type_for_chain = {chain_id: mol_names[i] for i, chain_id in enumerate(chain_ids)}
+
+            # Reference, restraint and molecule type name triplet list to add restraints to the topology with ndx2resttop
+            ref_rest_mol_triplet_list = ", ".join([f"({chains_dict[chain]['reference_group']}, {chains_dict[chain]['restrain_group']}, {mol_type_for_chain[chain]})" for chain in chains_dict])
+
+            # POSRES names for each chain
+            posres_names = " ".join([chains_dict[chain]["posres_name"] for chain in chains_dict])
+            
+            print(f"posres_names: {posres_names}")
+            print(f"ref_rest_mol_triplet_list: {ref_rest_mol_triplet_list}")
+            print(f"master_index_file: {master_index_file}")
+
+            # STEP 4: Append position restraints to the topology file
+            global_log.info(f"step4_append_posres: Append restraints to the topology")
+            setup_prop["step4_append_posres"]["ref_rest_mol_triplet_list"] = ref_rest_mol_triplet_list
+            setup_prop["step4_append_posres"]["posres_names"] = posres_names
+            setup_paths["step4_append_posres"]["input_ndx_path"] = master_index_file
+            ndx2resttop(**setup_paths["step4_append_posres"], properties=setup_prop["step4_append_posres"])
+            current_topology_path = setup_paths["step4_append_posres"]["output_top_zip_path"]
+
         if ligands_dict:
-            
+
             # STEP 5: Convert gro of main structure to pdb - to concatenate with ligands
             global_log.info("step5_structure_pdb: Convert GRO to PDB")
+            setup_paths["step5_structure_pdb"]["input_structure_path"] = structure_path
+            setup_paths["step5_structure_pdb"]["input_top_path"] = structure_path
             gmx_trjconv_str(**setup_paths["step5_structure_pdb"], properties=setup_prop["step5_structure_pdb"])
-            
-            complex_topology_path = setup_paths["step4_append_posres"]["output_top_zip_path"]
+
+            complex_topology_path = current_topology_path
             complex_pdb_path = setup_paths["step5_structure_pdb"]["output_str_path"]
-            
-            # STEP 5: Add each ligand to the PDB and topology files
+
+            # STEP 6: Add each ligand to the PDB and topology files
             for ligand_id in ligands_dict:
 
                 prefix = f"{setup_prefix}/step6_add_ligand_{ligand_id}"
                 ligand_prop = conf.get_prop_dic(prefix=prefix)
                 ligand_paths = conf.get_paths_dic(prefix=prefix)
-                
+
                 ligand_gro_path = ligands_dict[ligand_id]["coordinates"]
                 ligand_itp_path = ligands_dict[ligand_id]["topology"]
-                
+
                 ligands_dict[ligand_id]["posres_name"] = f"LIGAND_{ligand_id}_POSRES"
-            
+
                 # STEP 1: Convert ligand coordinates from gro to pdb
                 global_log.info(f"{ligand_id} > Convert ligand GRO to PDB")
                 ligand_paths["step1_create_ligand_pdb"]["input_structure_path"] = ligand_gro_path
                 ligand_paths["step1_create_ligand_pdb"]["input_top_path"] = ligand_gro_path
                 gmx_trjconv_str(**ligand_paths["step1_create_ligand_pdb"], properties=ligand_prop["step1_create_ligand_pdb"])
-                
+
                 # STEP 2: Create complex pdb file concatenating the current complex and the new ligand
                 global_log.info(f"{ligand_id} > Create complex PDB file")
                 ligand_paths["step2_create_complex_pdb"]["input_structure1"] = complex_pdb_path
                 ligand_paths["step2_create_complex_pdb"]["output_structure_path"] = os.path.join(str(Path(ligand_paths["step2_create_complex_pdb"]["output_structure_path"]).parent), f"{ligand_id}_complex.pdb")
                 cat_pdb(**ligand_paths["step2_create_complex_pdb"], properties=ligand_prop["step2_create_complex_pdb"])
-                
+
                 # Update complex pdb path for the next ligands
                 complex_pdb_path = ligand_paths["step2_create_complex_pdb"]["output_structure_path"]
-                
+
                 # STEP 3: Make ndx file for the ligand's heavy atoms
                 global_log.info(f"{ligand_id} > Create index file for the ligand's heavy atoms")
                 ligand_paths["step3_make_ligand_ndx"]["input_structure_path"] = ligand_gro_path
                 make_ndx(**ligand_paths["step3_make_ligand_ndx"], properties=ligand_prop["step3_make_ligand_ndx"])
-                
+
                 ligand_restraints_path = os.path.join(str(Path(ligand_paths["step4_create_ligand_restraints"]["output_itp_path"]).parent), f"{ligand_id}_posre.itp")
-                
+
                 # STEP 4: Generate restraints for the ligand's heavy atoms
                 global_log.info(f"{ligand_id} > Generate restraints for ligand")
                 ligand_paths["step4_create_ligand_restraints"]["input_structure_path"] = ligand_gro_path
                 ligand_paths["step4_create_ligand_restraints"]["output_itp_path"] = ligand_restraints_path
                 genrestr(**ligand_paths["step4_create_ligand_restraints"], properties=ligand_prop["step4_create_ligand_restraints"])
-                
+
                 # STEP 5: Append parameterized ligand to the current complex topology zip file
                 ligand_paths["step5_append_ligand_topology"]["input_top_zip_path"] = complex_topology_path
                 ligand_paths["step5_append_ligand_topology"]["input_itp_path"] = ligand_itp_path
@@ -1705,39 +1817,49 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
                 ligand_prop["step5_append_ligand_topology"]["posres_name"] = ligands_dict[ligand_id]["posres_name"]
                 global_log.info(f"{ligand_id} > Append ligand to the topology")
                 append_ligand(**ligand_paths["step5_append_ligand_topology"], properties=ligand_prop["step5_append_ligand_topology"])
-                
+
                 # Update complex topology path for the next ligands
                 complex_topology_path = ligand_paths["step5_append_ligand_topology"]["output_top_zip_path"]
-                
-            # Modify paths for the next steps
-            setup_paths["step6_editconf"]["input_gro_path"] = complex_pdb_path
-            setup_paths["step7_solvate"]["input_top_zip_path"] = complex_topology_path
-            
-        # STEP 6: Create simulation box
-        global_log.info("step6_editconf: Create the solvent box")
-        editconf(**setup_paths["step6_editconf"], properties=setup_prop["step6_editconf"])
 
-        # STEP 7: Add solvent molecules
-        global_log.info("step7_solvate: Fill the solvent box with water molecules")
-        solvate(**setup_paths["step7_solvate"], properties=setup_prop["step7_solvate"])
+            # Update structure and topology trackers after all ligands
+            structure_path = complex_pdb_path
+            current_topology_path = complex_topology_path
 
-        # STEP 8: ion generation pre-processing
-        global_log.info("step8_grompp_genion: Preprocess ion generation")
-        grompp(**setup_paths["step8_grompp_genion"], properties=setup_prop["step8_grompp_genion"])
+        # Always wire editconf/solvate inputs from the current structure and topology
+        setup_paths["step6_editconf"]["input_gro_path"] = structure_path
+        setup_paths["step7_solvate"]["input_top_zip_path"] = current_topology_path
 
-        # STEP 9: ion generation
-        global_log.info("step9_genion: Ion generation")
-        setup_prop["step9_genion"]["concentration"] = ions_concentration
-        genion(**setup_paths["step9_genion"], properties=setup_prop["step9_genion"])
+        if not skip_solvation:
+            # STEP 6: Create simulation box
+            global_log.info("step6_editconf: Create the solvent box")
+            editconf(**setup_paths["step6_editconf"], properties=setup_prop["step6_editconf"])
+
+            # STEP 7: Add solvent molecules
+            global_log.info("step7_solvate: Fill the solvent box with water molecules")
+            solvate(**setup_paths["step7_solvate"], properties=setup_prop["step7_solvate"])
+
+            # STEP 8: ion generation pre-processing
+            global_log.info("step8_grompp_genion: Preprocess ion generation")
+            grompp(**setup_paths["step8_grompp_genion"], properties=setup_prop["step8_grompp_genion"])
+
+            # STEP 9: ion generation
+            global_log.info("step9_genion: Ion generation")
+            setup_prop["step9_genion"]["concentration"] = ions_concentration
+            genion(**setup_paths["step9_genion"], properties=setup_prop["step9_genion"])
+
+            input_gro_path = setup_paths["step9_genion"]["output_gro_path"]
+            input_top_path = setup_paths["step9_genion"]["output_top_zip_path"]
+
+        else:
+            # Skip solvation: pass current structure and topology directly to the next stage
+            input_gro_path = structure_path
+            input_top_path = current_topology_path
 
         if setup_only:
             global_log.info("Set up only: setup_only flag is set to True! Exiting...")
             return
-    
-        input_gro_path = setup_paths["step9_genion"]["output_gro_path"]
-        input_top_path = setup_paths["step9_genion"]["output_top_zip_path"]
-        
-    equil_needed = (input_mode == 'input_pdb') or (input_mode == 'prepared_system') 
+
+    equil_needed = input_mode in ('input_pdb', 'input_gro_top')
     if equil_needed:
         
         #######################################
@@ -2047,19 +2169,17 @@ def main():
                         required=False)
 
     parser.add_argument('--ligands_folder', dest='ligands_top_folder', type=str,
-                        help="""Path to folder with .itp and .gro files for the ligands that 
-                        should be included in the simulation. Make sure the coordinates of the 
-                        ligands correspond to the PDB used. Only compatible with '--input_pdb'. Default: None""",
+                        help="""Path to folder with .itp and .gro files for the ligands that
+                        should be included in the simulation. Compatible with '--input_pdb' and '--input_gro'/'--input_top'. Default: None""",
                         required=False)
 
     parser.add_argument('--input_gro', dest='input_gro_path', type=str,
-                        help="""Input structure file ready to minimize (.gro). To provide an externally prepared system, 
-                        use together with '--input_top'. Default: None""",
+                        help="""Input structure file (.gro). Use together with '--input_top'.
+                        Restraints and ligands can be added; use '--skip_solvation' if the system is already solvated. Default: None""",
                         required=False)
 
     parser.add_argument('--input_top', dest='input_top_path', type=str,
-                        help="""Input compressed topology file ready to minimize (.zip). To provide an externally prepared system, 
-                        use together with '--input_gro'. Default: None""",
+                        help="""Input compressed topology file (.zip). Use together with '--input_gro'. Default: None""",
                         required=False)
     
     parser.add_argument('--input_tpr', dest='input_tpr_path', type=str,
@@ -2085,7 +2205,8 @@ def main():
     # NOTE: Add option for H mass repartitioning
     # NOTE: Add flag to determine what should remain restrained during the production run - currently everything is free always
     # NOTE: Add progressive release of position restraints during equilibration (additional steps if needed)
-    # NOTE: Are restraints general enough for any system?
+    # NOTE: Call traj postprocessing function from the package instead of re-writing it here
+    # NOTE: Add type of water model as an option 
 
     #########################
     # Configuration options #
@@ -2143,6 +2264,16 @@ def main():
     
     parser.add_argument('--setup_only', action='store_true',
                         help="Only setup the system. Default: False",
+                        required=False, default=False)
+
+    parser.add_argument('--skip_restraints', action='store_true',
+                        help="""Skip adding chain backbone position restraints to the topology.
+                        Only used for input_pdb and input_gro_top modes. Ligand restraints are always added if a ligands folder is provided. Default: False""",
+                        required=False, default=False)
+
+    parser.add_argument('--skip_solvation', action='store_true',
+                        help="""Skip adding simulation box, solvent and ions (editconf, solvate, grompp, genion).
+                        Use when the input structure is already solvated. Only used for input_pdb and input_gro_top modes. Default: False""",
                         required=False, default=False)
     
     parser.add_argument('--dt', type=float,
@@ -2229,7 +2360,9 @@ def main():
             ions_concentration=args.ions_concentration,
             temperature=args.temperature,
             random_seed=args.random_seed,
-            setup_only=args.setup_only, 
+            setup_only=args.setup_only,
+            skip_restraints=args.skip_restraints,
+            skip_solvation=args.skip_solvation,
             dt=args.dt, 
             equil_time=args.equil_time,
             equil_frames=args.equil_frames,
