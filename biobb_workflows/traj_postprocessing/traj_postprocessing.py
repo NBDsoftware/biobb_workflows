@@ -146,7 +146,6 @@ def common_config_contents(
 global_properties:
   can_write_console_log: False
   restart: True
-  working_dir_path: output
   remove_tmp: {not debug}
 
 ###################################################
@@ -517,6 +516,7 @@ def traj_postprocessing(
     global_log.info(f"Configuration file: {config_path}")
 
     conf = settings.ConfReader(config=config_path, system=None)
+    conf.working_dir_path = output_path
     prop = conf.get_prop_dic()
     paths = conf.get_paths_dic()
 
