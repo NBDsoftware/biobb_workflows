@@ -1962,7 +1962,8 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
 
         ndx_paths['step3_make_ndx']['input_structure_path'] = input_pdb_path
         ndx_paths['step4_make_ndx']['input_structure_path'] = input_pdb_path
-
+        ndx_paths['step5_make_ndx']['input_structure_path'] = input_pdb_path
+        
         # STEP 3: create index file with custom solvent and ions group
         global_log.info("step3_make_ndx: Create solvent group in index file")
         make_ndx(**ndx_paths["step3_make_ndx"], properties=ndx_prop["step3_make_ndx"])
