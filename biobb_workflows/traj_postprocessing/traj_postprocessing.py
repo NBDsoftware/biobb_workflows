@@ -3,7 +3,6 @@
 from typing import List, Optional
 from pathlib import Path
 import numpy as np
-
 import argparse
 import time
 import os
@@ -58,7 +57,6 @@ def get_residue_types(pdb_path: str, target_resnames: List[str]) -> List[str]:
             found_residues.add(res_name)
     return list(found_residues)
 
-
 def get_atom_types(pdb_path: str, target_atom_names: List[str]) -> List[str]:
     """Find atom names from target_atom_names present in the PDB structure."""
     parser = PDBParser(QUIET=True)
@@ -70,7 +68,6 @@ def get_atom_types(pdb_path: str, target_atom_names: List[str]) -> List[str]:
         if atom_name in target_set:
             found_atoms.add(atom_name)
     return list(found_atoms)
-
 
 def build_solvent_selection(solvent_names: List[str], ion_names: List[str]) -> str:
     """Build a GROMACS selection string for solvent and ions groups."""
@@ -84,7 +81,6 @@ def build_solvent_selection(solvent_names: List[str], ion_names: List[str]) -> s
         ions_selection = '"Ion"'
     return f'{solvent_selection} | {ions_selection}'
 
-
 def rename_last_ndx_group(ndx_path: str, new_name: str) -> None:
     """Rename the last group in a GROMACS index file."""
     with open(ndx_path, 'r') as f:
@@ -97,7 +93,6 @@ def rename_last_ndx_group(ndx_path: str, new_name: str) -> None:
     with open(ndx_path, 'w') as f:
         f.writelines(lines)
 
-
 def get_central_atom_index(pdb_path: str) -> int:
     """Return the 1-based index of the atom closest to the geometric center."""
     parser = PDBParser(QUIET=True)
@@ -107,7 +102,6 @@ def get_central_atom_index(pdb_path: str) -> int:
     center = coords.mean(axis=0)
     distances = np.linalg.norm(coords - center, axis=1)
     return int(np.argmin(distances)) + 1
-
 
 def add_group(atom_indices: List, group_name: str, old_ndx_path: str, new_ndx_path: str) -> None:
     """Append a new group with given atom indices to an ndx file, saving to a new path."""
@@ -127,7 +121,7 @@ def add_group(atom_indices: List, group_name: str, old_ndx_path: str, new_ndx_pa
         f.write(old_content)
         f.write(group_block)
 
-def get_input_pdb(input_structure: str, gmx_bin: str, output_path: str, log) -> str:
+def get_input_pdb(input_structure: str, gmx_bin: str, output_path: str) -> str:
     """     
     Extract a PDB structure from the input structure file (GRO or TPR) using editconf, and return its path.
     """
@@ -427,7 +421,6 @@ def config_contents(
     else:
         return common_contents + complete_postprocessing(gmx_bin, input_topology_path)
 
-
 def create_config_file(output_path: str, **config_args) -> str:
     """Write YAML config to output_path/config.yml and return its path."""
     config_path = os.path.join(output_path, 'config.yml')
@@ -503,7 +496,7 @@ def traj_postprocessing(
 
     # Convert provided GRO to PDB for solvent/ion detection if needed
     if Path(input_structure_path).suffix.lower() != '.pdb':
-        pdb_structure_path = get_input_pdb(input_structure_path, gmx_bin, output_path, global_log)
+        pdb_structure_path = get_input_pdb(input_structure_path, gmx_bin, output_path)
     else:
         pdb_structure_path = input_structure_path
 
