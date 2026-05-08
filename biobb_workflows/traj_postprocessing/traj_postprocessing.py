@@ -30,6 +30,21 @@ solvent_group : str = "Solvent_group"
 solute_group : str = "Solute_group"
 output_group : str = "Output_group"
 
+def read_groups(index_path: str) -> List[str]:
+    """Read all groups in an index file and return a list of their names."""
+    
+    # Read index file
+    with open(index_path, 'r') as f:
+        lines = f.readlines()
+    
+    # Extract group names
+    group_names = []
+    for line in lines:
+        if line.strip().startswith("[") and line.strip().endswith("]"):
+            group_name = line.strip()[1:-1].strip()
+            group_names.append(group_name)
+
+    return group_names
 
 def get_residue_types(pdb_path: str, target_resnames: List[str]) -> List[str]:
     """Find residue names from target_resnames present in the PDB structure."""
@@ -152,11 +167,21 @@ global_properties:
 # Section 1: Index group creation from structure  #
 ###################################################
 
+# Create base index file
+step0_make_ndx:
+  tool: make_ndx
+  paths:
+    input_structure_path: {structure_path}
+    output_ndx_path: index.ndx
+  properties:
+    binary_path: {gmx_bin}
+    
 # Add solvent and ions to index file
 step1_make_ndx:
   tool: make_ndx
   paths:
     input_structure_path: {structure_path}
+    input_ndx_path: dependency/step0_make_ndx/output_ndx_path
     output_ndx_path: index.ndx
   properties:
     binary_path: {gmx_bin}
@@ -520,13 +545,32 @@ def traj_postprocessing(
     prop = conf.get_prop_dic()
     paths = conf.get_paths_dic()
 
-    #######################
-    # Create index files  #
-    #######################
+    ######################
+    # Create index files #
+    ######################
+    
+    # Find default groups in the input structure
+    global_log.info("step0_make_ndx: Create base index file")
+    make_ndx(**paths['step0_make_ndx'], properties=prop['step0_make_ndx'])  
+    default_groups = read_groups(paths['step0_make_ndx']['output_ndx_path'])
 
+    # Try to add a solvent group
     global_log.info("step1_make_ndx: Create solvent group in index file")
     make_ndx(**paths['step1_make_ndx'], properties=prop['step1_make_ndx'])
-    rename_last_ndx_group(paths['step1_make_ndx']['output_ndx_path'], solvent_group)
+    all_groups = read_groups(paths['step1_make_ndx']['output_ndx_path'])
+    
+    # Check if a Solvent group was added correctly
+    if len(all_groups) > len(default_groups):
+        # If there is a solvent group, rename it and leave solute/output selections as they are
+        global_log.info(f"Renaming last created group to {solvent_group}")
+        rename_last_ndx_group(paths['step1_make_ndx']['output_ndx_path'], solvent_group)
+    else: 
+        # If there is no solvent group, change the solute/output selections to System 
+        global_log.info(f"No Solvent group was created.")
+        global_log.info(f"If your input structure contains solvent molecules or ions not recognized by GROMACS, ")
+        global_log.info(f"make sure you include them with the --ions or --solvent arguments")
+        prop['step2_make_ndx']['selection'] = '"System"'
+        prop['step3_make_ndx']['selection'] = '"System"'
 
     global_log.info("step2_make_ndx: Create solute group in index file")
     make_ndx(**paths['step2_make_ndx'], properties=prop['step2_make_ndx'])
