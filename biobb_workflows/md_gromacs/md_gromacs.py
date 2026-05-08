@@ -782,6 +782,7 @@ def build_solvent_selection(solvent_names: List[str], ion_names: List[str]) -> s
     
 # YML construction
 def config_contents(
+    input_mode: Literal['input_pdb', 'input_gro_top', 'restart_simulation'],
     gmx_bin: str = 'gmx',
     mpi_bin: Optional[str] = None,
     mpi_np: Optional[int] = None,
@@ -871,22 +872,30 @@ def config_contents(
     if dt < 1.0 or dt > 4.0:
         raise ValueError("dt must be between 1 and 4 fs.")
     
-    # Check equil_time and prod_time are larger than 0
-    if equil_time <= 0.0:
-        raise ValueError("equil_time must be larger than 0 ns.")
-    
-    if prod_time <= 0.0:
-        raise ValueError("prod_time must be larger than 0 ns.")
-    
-    # Calculate number of steps
-    nsteps_equil = int(equil_time*10**6 // dt)
-    nsteps_prod = int(prod_time*10**6 // dt)
-    
-    dt_in_ps = dt / 1000  # convert fs to ps
+    if input_mode in ('input_pdb', 'input_gro_top'):
 
-    equil_traj_freq_steps = max(nsteps_equil // equil_frames, 1)  # equil_frames frames during equilibration
+        # Check equil_time and prod_time are larger than 0
+        if equil_time <= 0.0:
+            raise ValueError("equil_time must be larger than 0 ns.")
+        
+        if prod_time <= 0.0:
+            raise ValueError("prod_time must be larger than 0 ns.")
+    
+        # Calculate number of steps
+        nsteps_equil = int(equil_time*10**6 // dt)
+        nsteps_prod = int(prod_time*10**6 // dt)
+    
+        dt_in_ps = dt / 1000  # convert fs to ps
 
-    prod_traj_freq_steps = max(nsteps_prod // prod_frames, 1)     # prod_frames frames during production
+        equil_traj_freq_steps = max(nsteps_equil // equil_frames, 1)  # equil_frames frames during equilibration
+
+        prod_traj_freq_steps = max(nsteps_prod // prod_frames, 1)     # prod_frames frames during production
+    else: 
+        nsteps_equil = None
+        nsteps_prod = None
+        dt_in_ps = None
+        equil_traj_freq_steps = None
+        prod_traj_freq_steps = None
     
     if mpi_bin is None:
         mpi_bin = 'null'
@@ -1430,7 +1439,9 @@ step10_fit_traj:
     fit: rot+trans
 """
 
-def create_config_file(output_path: str, **config_args) -> str:
+def create_config_file(output_path: str, 
+                       input_mode: Literal['input_pdb', 'input_gro_top', 'restart_simulation'], 
+                       **config_args) -> str:
     """
     Create a YAML configuration file for the workflow in the output path.
     Return the path to the configuration file.
@@ -1453,7 +1464,7 @@ def create_config_file(output_path: str, **config_args) -> str:
     
     # Write the contents to the file
     with open(config_path, 'w') as f:
-        f.write(config_contents(**config_args))
+        f.write(config_contents(input_mode, **config_args))
         
     print(f"Configuration file created at {config_path}.")
     
@@ -1651,7 +1662,7 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
         'residues_to_keep': residues_to_keep,
         'debug': debug
     }
-    configuration_path = create_config_file(output_path, **config_args)
+    configuration_path = create_config_file(output_path, input_mode, **config_args)
     conf = settings.ConfReader(configuration_path)
     conf.working_dir_path = output_path
 
